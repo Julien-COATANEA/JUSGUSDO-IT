@@ -15,11 +15,6 @@ const AdminPage = (() => {
           </div>
         </header>
 
-        <div class="admin-tabs">
-          <button class="admin-tab active" id="atab-exercises" onclick="AdminPage.switchTab('exercises')">Exercices</button>
-          <button class="admin-tab" id="atab-users" onclick="AdminPage.switchTab('users')">Utilisateurs</button>
-        </div>
-
         <div id="admin-content" style="padding:16px;display:flex;flex-direction:column;gap:12px;">
           <div class="skeleton-card"></div>
           <div class="skeleton-card"></div>

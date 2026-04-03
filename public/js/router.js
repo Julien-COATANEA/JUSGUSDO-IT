@@ -31,7 +31,7 @@ const Router = (() => {
     const items = [
       { route: 'home',  icon: SVG.home,  label: 'Équipe' },
       { route: 'app',   icon: SVG.app,   label: 'Programme' },
-      ...(u.is_admin ? [{ route: 'admin', icon: SVG.admin, label: 'Admin' }] : []),
+      ...(u.is_admin ? [{ route: 'admin', icon: SVG.admin, label: 'Conf' }] : []),
     ];
 
     const nav = document.createElement('nav');
