@@ -21,66 +21,89 @@ const AdminPage = (() => {
         </div>
 
         <!-- Exercise form modal -->
-        <div class="modal-overlay" id="ex-modal" style="display:none;">
-          <div class="modal-card" style="max-height:90vh;overflow-y:auto;">
-            <h2 id="ex-modal-title" style="margin-bottom:16px;color:var(--text)">Nouvel exercice</h2>
-            <form id="ex-form" onsubmit="AdminPage.saveExercise(event)">
-              <div class="form-group">
-                <label>Emoji</label>
-                <input type="text" id="ex-emoji" value="💪" maxlength="4" />
-              </div>
-              <div class="form-group">
-                <label>Nom *</label>
-                <input type="text" id="ex-name" placeholder="Ex: Pompes" required />
-              </div>
-              <div class="form-group">
-                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-                  <input type="checkbox" id="ex-is-running" onchange="AdminPage.toggleRunningFields()"
-                    style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;" />
-                  <span>🏃 Session running <span style="font-size:11px;color:var(--text3);">(20 XP, pas de séries)</span></span>
-                </label>
-              </div>
-              <div id="ex-muscu-fields">
+        <div class="modal-overlay" id="ex-modal" style="display:none;" onclick="AdminPage.onOverlayClick(event)">
+          <div class="modal-card ex-modal-card" style="max-height:92vh;overflow-y:auto;text-align:left;padding:0;border-radius:20px 20px 0 0;">
+
+            <!-- Header -->
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 20px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:1;border-radius:20px 20px 0 0;">
+              <h2 id="ex-modal-title" style="margin:0;font-size:18px;font-weight:800;color:var(--text);">Nouvel exercice</h2>
+              <button type="button" onclick="AdminPage.closeExModal()"
+                style="width:32px;height:32px;border-radius:50%;border:none;background:var(--card2);color:var(--text2);font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>
+            </div>
+
+            <form id="ex-form" onsubmit="AdminPage.saveExercise(event)" style="padding:20px;display:flex;flex-direction:column;gap:20px;">
+
+              <!-- Identité -->
+              <div style="display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:end;">
                 <div class="form-group">
-                  <label>Séries</label>
-                  <input type="number" id="ex-sets" value="1" min="1" max="20" />
+                  <label>Emoji</label>
+                  <input type="text" id="ex-emoji" value="💪" maxlength="4" style="text-align:center;font-size:22px;" />
                 </div>
                 <div class="form-group">
-                  <label>Répétitions *</label>
-                  <input type="number" id="ex-reps" placeholder="20" min="1" />
+                  <label>Nom *</label>
+                  <input type="text" id="ex-name" placeholder="Ex: Pompes" required />
+                </div>
+              </div>
+
+              <!-- Session running toggle -->
+              <label class="ex-running-toggle">
+                <input type="checkbox" id="ex-is-running" onchange="AdminPage.toggleRunningFields()" />
+                <span class="ex-running-pill">
+                  🏃 Session running
+                  <span style="font-size:11px;opacity:0.7;font-weight:500;">&nbsp;· 20 XP</span>
+                </span>
+              </label>
+
+              <!-- Champs muscu -->
+              <div id="ex-muscu-fields" style="display:flex;flex-direction:column;gap:12px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                  <div class="form-group">
+                    <label>Séries</label>
+                    <input type="number" id="ex-sets" value="1" min="1" max="20" />
+                  </div>
+                  <div class="form-group">
+                    <label>Répétitions *</label>
+                    <input type="number" id="ex-reps" placeholder="20" min="1" />
+                  </div>
                 </div>
                 <div class="form-group">
                   <label>Unité</label>
                   <input type="text" id="ex-unit" value="répétitions" placeholder="répétitions / secondes..." />
                 </div>
-              </div><!-- /#ex-muscu-fields -->
-              <div class="form-group">
-                <label>Ordre d'affichage</label>
-                <input type="number" id="ex-order" value="0" min="0" />
               </div>
-              <div class="form-group">
-                <label>Jours actifs</label>
-                <div class="schedule-picker" id="ex-schedule">
-                  <button type="button" class="sday-btn" data-day="1" onclick="this.classList.toggle('active')">L</button>
-                  <button type="button" class="sday-btn" data-day="2" onclick="this.classList.toggle('active')">M</button>
-                  <button type="button" class="sday-btn" data-day="3" onclick="this.classList.toggle('active')">M</button>
-                  <button type="button" class="sday-btn" data-day="4" onclick="this.classList.toggle('active')">J</button>
-                  <button type="button" class="sday-btn" data-day="5" onclick="this.classList.toggle('active')">V</button>
-                  <button type="button" class="sday-btn" data-day="6" onclick="this.classList.toggle('active')">S</button>
-                  <button type="button" class="sday-btn" data-day="0" onclick="this.classList.toggle('active')">D</button>
+
+              <!-- Ordre + Jours -->
+              <div style="display:grid;grid-template-columns:80px 1fr;gap:12px;align-items:start;">
+                <div class="form-group">
+                  <label>Ordre</label>
+                  <input type="number" id="ex-order" value="0" min="0" />
                 </div>
-                <p style="font-size:11px;color:var(--text3);margin-top:6px;">Aucun sélectionné = tous les jours</p>
+                <div class="form-group">
+                  <label>Jours actifs</label>
+                  <div class="schedule-picker" id="ex-schedule">
+                    <button type="button" class="sday-btn" data-day="1" onclick="this.classList.toggle('active')">L</button>
+                    <button type="button" class="sday-btn" data-day="2" onclick="this.classList.toggle('active')">M</button>
+                    <button type="button" class="sday-btn" data-day="3" onclick="this.classList.toggle('active')">M</button>
+                    <button type="button" class="sday-btn" data-day="4" onclick="this.classList.toggle('active')">J</button>
+                    <button type="button" class="sday-btn" data-day="5" onclick="this.classList.toggle('active')">V</button>
+                    <button type="button" class="sday-btn" data-day="6" onclick="this.classList.toggle('active')">S</button>
+                    <button type="button" class="sday-btn" data-day="0" onclick="this.classList.toggle('active')">D</button>
+                  </div>
+                  <p style="font-size:11px;color:var(--text3);margin-top:4px;">Aucun = tous les jours</p>
+                </div>
               </div>
+
+              <!-- Assigné à -->
               <div class="form-group" id="ex-assign-group">
-                <label style="margin-bottom:8px;display:block;">Assigné à</label>
-                <div id="ex-assign-users" style="display:flex;flex-direction:column;gap:6px;"></div>
-                <p style="font-size:11px;color:var(--text3);margin-top:6px;">Aucun coché = visible par tous</p>
+                <label>Assigné à</label>
+                <div id="ex-assign-users" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
+                <p style="font-size:11px;color:var(--text3);margin-top:4px;">Aucun coché = visible par tous</p>
               </div>
+
               <p class="form-error" id="ex-form-error"></p>
-              <div style="display:flex;gap:10px;margin-top:8px;">
-                <button type="button" class="modal-btn" style="background:var(--card2);color:var(--text2);box-shadow:none;" onclick="AdminPage.closeExModal()">Annuler</button>
-                <button type="submit" class="modal-btn" id="ex-submit-btn">Enregistrer</button>
-              </div>
+
+              <!-- Actions -->
+              <button type="submit" class="modal-btn" id="ex-submit-btn" style="margin-top:4px;">Enregistrer</button>
             </form>
           </div>
         </div>
@@ -228,6 +251,10 @@ const AdminPage = (() => {
     editingId = null;
   }
 
+  function onOverlayClick(e) {
+    if (e.target === document.getElementById('ex-modal')) closeExModal();
+  }
+
   function toggleRunningFields() {
     const isRunning = document.getElementById('ex-is-running').checked;
     const muscu = document.getElementById('ex-muscu-fields');
@@ -366,5 +393,5 @@ const AdminPage = (() => {
     return sch.map(d => labels[d]).join(' · ');
   }
 
-  return { render, init, switchTab, openExModal, closeExModal, saveExercise, deleteExercise, restoreExercise, toggleAdmin, toggleRunningFields };
+  return { render, init, switchTab, openExModal, closeExModal, onOverlayClick, saveExercise, deleteExercise, restoreExercise, toggleAdmin, toggleRunningFields };
 })();

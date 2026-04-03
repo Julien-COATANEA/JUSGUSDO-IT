@@ -718,6 +718,35 @@ html, body {
 .admin-btn:active  { transform: scale(0.95); }
 .admin-btn.danger  { color: var(--accent); }
 
+/* Exercise form modal — running toggle */
+.ex-running-toggle {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+.ex-running-toggle input[type="checkbox"] { display: none; }
+.ex-running-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 100px;
+  border: 2px solid var(--border);
+  background: var(--card2);
+  color: var(--text2);
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  width: 100%;
+  justify-content: center;
+}
+.ex-running-toggle input:checked + .ex-running-pill {
+  background: rgba(78,205,196,0.12);
+  border-color: var(--accent3);
+  color: var(--accent3);
+}
+
 /* ===========================
    PROFILE MODAL
 =========================== */
