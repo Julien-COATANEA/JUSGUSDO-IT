@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
+const db = require('./db/pool');
 
 const authRoutes = require('./routes/auth');
 const exercisesRoutes = require('./routes/exercises');
@@ -28,6 +30,20 @@ app.get(/^(?!\/api).*/, (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 JuGus Do-It server running on port ${PORT}`);
-});
+
+async function initDB() {
+  const schema = fs.readFileSync(path.join(__dirname, 'db/schema.sql'), 'utf8');
+  await db.query(schema);
+  console.log('✅ Database schema initialized');
+}
+
+initDB()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`🚀 JuGus Do-It server running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('❌ Failed to initialize database:', err);
+    process.exit(1);
+  });
