@@ -70,11 +70,12 @@ router.put('/exercises/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/admin/exercises/:id — soft delete (deactivate)
+// DELETE /api/admin/exercises/:id — hard delete
 router.delete('/exercises/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
-    await db.query('UPDATE exercises SET is_active = FALSE WHERE id = $1', [id]);
+    await db.query('DELETE FROM checklist_entries WHERE exercise_id = $1', [id]);
+    await db.query('DELETE FROM exercises WHERE id = $1', [id]);
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

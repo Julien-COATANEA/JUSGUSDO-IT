@@ -233,13 +233,13 @@ const AdminPage = (() => {
   function deleteExercise(id) {
     const ex = exercises.find(e => e.id === id);
     App.showConfirm(
-      'Désactiver l\'exercice',
-      `Désactiver "${ex?.name}" ? Il ne sera plus visible pour les utilisateurs.`,
+      'Supprimer l\'exercice',
+      `Supprimer définitivement "${ex?.name}" ? Cette action est irréversible.`,
       async (ok) => {
         if (!ok) return;
         try {
           await API.adminDeleteExercise(id);
-          App.showToast('Exercice désactivé');
+          App.showToast('Exercice supprimé');
           await loadExercises();
         } catch (err) {
           App.showToast('Erreur: ' + err.message);
