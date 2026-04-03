@@ -67,3 +67,17 @@ INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index) VA
   ('Abdos',   '🔥', 1, 30, 'répétitions', 10, 2),
   ('Squats',  '🦵', 1, 30, 'répétitions', 10, 3)
 ON CONFLICT (name) DO NOTHING;
+
+-- Migration: is_running flag for running sessions (gives 15 XP instead of 10)
+ALTER TABLE exercises ADD COLUMN IF NOT EXISTS is_running BOOLEAN DEFAULT FALSE;
+
+-- Migration: per-user exercise assignments
+-- If assigned_users is empty/null → exercise is global (all users see it)
+-- If assigned_users has values → only those users see it
+CREATE TABLE IF NOT EXISTS user_exercise_assignments (
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  exercise_id INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, exercise_id)
+);
+CREATE INDEX IF NOT EXISTS idx_uea_exercise ON user_exercise_assignments(exercise_id);
+CREATE INDEX IF NOT EXISTS idx_uea_user ON user_exercise_assignments(user_id);

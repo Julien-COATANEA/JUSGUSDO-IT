@@ -4,11 +4,23 @@ const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
-// GET /api/exercises — list active exercises
+// GET /api/exercises — list active exercises for the current user
+// Returns global exercises + exercises explicitly assigned to this user
 router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await db.query(
-      'SELECT * FROM exercises WHERE is_active = TRUE ORDER BY order_index ASC'
+      `SELECT e.*
+       FROM exercises e
+       WHERE e.is_active = TRUE
+         AND (
+           -- Global: no assignments defined for this exercise
+           NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
+           OR
+           -- Or explicitly assigned to this user
+           EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
+         )
+       ORDER BY e.order_index ASC, e.id ASC`,
+      [req.user.id]
     );
     res.json({ exercises: result.rows });
   } catch (err) {

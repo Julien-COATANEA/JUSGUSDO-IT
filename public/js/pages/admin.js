@@ -10,7 +10,7 @@ const AdminPage = (() => {
         <header class="app-header">
           <button class="icon-btn" onclick="Router.navigate('home')">←</button>
           <div class="header-info" style="flex:1">
-            <span class="header-username">Administration ⚙️</span>
+            <span class="header-username">Configuration ⚙️</span>
             <span class="header-rank" style="color:var(--accent)">Accès admin</span>
           </div>
         </header>
@@ -67,6 +67,17 @@ const AdminPage = (() => {
                 </div>
                 <p style="font-size:11px;color:var(--text3);margin-top:6px;">Aucun sélectionné = tous les jours</p>
               </div>
+              <div class="form-group">
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+                  <input type="checkbox" id="ex-is-running" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;" />
+                  <span>🏃 Session running <span style="font-size:11px;color:var(--text3);">(15 XP au lieu de 10)</span></span>
+                </label>
+              </div>
+              <div class="form-group" id="ex-assign-group">
+                <label style="margin-bottom:8px;display:block;">Assigné à</label>
+                <div id="ex-assign-users" style="display:flex;flex-direction:column;gap:6px;"></div>
+                <p style="font-size:11px;color:var(--text3);margin-top:6px;">Aucun coché = visible par tous</p>
+              </div>
               <p class="form-error" id="ex-form-error"></p>
               <div style="display:flex;gap:10px;margin-top:8px;">
                 <button type="button" class="modal-btn" style="background:var(--card2);color:var(--text2);box-shadow:none;" onclick="AdminPage.closeExModal()">Annuler</button>
@@ -80,6 +91,8 @@ const AdminPage = (() => {
   }
 
   async function init() {
+    // Preload users so assignment labels render correctly on first load
+    try { const d = await API.adminGetUsers(); users = d.users || []; } catch (_) {}
     await loadExercises();
   }
 
@@ -129,10 +142,11 @@ const AdminPage = (() => {
               <div class="admin-ex-name">${escapeHtml(ex.name)}</div>
               <div class="admin-ex-detail">
                 ${ex.sets > 1 ? ex.sets + ' séries × ' : ''}${ex.reps} ${escapeHtml(ex.unit)}
-                &nbsp;·&nbsp; ${ex.xp_reward} XP
+                &nbsp;·&nbsp; ${ex.xp_reward} XP${ex.is_running ? ' 🏃' : ''}
                 &nbsp;·&nbsp; <span style="color:var(--accent3)">${formatSchedule(ex.schedule)}</span>
                 ${!ex.is_active ? ' · <span style="color:var(--text3)">désactivé</span>' : ''}
               </div>
+              <div class="admin-ex-assigned" style="font-size:11px;color:var(--text3);margin-top:3px;">${renderAssignedLabel(ex.assigned_users)}</div>
             </div>
           </div>
           <div class="admin-ex-actions">
@@ -191,6 +205,7 @@ const AdminPage = (() => {
       document.getElementById('ex-reps').value = ex.reps;
       document.getElementById('ex-unit').value = ex.unit;
       document.getElementById('ex-order').value = ex.order_index;
+      document.getElementById('ex-is-running').checked = !!ex.is_running;
       const schedule = ex.schedule || [];
       document.querySelectorAll('#ex-schedule .sday-btn').forEach(btn => {
         btn.classList.toggle('active', schedule.includes(parseInt(btn.dataset.day)));
@@ -201,8 +216,10 @@ const AdminPage = (() => {
       document.getElementById('ex-emoji').value = '💪';
       document.getElementById('ex-sets').value = '1';
       document.getElementById('ex-unit').value = 'répétitions';
+      document.getElementById('ex-is-running').checked = false;
       document.querySelectorAll('#ex-schedule .sday-btn').forEach(btn => btn.classList.remove('active'));
     }
+    renderAssignmentCheckboxes(id ? (exercises.find(e => e.id === id)?.assigned_users || []) : []);
     modal.style.display = 'flex';
   }
 
@@ -217,24 +234,32 @@ const AdminPage = (() => {
     btn.disabled = true;
     document.getElementById('ex-form-error').textContent = '';
 
+    const isRunning = document.getElementById('ex-is-running').checked;
+    const assignedUserIds = [...document.querySelectorAll('#ex-assign-users input[type=checkbox]:checked')].map(cb => parseInt(cb.value));
     const data = {
       emoji: document.getElementById('ex-emoji').value,
       name: document.getElementById('ex-name').value.trim(),
       sets: parseInt(document.getElementById('ex-sets').value),
       reps: parseInt(document.getElementById('ex-reps').value),
       unit: document.getElementById('ex-unit').value.trim(),
-      xp_reward: 10,
       order_index: parseInt(document.getElementById('ex-order').value),
       schedule: [...document.querySelectorAll('#ex-schedule .sday-btn.active')].map(b => parseInt(b.dataset.day)),
+      is_running: isRunning,
     };
 
     try {
+      let savedEx;
       if (editingId) {
-        await API.adminUpdateExercise(editingId, data);
+        const res = await API.adminUpdateExercise(editingId, data);
+        savedEx = res.exercise || { id: editingId };
         App.showToast('✅ Exercice mis à jour');
       } else {
-        await API.adminCreateExercise(data);
+        const res = await API.adminCreateExercise(data);
+        savedEx = res.exercise;
         App.showToast('✅ Exercice créé');
+      }
+      if (savedEx?.id) {
+        await API.adminAssignExercise(savedEx.id, assignedUserIds);
       }
       closeExModal();
       await loadExercises();
@@ -287,6 +312,39 @@ const AdminPage = (() => {
         }
       }
     );
+  }
+
+  function renderAssignmentCheckboxes(currentAssignedIds) {
+    const container = document.getElementById('ex-assign-users');
+    if (!container) return;
+    if (users.length === 0) {
+      container.innerHTML = '<span style="font-size:12px;color:var(--text3)">Chargement...</span>';
+      API.adminGetUsers().then(data => {
+        users = data.users || [];
+        renderAssignmentCheckboxes(currentAssignedIds);
+      });
+      return;
+    }
+    container.innerHTML = users.map(u => {
+      const rank = Gamification.getRank(u.xp);
+      const checked = currentAssignedIds.includes(u.id) ? 'checked' : '';
+      return `
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0;">
+          <input type="checkbox" value="${u.id}" ${checked}
+            style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" />
+          <span>${rank.emoji} ${escapeHtml(u.username)}</span>
+        </label>
+      `;
+    }).join('');
+  }
+
+  function renderAssignedLabel(assignedUsers) {
+    if (!assignedUsers || assignedUsers.length === 0) return '👥 Tous les utilisateurs';
+    const names = assignedUsers.map(uid => {
+      const u = users.find(u => u.id === uid);
+      return u ? escapeHtml(u.username) : `#${uid}`;
+    });
+    return '🔒 ' + names.join(', ');
   }
 
   function escapeHtml(str) {
