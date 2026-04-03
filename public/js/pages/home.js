@@ -69,11 +69,9 @@ const HomePage = (() => {
     if (!grid) return;
 
     if (!users.length) {
-      grid.innerHTML = `<p style="color:var(--text3);text-align:center;grid-column:1/-1;padding:40px 0">Aucun joueur encore</p>`;
+      grid.innerHTML = `<p style="color:var(--text3);text-align:center;padding:40px 0">Aucun joueur encore</p>`;
       return;
     }
-
-    if (users.length === 1) grid.classList.add('single');
 
     grid.innerHTML = users.map((u, i) => {
       const rank     = Gamification.getRank(u.xp);
@@ -97,19 +95,23 @@ const HomePage = (() => {
       return `
         <div class="player-card${isMe ? ' is-me' : ''}" style="animation:fadeIn 0.3s ease both;animation-delay:${i * 0.06}s" onclick="Router.navigate('profile',{userId:${u.id}})" role="button" tabindex="0">
           <div class="player-avatar">${avatar}</div>
-          <div class="player-name">${name}</div>
-          <div class="player-rank-title">${rank.title}</div>
-          <div class="player-xp-bar">
-            <div class="player-xp-bar-track">
-              <div class="player-xp-bar-fill" style="width:${progress.pct}%"></div>
-            </div>
-            <div class="player-xp-labels">
-              <span>${progress.inRank} XP</span>
-              <span>${progress.needed} XP</span>
+          <div class="player-card-body">
+            <div class="player-name">${name}</div>
+            <div class="player-rank-title">${rank.emoji} ${rank.title}</div>
+            <div class="player-xp-bar">
+              <div class="player-xp-bar-track">
+                <div class="player-xp-bar-fill" style="width:${progress.pct}%"></div>
+              </div>
+              <div class="player-xp-labels">
+                <span>${progress.inRank} XP</span>
+                <span>${progress.needed} XP pour rang suivant</span>
+              </div>
             </div>
           </div>
-          <div class="player-xp-badge">${u.xp} XP</div>
-          ${dayBadge}
+          <div class="player-card-side">
+            <div class="player-xp-badge">${u.xp} XP</div>
+            ${dayBadge}
+          </div>
         </div>
       `;
     }).join('');

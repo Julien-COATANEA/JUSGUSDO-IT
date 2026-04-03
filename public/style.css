@@ -533,22 +533,21 @@ html, body {
 }
 
 .players-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   padding: 10px 16px 20px;
 }
-.players-grid.single { grid-template-columns: 1fr; max-width: 300px; margin: 0 auto; width: 100%; }
 
 .player-card {
   background: var(--card);
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  padding: 20px 16px 18px;
+  padding: 18px 20px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 10px;
+  gap: 18px;
   position: relative;
   overflow: hidden;
   transition: border-color 0.2s;
@@ -563,26 +562,41 @@ html, body {
 .player-card.is-me { border-color: rgba(78,205,196,0.3); --card-glow: rgba(78,205,196,0.1); }
 
 .player-avatar {
-  font-size: 44px;
+  font-size: 52px;
   line-height: 1;
-  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+  filter: drop-shadow(0 4px 14px rgba(0,0,0,0.45));
+  flex-shrink: 0;
+}
+
+.player-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.player-card-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .player-name {
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 900;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.4px;
   color: var(--text);
-  text-align: center;
 }
 .player-card.is-me .player-name { color: var(--accent3); }
 
 .player-rank-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text2);
-  text-align: center;
-  margin-top: -6px;
+  margin-top: -2px;
 }
 
 .player-xp-bar {
@@ -610,14 +624,15 @@ html, body {
 }
 
 .player-xp-badge {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
   color: var(--gold);
   background: rgba(251,191,36,0.08);
   border: 1px solid rgba(251,191,36,0.12);
-  padding: 5px 14px;
+  padding: 6px 16px;
   border-radius: 100px;
   letter-spacing: 0.2px;
+  white-space: nowrap;
 }
 
 .player-streak {
@@ -633,7 +648,8 @@ html, body {
   padding: 5px 12px;
   border-radius: 100px;
   letter-spacing: 0.1px;
-  text-align: center;
+  text-align: right;
+  white-space: nowrap;
 }
 .player-day-badge.done    { background: rgba(34,209,139,0.1);  color: var(--green); border: 1px solid rgba(34,209,139,0.2); }
 .player-day-badge.partial { background: rgba(251,191,36,0.08); color: var(--gold);  border: 1px solid rgba(251,191,36,0.15); }
