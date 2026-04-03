@@ -47,7 +47,7 @@ const Gamification = (() => {
     for (let i = 0; i < count; i++) {
       setTimeout(() => {
         const c = document.createElement('div');
-        c.className = 'confetti';
+        c.className = 'confetti-piece';
         c.style.left = `${Math.random() * 100}vw`;
         c.style.top = `${Math.random() * 40}vh`;
         c.style.background = colors[Math.floor(Math.random() * colors.length)];
