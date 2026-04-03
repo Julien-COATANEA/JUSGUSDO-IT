@@ -76,7 +76,6 @@ const AdminPage = (() => {
                 </div>
                 <p style="font-size:11px;color:var(--text3);margin-top:6px;">Aucun sélectionné = tous les jours</p>
               </div>
-              </div>
               <div class="form-group" id="ex-assign-group">
                 <label style="margin-bottom:8px;display:block;">Assigné à</label>
                 <div id="ex-assign-users" style="display:flex;flex-direction:column;gap:6px;"></div>
