@@ -103,9 +103,6 @@ const ProfilePage = (() => {
     const today = new Date().toISOString().split('T')[0];
     const DAY_LABELS = ['L','M','M','J','V','S','D'];
 
-    // Header row: day labels Mon→Sun
-    // calendar is ordered Mon-Sun in DB (generate_series), but JS Date day 0=Sun
-    // We'll show 4 rows of 7 cols, label by weekday of each date
     const cells = calendar.map(d => {
       const pct  = d.total > 0 ? d.done / d.total : 0;
       const cls  = d.date > today ? 'future'
@@ -116,12 +113,8 @@ const ProfilePage = (() => {
       return `<div class="cal-cell ${cls}${isToday ? ' cal-today' : ''}" title="${d.date} · ${d.done}/${d.total}"></div>`;
     });
 
-    // day labels above first row
-    // columns start directly from calendar[0].date — no offset needed
-    const headerLabels = calendar.slice(0, 7).map(d => {
-      const dow = (new Date(d.date + 'T00:00:00').getDay() + 6) % 7;
-      return `<div class="cal-label">${DAY_LABELS[dow]}</div>`;
-    });
+    // Calendar always starts on Monday (ISO-aligned), so headers are fixed
+    const headerLabels = DAY_LABELS.map(l => `<div class="cal-label">${l}</div>`);
 
     return `
       <div class="profile-section" style="animation:fadeIn 0.3s ease 0.1s both">

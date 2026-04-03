@@ -95,21 +95,26 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       db.query(`SELECT COUNT(*) AS total FROM exercises WHERE is_active = TRUE`),
     ]);
 
-    // 28-day calendar (last 4 weeks)
+    // 28-day calendar aligned to ISO weeks (Mon→Sun), 4 full weeks
     const calendarRes = await db.query(
-      `WITH active_count AS (SELECT COUNT(*) AS cnt FROM exercises WHERE is_active = TRUE),
+      `WITH week_start AS (
+              SELECT (CURRENT_DATE - (EXTRACT(ISODOW FROM CURRENT_DATE)::int - 1) - 21)::date AS start_date,
+                     (CURRENT_DATE - (EXTRACT(ISODOW FROM CURRENT_DATE)::int - 1) + 6)::date  AS end_date
+            ),
+            active_count AS (SELECT COUNT(*) AS cnt FROM exercises WHERE is_active = TRUE),
             day_data AS (
               SELECT entry_date,
                      COUNT(*) FILTER (WHERE completed) AS done
               FROM checklist_entries
               WHERE user_id = $1
-                AND entry_date >= CURRENT_DATE - 27
+                AND entry_date >= (SELECT start_date FROM week_start)
               GROUP BY entry_date
             )
        SELECT d.entry_date,
               COALESCE(dd.done, 0) AS done,
               ac.cnt AS total
-       FROM generate_series(CURRENT_DATE - 27, CURRENT_DATE, '1 day'::interval) AS d(entry_date)
+       FROM week_start ws,
+            generate_series(ws.start_date, ws.end_date, '1 day'::interval) AS d(entry_date)
        CROSS JOIN active_count ac
        LEFT JOIN day_data dd ON dd.entry_date = d.entry_date
        ORDER BY d.entry_date`,
