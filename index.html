@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#1a1a2e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>JuGus Do-It 💪</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="login-page">
+  <div class="login-container">
+    <div class="login-header">
+      <div class="logo">💪</div>
+      <h1>JuGus Do-It</h1>
+      <p class="tagline">Qui es-tu aujourd'hui ?</p>
+    </div>
+
+    <div class="player-cards">
+      <button class="player-card" data-user="ju" onclick="selectUser('ju')">
+        <div class="player-avatar ju-avatar">🧑</div>
+        <div class="player-name">Ju</div>
+        <div class="player-title" id="ju-title">Chargement...</div>
+      </button>
+
+      <button class="player-card" data-user="gus" onclick="selectUser('gus')">
+        <div class="player-avatar gus-avatar">👨</div>
+        <div class="player-name">Gus</div>
+        <div class="player-title" id="gus-title">Chargement...</div>
+      </button>
+    </div>
+
+    <p class="login-footer">Commence ta semaine. Bats tes records 🔥</p>
+  </div>
+
+  <script>
+    const RANKS = [
+      { min: 0,   title: "Débutant 🌱",    xpNeeded: 100 },
+      { min: 100, title: "Guerrier 🗡️",     xpNeeded: 300 },
+      { min: 400, title: "Champion 🏆",     xpNeeded: 600 },
+      { min: 1000, title: "Légende ⚡",     xpNeeded: 1000 },
+      { min: 2000, title: "Dieu du Muscle 🔱", xpNeeded: Infinity }
+    ];
+
+    function getRank(xp) {
+      for (let i = RANKS.length - 1; i >= 0; i--) {
+        if (xp >= RANKS[i].min) return RANKS[i];
+      }
+      return RANKS[0];
+    }
+
+    function loadTitle(user) {
+      const xp = parseInt(localStorage.getItem(`${user}_xp`) || '0');
+      const rank = getRank(xp);
+      document.getElementById(`${user}-title`).textContent = `${rank.title} · ${xp} XP`;
+    }
+
+    function selectUser(user) {
+      localStorage.setItem('currentUser', user);
+      window.location.href = 'app.html';
+    }
+
+    loadTitle('ju');
+    loadTitle('gus');
+  </script>
+</body>
+</html>

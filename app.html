@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#1a1a2e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>JuGus Do-It 💪</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="app-page">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <button class="back-btn" onclick="goBack()">←</button>
+    <div class="header-info">
+      <span class="header-username" id="header-username">...</span>
+      <span class="header-rank" id="header-rank">...</span>
+    </div>
+    <div class="header-xp">
+      <span id="header-xp-val">0 XP</span>
+    </div>
+  </header>
+
+  <!-- XP BAR -->
+  <div class="xp-bar-container">
+    <div class="xp-bar-track">
+      <div class="xp-bar-fill" id="xp-bar-fill"></div>
+    </div>
+    <div class="xp-bar-labels">
+      <span id="xp-current-label">0 XP</span>
+      <span id="xp-rank-progress"></span>
+      <span id="xp-next-label">100 XP</span>
+    </div>
+  </div>
+
+  <!-- WEEK NAV -->
+  <div class="week-nav">
+    <button class="week-btn" onclick="changeWeek(-1)">‹</button>
+    <div class="week-label" id="week-label">Semaine actuelle</div>
+    <button class="week-btn" onclick="changeWeek(1)">›</button>
+  </div>
+
+  <!-- STATS BAND -->
+  <div class="stats-band">
+    <div class="stat-pill">
+      <span class="stat-val" id="stat-streak">0</span>
+      <span class="stat-lbl">🔥 Série</span>
+    </div>
+    <div class="stat-pill">
+      <span class="stat-val" id="stat-week">0/7</span>
+      <span class="stat-lbl">📅 Cette sem.</span>
+    </div>
+    <div class="stat-pill">
+      <span class="stat-val" id="stat-total">0</span>
+      <span class="stat-lbl">⚡ Total jours</span>
+    </div>
+  </div>
+
+  <!-- CALENDAR -->
+  <main class="calendar-container" id="calendar-container">
+    <!-- Days injected by JS -->
+  </main>
+
+  <!-- TOAST NOTIFICATION -->
+  <div class="toast" id="toast"></div>
+
+  <!-- LEVEL UP MODAL -->
+  <div class="modal-overlay" id="levelup-modal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-emoji" id="modal-emoji">🏆</div>
+      <h2 id="modal-title">Niveau supérieur !</h2>
+      <p id="modal-desc">Tu as atteint un nouveau rang !</p>
+      <button class="modal-btn" onclick="closeModal()">Continuons ! 💪</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

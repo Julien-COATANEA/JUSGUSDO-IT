@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f0f1a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>JuGus Do-It 💪</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Pages rendered by router.js -->
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="modal-overlay" id="levelup-modal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-emoji" id="modal-emoji">🏆</div>
+      <h2 id="modal-title">Niveau supérieur !</h2>
+      <p id="modal-desc">Tu as atteint un nouveau rang !</p>
+      <button class="modal-btn" onclick="App.closeModal()">Continuons ! 💪</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="confirm-modal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-emoji">⚠️</div>
+      <h2 id="confirm-title">Confirmer</h2>
+      <p id="confirm-desc"></p>
+      <div style="display:flex;gap:12px;margin-top:4px;">
+        <button class="modal-btn" style="background:var(--card2);color:var(--text2);box-shadow:none;" onclick="App.closeConfirm(false)">Annuler</button>
+        <button class="modal-btn" id="confirm-ok-btn" onclick="App.closeConfirm(true)">Confirmer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/gamification.js"></script>
+  <script src="/js/pages/login.js"></script>
+  <script src="/js/pages/home.js"></script>
+  <script src="/js/pages/app.js"></script>
+  <script src="/js/pages/admin.js"></script>
+  <script src="/js/router.js"></script>
+</body>
+</html>
