@@ -154,6 +154,7 @@ const WorkoutPage = (() => {
       const key = dateKey(date);
       const isToday = date.getTime() === today.getTime();
       const isFuture = date > today;
+      const isPast = !isToday && !isFuture;
 
       const dayExercises = getExercisesForDay(date);
       const doneCount = dayExercises.filter(ex => entries[`${key}_${ex.id}`] === true).length;
