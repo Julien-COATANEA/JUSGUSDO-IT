@@ -15,11 +15,18 @@ const EXERCISES = [
 const DAY_XP = 15; // bonus XP for completing all exercises in a day
 
 const RANKS = [
-  { min: 0,    title: 'Débutant',        emoji: '🌱', xpNeeded: 100  },
-  { min: 100,  title: 'Guerrier',        emoji: '🗡️', xpNeeded: 300  },
-  { min: 400,  title: 'Champion',        emoji: '🏆', xpNeeded: 600  },
-  { min: 1000, title: 'Légende',         emoji: '⚡', xpNeeded: 1000 },
-  { min: 2000, title: 'Dieu du Muscle',  emoji: '🔱', xpNeeded: Infinity },
+  { min: 0,     title: 'Débutant',       emoji: '🌱', xpNeeded: 100  },
+  { min: 100,   title: 'Apprenti',       emoji: '🔰', xpNeeded: 150  },
+  { min: 250,   title: 'Guerrier',       emoji: '🗡️', xpNeeded: 250  },
+  { min: 500,   title: 'Combattant',     emoji: '🥊', xpNeeded: 300  },
+  { min: 800,   title: 'Vétéran',        emoji: '🛡️', xpNeeded: 400  },
+  { min: 1200,  title: 'Champion',       emoji: '🏆', xpNeeded: 500  },
+  { min: 1700,  title: 'Élite',          emoji: '💎', xpNeeded: 700  },
+  { min: 2400,  title: 'Maître',         emoji: '🌟', xpNeeded: 800  },
+  { min: 3200,  title: 'Légende',        emoji: '⚡', xpNeeded: 1000 },
+  { min: 4200,  title: 'Mythique',       emoji: '🔥', xpNeeded: 1300 },
+  { min: 5500,  title: 'Immortel',       emoji: '👑', xpNeeded: 1500 },
+  { min: 7000,  title: 'Dieu du Muscle', emoji: '🔱', xpNeeded: Infinity },
 ];
 
 // ── STATE ────────────────────────────────────────────────────
