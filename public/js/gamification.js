@@ -165,5 +165,26 @@ const App = (() => {
     if (btn) btn.disabled = false;
   }
 
-  return { showToast, showLevelUp, closeModal, showConfirm, closeConfirm, showProfileModal, saveProfile, closeProfileModal };
+  // ── Theme toggle ───────────────────────────────────────────
+  function _applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('theme', theme);
+    const btn = document.getElementById('theme-toggle-btn');
+    if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀️';
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.dataset.theme;
+    _applyTheme(current === 'light' ? 'dark' : 'light');
+  }
+
+  function initTheme() {
+    const saved = localStorage.getItem('theme') || 'dark';
+    _applyTheme(saved);
+  }
+
+  // Init theme on load
+  initTheme();
+
+  return { showToast, showLevelUp, closeModal, showConfirm, closeConfirm, showProfileModal, saveProfile, closeProfileModal, toggleTheme, initTheme };
 })();

@@ -85,6 +85,51 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       [userId]
     );
 
+    // Today's status
+    const [todayDoneRes, todayTotalRes] = await Promise.all([
+      db.query(
+        `SELECT COUNT(*) AS done FROM checklist_entries
+         WHERE user_id = $1 AND entry_date = CURRENT_DATE AND completed = TRUE`,
+        [userId]
+      ),
+      db.query(`SELECT COUNT(*) AS total FROM exercises WHERE is_active = TRUE`),
+    ]);
+
+    // 28-day calendar (last 4 weeks)
+    const calendarRes = await db.query(
+      `WITH active_count AS (SELECT COUNT(*) AS cnt FROM exercises WHERE is_active = TRUE),
+            day_data AS (
+              SELECT entry_date,
+                     COUNT(*) FILTER (WHERE completed) AS done
+              FROM checklist_entries
+              WHERE user_id = $1
+                AND entry_date >= CURRENT_DATE - 27
+              GROUP BY entry_date
+            )
+       SELECT d.entry_date,
+              COALESCE(dd.done, 0) AS done,
+              ac.cnt AS total
+       FROM generate_series(CURRENT_DATE - 27, CURRENT_DATE, '1 day'::interval) AS d(entry_date)
+       CROSS JOIN active_count ac
+       LEFT JOIN day_data dd ON dd.entry_date = d.entry_date
+       ORDER BY d.entry_date`,
+      [userId]
+    );
+
+    // Daily XP for last 30 days
+    const xpHistoryRes = await db.query(
+      `SELECT ce.entry_date,
+              SUM(e.xp_reward) AS xp_earned
+       FROM checklist_entries ce
+       JOIN exercises e ON e.id = ce.exercise_id
+       WHERE ce.user_id = $1
+         AND ce.completed = TRUE
+         AND ce.entry_date >= CURRENT_DATE - 29
+       GROUP BY ce.entry_date
+       ORDER BY ce.entry_date`,
+      [userId]
+    );
+
     // Compute streaks
     const dates = datesRes.rows.map(r => {
       const d = r.entry_date;
@@ -124,6 +169,17 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
         best_streak:     bestStreak,
         current_streak:  currentStreak,
         top_exercises:   topExRes.rows,
+        today_done:      parseInt(todayDoneRes.rows[0].done),
+        today_total:     parseInt(todayTotalRes.rows[0].total),
+        calendar:        calendarRes.rows.map(r => ({
+          date:  typeof r.entry_date === 'string' ? r.entry_date : r.entry_date.toISOString().split('T')[0],
+          done:  parseInt(r.done),
+          total: parseInt(r.total),
+        })),
+        xp_history: xpHistoryRes.rows.map(r => ({
+          date:       typeof r.entry_date === 'string' ? r.entry_date : r.entry_date.toISOString().split('T')[0],
+          xp_earned:  parseInt(r.xp_earned),
+        })),
       },
     });
   } catch (err) {
