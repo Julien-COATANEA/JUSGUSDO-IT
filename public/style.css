@@ -502,6 +502,9 @@ html, body {
 }
 .exercise-item.checked .exercise-checkbox { background: var(--green); border-color: var(--green); box-shadow: 0 0 10px rgba(34,209,139,0.35); }
 
+.exercise-item.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+.day-card.past .day-header { cursor: default; }
+
 .all-done-badge {
   display: none;
   font-size: 11px;
@@ -845,7 +848,7 @@ html, body {
 .modal-btn:active { transform: scale(0.97); }
 
 /* XP float */
-.xp-float {
+.xp-float, .xp-popup {
   position: fixed;
   font-size: 18px;
   font-weight: 900;

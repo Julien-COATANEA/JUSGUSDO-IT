@@ -168,7 +168,7 @@ const WorkoutPage = (() => {
       const ringColor = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : '#ef4444';
 
       const card = document.createElement('div');
-      card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isToday ? ' open' : ''}`;
+      card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${isToday ? ' open' : ''}`;
       card.dataset.key = key;
       card.id = `day-${key}`;
 
@@ -191,7 +191,7 @@ const WorkoutPage = (() => {
             : dayExercises.map(ex => {
             const checked = entries[`${key}_${ex.id}`] === true;
             return `
-              <div class="exercise-item${checked ? ' checked' : ''}"
+              <div class="exercise-item${checked ? ' checked' : ''}${isPast ? ' disabled' : ''}"
                    id="ex-${key}-${ex.id}"
                    onclick="WorkoutPage.toggleExercise('${key}', ${ex.id}, this)">
                 <div class="exercise-icon">${ex.emoji}</div>
