@@ -87,8 +87,6 @@ const HomePage = (() => {
           dayBadge = `<div class="player-day-badge done">&#x2705; Journée complète !</div>`;
         } else if (done > 0) {
           dayBadge = `<div class="player-day-badge partial">&#x1F4AA; ${done}&thinsp;/&thinsp;${total} aujourd'hui</div>`;
-        } else {
-          dayBadge = `<div class="player-day-badge empty">&#x1F634; Pas encore commencé</div>`;
         }
       }
 
@@ -103,8 +101,7 @@ const HomePage = (() => {
                 <div class="player-xp-bar-fill" style="width:${progress.pct}%"></div>
               </div>
               <div class="player-xp-labels">
-                <span>${progress.inRank} XP</span>
-                <span>${progress.needed} XP pour rang suivant</span>
+                <span>${progress.inRank} / ${progress.needed} XP</span>
               </div>
             </div>
           </div>

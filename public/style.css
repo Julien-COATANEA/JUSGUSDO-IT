@@ -616,11 +616,11 @@ html, body {
 }
 .player-xp-labels {
   display: flex;
-  justify-content: space-between;
   font-size: 10px;
   color: var(--text3);
-  margin-top: 5px;
+  margin-top: 4px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .player-xp-badge {
