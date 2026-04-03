@@ -1,6 +1,7 @@
 // ── Home / Activity page ─────────────────────────────────────
 const HomePage = (() => {
   let _refreshTimer = null;
+  let _todayStatus  = null;
   function render() {
     return `
       <div class="app-page">
@@ -9,8 +10,8 @@ const HomePage = (() => {
             <span class="header-username">JuGus Do-It 💪</span>
             <span class="header-rank">Notre progression</span>
           </div>
-          <button class="icon-btn" onclick="App.showProfileModal()" title="Mon profil">✏️</button>
-          <button class="icon-btn" style="color:var(--text3)" onclick="HomePage.logout()" title="Déconnexion">🚪</button>
+          <button class="icon-btn" onclick="App.showProfileModal()" title="Mon profil"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+          <button class="icon-btn" style="color:var(--text3)" onclick="HomePage.logout()" title="Déconnexion"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
         </header>
 
         <div id="activity-container">
@@ -25,8 +26,17 @@ const HomePage = (() => {
   }
 
   async function init() {
+    const today = new Date().toISOString().split('T')[0];
     try {
-      const { users } = await API.getUsers();
+      const [{ users }, checklistData, exercisesData] = await Promise.all([
+        API.getUsers(),
+        API.getChecklist(today, today),
+        API.getExercises(),
+      ]);
+      _todayStatus = {
+        done:  checklistData.entries.filter(e => e.completed).length,
+        total: exercisesData.exercises.length,
+      };
       renderActivity(users);
     } catch (err) {
       document.getElementById('activity-container').innerHTML =
@@ -35,7 +45,18 @@ const HomePage = (() => {
     clearInterval(_refreshTimer);
     _refreshTimer = setInterval(async () => {
       if (!document.getElementById('players-grid')) { clearInterval(_refreshTimer); return; }
-      try { const { users } = await API.getUsers(); renderActivity(users); } catch (_) {}
+      try {
+        const [{ users }, checklistData, exercisesData] = await Promise.all([
+          API.getUsers(),
+          API.getChecklist(today, today),
+          API.getExercises(),
+        ]);
+        _todayStatus = {
+          done:  checklistData.entries.filter(e => e.completed).length,
+          total: exercisesData.exercises.length,
+        };
+        renderActivity(users);
+      } catch (_) {}
     }, 60_000);
   }
 
@@ -56,10 +77,24 @@ const HomePage = (() => {
       const progress = Gamification.getProgress(u.xp);
       const isMe     = u.id === me.id;
       const avatar   = u.avatar || rank.emoji;
+      const name     = escapeHtml(u.username.charAt(0).toUpperCase() + u.username.slice(1));
+
+      let dayBadge = '';
+      if (isMe && _todayStatus && _todayStatus.total > 0) {
+        const { done, total } = _todayStatus;
+        if (done >= total) {
+          dayBadge = `<div class="player-day-badge done">&#x2705; Journée complète !</div>`;
+        } else if (done > 0) {
+          dayBadge = `<div class="player-day-badge partial">&#x1F4AA; ${done}&thinsp;/&thinsp;${total} aujourd'hui</div>`;
+        } else {
+          dayBadge = `<div class="player-day-badge empty">&#x1F634; Pas encore commencé</div>`;
+        }
+      }
+
       return `
         <div class="player-card${isMe ? ' is-me' : ''}" style="animation:fadeIn 0.3s ease both;animation-delay:${i * 0.06}s" onclick="Router.navigate('profile',{userId:${u.id}})" role="button" tabindex="0">
           <div class="player-avatar">${avatar}</div>
-          <div class="player-name">${escapeHtml(u.username)}</div>
+          <div class="player-name">${name}</div>
           <div class="player-rank-title">${rank.title}</div>
           <div class="player-xp-bar">
             <div class="player-xp-bar-track">
@@ -71,6 +106,7 @@ const HomePage = (() => {
             </div>
           </div>
           <div class="player-xp-badge">${u.xp} XP</div>
+          ${dayBadge}
         </div>
       `;
     }).join('');
