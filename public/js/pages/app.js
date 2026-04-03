@@ -195,10 +195,10 @@ const WorkoutPage = (() => {
               <div class="exercise-item${checked ? ' checked' : ''}${isPast ? ' disabled' : ''}"
                    id="ex-${key}-${ex.id}"
                    onclick="WorkoutPage.toggleExercise('${key}', ${ex.id}, this)">
-                <div class="exercise-icon">${ex.emoji}</div>
+                <div class="exercise-icon">${ex.is_running ? '🏃' : ex.emoji}</div>
                 <div class="exercise-info">
                   <div class="exercise-name">${escapeHtml(ex.name)}</div>
-                  <div class="exercise-detail">${ex.sets > 1 ? ex.sets + ' séries × ' : ''}${ex.reps} ${escapeHtml(ex.unit)}</div>
+                  ${ex.is_running ? '' : `<div class="exercise-detail">${ex.sets > 1 ? ex.sets + ' séries × ' : ''}${ex.reps} ${escapeHtml(ex.unit)}</div>`}
                 </div>
                 <div class="exercise-checkbox">${checked ? '✓' : ''}</div>
               </div>

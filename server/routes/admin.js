@@ -31,8 +31,8 @@ router.post('/exercises', requireAdmin, async (req, res) => {
   if (!name || !reps) {
     return res.status(400).json({ error: 'name et reps requis' });
   }
-  // is_running sessions get 15 XP, others always 10
-  const xp = is_running ? 15 : 10;
+  // is_running sessions get 20 XP, others always 10
+  const xp = is_running ? 20 : 10;
   try {
     const result = await db.query(
       `INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index, schedule, is_running)
@@ -61,7 +61,7 @@ router.put('/exercises/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, emoji, sets, reps, unit, order_index, is_active, schedule, is_running } = req.body;
   // Recompute XP based on is_running if provided, otherwise keep existing
-  const xpExpr = typeof is_running === 'boolean' ? (is_running ? 15 : 10) : null;
+  const xpExpr = typeof is_running === 'boolean' ? (is_running ? 20 : 10) : null;
   try {
     const result = await db.query(
       `UPDATE exercises

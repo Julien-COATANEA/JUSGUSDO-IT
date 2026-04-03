@@ -39,17 +39,26 @@ const AdminPage = (() => {
                 <input type="text" id="ex-name" placeholder="Ex: Pompes" required />
               </div>
               <div class="form-group">
-                <label>Séries</label>
-                <input type="number" id="ex-sets" value="1" min="1" max="20" />
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+                  <input type="checkbox" id="ex-is-running" onchange="AdminPage.toggleRunningFields()"
+                    style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;" />
+                  <span>🏃 Session running <span style="font-size:11px;color:var(--text3);">(20 XP, pas de séries)</span></span>
+                </label>
               </div>
-              <div class="form-group">
-                <label>Répétitions *</label>
-                <input type="number" id="ex-reps" placeholder="20" required min="1" />
-              </div>
-              <div class="form-group">
-                <label>Unité</label>
-                <input type="text" id="ex-unit" value="répétitions" placeholder="répétitions / secondes..." />
-              </div>
+              <div id="ex-muscu-fields">
+                <div class="form-group">
+                  <label>Séries</label>
+                  <input type="number" id="ex-sets" value="1" min="1" max="20" />
+                </div>
+                <div class="form-group">
+                  <label>Répétitions *</label>
+                  <input type="number" id="ex-reps" placeholder="20" min="1" />
+                </div>
+                <div class="form-group">
+                  <label>Unité</label>
+                  <input type="text" id="ex-unit" value="répétitions" placeholder="répétitions / secondes..." />
+                </div>
+              </div><!-- /#ex-muscu-fields -->
               <div class="form-group">
                 <label>Ordre d'affichage</label>
                 <input type="number" id="ex-order" value="0" min="0" />
@@ -67,11 +76,6 @@ const AdminPage = (() => {
                 </div>
                 <p style="font-size:11px;color:var(--text3);margin-top:6px;">Aucun sélectionné = tous les jours</p>
               </div>
-              <div class="form-group">
-                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-                  <input type="checkbox" id="ex-is-running" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;" />
-                  <span>🏃 Session running <span style="font-size:11px;color:var(--text3);">(15 XP au lieu de 10)</span></span>
-                </label>
               </div>
               <div class="form-group" id="ex-assign-group">
                 <label style="margin-bottom:8px;display:block;">Assigné à</label>
@@ -206,6 +210,7 @@ const AdminPage = (() => {
       document.getElementById('ex-unit').value = ex.unit;
       document.getElementById('ex-order').value = ex.order_index;
       document.getElementById('ex-is-running').checked = !!ex.is_running;
+      toggleRunningFields();
       const schedule = ex.schedule || [];
       document.querySelectorAll('#ex-schedule .sday-btn').forEach(btn => {
         btn.classList.toggle('active', schedule.includes(parseInt(btn.dataset.day)));
@@ -218,6 +223,7 @@ const AdminPage = (() => {
       document.getElementById('ex-unit').value = 'répétitions';
       document.getElementById('ex-is-running').checked = false;
       document.querySelectorAll('#ex-schedule .sday-btn').forEach(btn => btn.classList.remove('active'));
+      toggleRunningFields();
     }
     renderAssignmentCheckboxes(id ? (exercises.find(e => e.id === id)?.assigned_users || []) : []);
     modal.style.display = 'flex';
@@ -226,6 +232,14 @@ const AdminPage = (() => {
   function closeExModal() {
     document.getElementById('ex-modal').style.display = 'none';
     editingId = null;
+  }
+
+  function toggleRunningFields() {
+    const isRunning = document.getElementById('ex-is-running').checked;
+    const muscu = document.getElementById('ex-muscu-fields');
+    const repsInput = document.getElementById('ex-reps');
+    muscu.style.display = isRunning ? 'none' : '';
+    repsInput.required = !isRunning;
   }
 
   async function saveExercise(e) {
@@ -239,9 +253,9 @@ const AdminPage = (() => {
     const data = {
       emoji: document.getElementById('ex-emoji').value,
       name: document.getElementById('ex-name').value.trim(),
-      sets: parseInt(document.getElementById('ex-sets').value),
-      reps: parseInt(document.getElementById('ex-reps').value),
-      unit: document.getElementById('ex-unit').value.trim(),
+      sets: isRunning ? 1 : parseInt(document.getElementById('ex-sets').value),
+      reps: isRunning ? 1 : parseInt(document.getElementById('ex-reps').value),
+      unit: isRunning ? 'session' : document.getElementById('ex-unit').value.trim(),
       order_index: parseInt(document.getElementById('ex-order').value),
       schedule: [...document.querySelectorAll('#ex-schedule .sday-btn.active')].map(b => parseInt(b.dataset.day)),
       is_running: isRunning,
@@ -358,5 +372,5 @@ const AdminPage = (() => {
     return sch.map(d => labels[d]).join(' · ');
   }
 
-  return { render, init, switchTab, openExModal, closeExModal, saveExercise, deleteExercise, restoreExercise, toggleAdmin };
+  return { render, init, switchTab, openExModal, closeExModal, saveExercise, deleteExercise, restoreExercise, toggleAdmin, toggleRunningFields };
 })();
