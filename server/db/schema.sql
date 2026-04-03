@@ -46,9 +46,12 @@ ALTER TABLE exercises ADD COLUMN IF NOT EXISTS schedule INTEGER[] DEFAULT '{}';
 -- Migration: add avatar column
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar VARCHAR(10) DEFAULT '💪';
 
+-- Migration: unique constraint on exercise name to prevent seed duplicates
+ALTER TABLE exercises ADD CONSTRAINT IF NOT EXISTS exercises_name_unique UNIQUE (name);
+
 -- Seed default exercises
 INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index) VALUES
   ('Pompes',  '💪', 1, 20, 'répétitions', 10, 1),
   ('Abdos',   '🔥', 1, 30, 'répétitions', 10, 2),
   ('Squats',  '🦵', 1, 30, 'répétitions', 10, 3)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (name) DO NOTHING;
