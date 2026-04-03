@@ -81,3 +81,16 @@ CREATE TABLE IF NOT EXISTS user_exercise_assignments (
 );
 CREATE INDEX IF NOT EXISTS idx_uea_exercise ON user_exercise_assignments(exercise_id);
 CREATE INDEX IF NOT EXISTS idx_uea_user ON user_exercise_assignments(user_id);
+
+-- Migration: muscle records (personal bests for weightlifting)
+CREATE TABLE IF NOT EXISTS muscle_records (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  exercise_name VARCHAR(100) NOT NULL,
+  sets INTEGER NOT NULL,
+  weight_kg DECIMAL(5,1) NOT NULL,
+  notes VARCHAR(255),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, exercise_name)
+);
+CREATE INDEX IF NOT EXISTS idx_muscle_records_user ON muscle_records(user_id);

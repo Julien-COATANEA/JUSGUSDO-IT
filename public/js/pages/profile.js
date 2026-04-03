@@ -1,5 +1,8 @@
 // ── Profile / Stats page ─────────────────────────────────────
 const ProfilePage = (() => {
+  let _profileUserId = null;
+  let _isOwnProfile  = false;
+
   function render() {
     return `
       <div class="app-page">
@@ -23,16 +26,24 @@ const ProfilePage = (() => {
   async function init({ userId } = {}) {
     const container = document.getElementById('profile-content');
     if (!container) return;
+
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    _profileUserId = userId ? parseInt(userId, 10) : currentUser.id;
+    _isOwnProfile  = _profileUserId === currentUser.id;
+
     try {
-      const { user, stats } = await API.getUserStats(userId);
-      container.innerHTML = _renderAll(user, stats);
+      const [{ user, stats }, { records }] = await Promise.all([
+        API.getUserStats(_profileUserId),
+        API.getMuscleRecords(_profileUserId),
+      ]);
+      container.innerHTML = _renderAll(user, stats, records);
     } catch (err) {
       container.innerHTML = `<p style="color:var(--text3);text-align:center;padding:40px 0">Erreur de chargement</p>`;
     }
   }
 
   // ── Main renderer ───────────────────────────────────────────
-  function _renderAll(user, stats) {
+  function _renderAll(user, stats, records = []) {
     const rank     = Gamification.getRank(user.xp);
     const progress = Gamification.getProgress(user.xp);
     const avatar   = user.avatar || rank.emoji;
@@ -45,6 +56,7 @@ const ProfilePage = (() => {
       ${_renderXpChart(stats.xp_history)}
       ${_renderChallenges(stats)}
       ${_renderTopEx(stats.top_exercises)}
+      ${_renderMuscleRecords(records)}
     `;
   }
 
@@ -251,6 +263,156 @@ const ProfilePage = (() => {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  return { render, init };
+  // ── 7. Records Muscu ────────────────────────────────────────
+  function _renderMuscleRecords(records) {
+    const maxWeight = records.length ? Math.max(...records.map(r => r.weight_kg)) : 1;
+
+    const cards = records.map(r => {
+      const pct     = Math.max(10, Math.round((r.weight_kg / maxWeight) * 100));
+      const dateStr = r.updated_at
+        ? new Date(r.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+        : '';
+      const editAttrs = _isOwnProfile
+        ? `onclick="ProfilePage.showEditRecordForm(${r.id}, '${_escape(r.exercise_name).replace(/'/g,"\\'")}', ${r.sets}, ${r.weight_kg})"`
+        : '';
+      const delAttrs = _isOwnProfile
+        ? `onclick="ProfilePage.deleteRecord(${r.id})"`
+        : '';
+      return `
+        <div class="muscle-record-card">
+          <div class="muscle-record-header">
+            <span class="muscle-record-name">${_escape(r.exercise_name)}</span>
+            ${_isOwnProfile ? `
+            <div class="muscle-record-actions">
+              <button class="mr-btn-icon" title="Modifier" ${editAttrs}>✏️</button>
+              <button class="mr-btn-icon mr-btn-del" title="Supprimer" ${delAttrs}>🗑️</button>
+            </div>` : ''}
+          </div>
+          <div class="muscle-record-stats">
+            <span class="muscle-record-reps">🔁 ${r.sets} série${r.sets > 1 ? 's' : ''}</span>
+            <span class="muscle-record-weight">${r.weight_kg % 1 === 0 ? r.weight_kg : r.weight_kg.toFixed(1)} kg</span>
+          </div>
+          <div class="muscle-record-bar-track">
+            <div class="muscle-record-bar-fill" style="width:${pct}%"></div>
+          </div>
+          ${dateStr ? `<div class="muscle-record-date">Mis à jour le ${dateStr}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    const empty = records.length === 0
+      ? `<p class="muscle-records-empty">Aucun record pour l'instant 💪</p>`
+      : '';
+
+    const addBtn = _isOwnProfile
+      ? `<button class="mr-add-btn" onclick="ProfilePage.showAddRecordForm()">＋ Ajouter un record</button>`
+      : '';
+
+    return `
+      <div class="profile-section" id="muscle-records-section" style="animation:fadeIn 0.3s ease 0.22s both">
+        <div class="muscle-records-title-row">
+          <div class="profile-section-title" style="margin-bottom:0">🏋️ Records Muscu</div>
+          ${_isOwnProfile ? `<button class="icon-btn mr-plus-btn" onclick="ProfilePage.showAddRecordForm()" title="Ajouter un record">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>` : ''}
+        </div>
+
+        <div id="muscle-record-form" style="display:none" class="muscle-record-form">
+          <input id="mr-name" class="mr-input" type="text" placeholder="Exercice (ex: Développé couché haltères)" autocomplete="off" maxlength="100" />
+          <div class="mr-row">
+            <div class="mr-field">
+              <label class="mr-label">Séries</label>
+              <input id="mr-sets" class="mr-input" type="number" min="1" max="100" placeholder="7" />
+            </div>
+            <div class="mr-field">
+              <label class="mr-label">Poids (kg)</label>
+              <input id="mr-weight" class="mr-input" type="number" min="0" step="0.5" placeholder="36" />
+            </div>
+          </div>
+          <div id="mr-form-error" class="mr-form-error"></div>
+          <div class="mr-form-actions">
+            <button class="mr-save-btn" onclick="ProfilePage.saveRecord()">Enregistrer</button>
+            <button class="mr-cancel-btn" onclick="ProfilePage.cancelRecordForm()">Annuler</button>
+          </div>
+          <input type="hidden" id="mr-editing-id" value="" />
+        </div>
+
+        ${empty}
+        <div id="muscle-records-list">
+          ${cards}
+        </div>
+      </div>`;
+  }
+
+  // ── Muscle records interaction ───────────────────────────────
+  function showAddRecordForm() {
+    const form = document.getElementById('muscle-record-form');
+    if (!form) return;
+    document.getElementById('mr-name').value    = '';
+    document.getElementById('mr-sets').value    = '';
+    document.getElementById('mr-weight').value  = '';
+    document.getElementById('mr-editing-id').value = '';
+    document.getElementById('mr-form-error').textContent = '';
+    form.style.display = 'block';
+    setTimeout(() => document.getElementById('mr-name').focus(), 50);
+  }
+
+  function showEditRecordForm(id, name, sets, weight) {
+    const form = document.getElementById('muscle-record-form');
+    if (!form) return;
+    document.getElementById('mr-name').value    = name;
+    document.getElementById('mr-sets').value    = sets;
+    document.getElementById('mr-weight').value  = weight;
+    document.getElementById('mr-editing-id').value = id;
+    document.getElementById('mr-form-error').textContent = '';
+    form.style.display = 'block';
+    form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function cancelRecordForm() {
+    const form = document.getElementById('muscle-record-form');
+    if (form) form.style.display = 'none';
+  }
+
+  async function saveRecord() {
+    const name   = (document.getElementById('mr-name').value || '').trim();
+    const sets   = parseInt(document.getElementById('mr-sets').value, 10);
+    const weight = parseFloat(document.getElementById('mr-weight').value);
+    const errEl  = document.getElementById('mr-form-error');
+
+    if (!name) { errEl.textContent = 'Nom de l\'exercice requis'; return; }
+    if (!sets || sets < 1) { errEl.textContent = 'Nombre de séries invalide'; return; }
+    if (isNaN(weight) || weight < 0) { errEl.textContent = 'Poids invalide'; return; }
+
+    const btn = document.querySelector('.mr-save-btn');
+    if (btn) btn.disabled = true;
+    errEl.textContent = '';
+    try {
+      await API.saveMuscleRecord(_profileUserId, { exercise_name: name, sets, weight_kg: weight });
+      await _refreshMuscleRecords();
+    } catch (err) {
+      errEl.textContent = err.message || 'Erreur lors de la sauvegarde';
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function deleteRecord(id) {
+    try {
+      await API.deleteMuscleRecord(_profileUserId, id);
+      await _refreshMuscleRecords();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function _refreshMuscleRecords() {
+    const { records } = await API.getMuscleRecords(_profileUserId);
+    const section = document.getElementById('muscle-records-section');
+    if (!section) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = _renderMuscleRecords(records);
+    section.replaceWith(tmp.firstElementChild);
+  }
+
+  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, saveRecord, deleteRecord };
 })();
 

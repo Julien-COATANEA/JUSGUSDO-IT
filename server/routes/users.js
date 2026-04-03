@@ -193,4 +193,64 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/users/:id/muscle-records
+router.get('/:id/muscle-records', requireAuth, async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (!userId || isNaN(userId)) return res.status(400).json({ error: 'ID invalide' });
+  try {
+    const result = await db.query(
+      `SELECT id, exercise_name, sets, weight_kg::float AS weight_kg, notes, updated_at
+       FROM muscle_records WHERE user_id = $1 ORDER BY exercise_name ASC`,
+      [userId]
+    );
+    res.json({ records: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/users/:id/muscle-records — upsert by exercise name
+router.post('/:id/muscle-records', requireAuth, async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (req.user.id !== userId && !req.user.is_admin)
+    return res.status(403).json({ error: 'Interdit' });
+  const { exercise_name, sets, weight_kg, notes } = req.body;
+  if (!exercise_name || !sets || weight_kg == null)
+    return res.status(400).json({ error: 'Données manquantes' });
+  try {
+    const result = await db.query(
+      `INSERT INTO muscle_records (user_id, exercise_name, sets, weight_kg, notes)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id, exercise_name)
+       DO UPDATE SET sets = EXCLUDED.sets, weight_kg = EXCLUDED.weight_kg,
+                     notes = EXCLUDED.notes, updated_at = NOW()
+       RETURNING id, exercise_name, sets, weight_kg::float AS weight_kg, notes, updated_at`,
+      [userId, exercise_name.trim(), parseInt(sets, 10), parseFloat(weight_kg), notes || null]
+    );
+    res.json({ record: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// DELETE /api/users/:id/muscle-records/:recordId
+router.delete('/:id/muscle-records/:recordId', requireAuth, async (req, res) => {
+  const userId   = parseInt(req.params.id, 10);
+  const recordId = parseInt(req.params.recordId, 10);
+  if (req.user.id !== userId && !req.user.is_admin)
+    return res.status(403).json({ error: 'Interdit' });
+  try {
+    await db.query(
+      `DELETE FROM muscle_records WHERE id = $1 AND user_id = $2`,
+      [recordId, userId]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;

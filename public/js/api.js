@@ -56,5 +56,10 @@ const API = (() => {
     adminPromoteUser: (id, is_admin) => request('PATCH', `/admin/users/${id}/promote`, { is_admin }),
     adminAssignExercise: (id, userIds) => request('POST', `/admin/exercises/${id}/assign`, { user_ids: userIds }),
     adminUnassignExercise: (id, userId) => request('DELETE', `/admin/exercises/${id}/assign/${userId}`),
+
+    // Muscle records
+    getMuscleRecords: (userId) => request('GET', `/users/${userId}/muscle-records`),
+    saveMuscleRecord: (userId, data) => request('POST', `/users/${userId}/muscle-records`, data),
+    deleteMuscleRecord: (userId, recordId) => request('DELETE', `/users/${userId}/muscle-records/${recordId}`),
   };
 })();
