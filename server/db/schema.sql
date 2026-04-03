@@ -49,6 +49,11 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar VARCHAR(10) DEFAULT '💪';
 -- Migration: unique constraint on exercise name to prevent seed duplicates
 DO $$
 BEGIN
+  -- Remove duplicate exercises, keeping the one with the lowest id
+  DELETE FROM exercises a
+  USING exercises b
+  WHERE a.id > b.id AND a.name = b.name;
+
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'exercises_name_unique'
   ) THEN
