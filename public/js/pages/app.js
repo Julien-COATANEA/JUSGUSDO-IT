@@ -39,6 +39,8 @@ const WorkoutPage = (() => {
           <button class="week-btn" onclick="WorkoutPage.changeWeek(1)">›</button>
         </div>
 
+        <div class="week-strip" id="week-strip"></div>
+
         <div class="stats-band">
           <div class="stat-pill">
             <span class="stat-val" id="stat-streak">0</span>
@@ -155,9 +157,13 @@ const WorkoutPage = (() => {
         if (allDone) weekDone++;
       }
 
+      const ringPct = exercises.length > 0 ? Math.round(doneCount / exercises.length * 100) : 0;
+      const ringColor = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : '#ef4444';
+
       const card = document.createElement('div');
       card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isToday ? ' open' : ''}`;
       card.dataset.key = key;
+      card.id = `day-${key}`;
 
       card.innerHTML = `
         <div class="day-header" onclick="WorkoutPage.toggleDay(this)">
@@ -166,7 +172,10 @@ const WorkoutPage = (() => {
             <div class="day-name">${DAYS_FR[date.getDay()]}</div>
             <div class="day-date">${date.getDate()} ${MONTHS_FR[date.getMonth()]}</div>
           </div>
-          <div class="day-xp-lbl">${doneCount}/${exercises.length} ✓</div>
+          ${isToday ? '<span class="today-badge">Aujourd\'hui</span>' : ''}
+          <div class="day-ring" style="--ring-p:${ringPct};--ring-c:${ringColor}">
+            <span class="day-ring-val">${doneCount}/${exercises.length}</span>
+          </div>
           ${!isFuture ? `<div class="day-toggle">▼</div>` : ''}
         </div>
         <div class="exercises-list">
@@ -176,11 +185,12 @@ const WorkoutPage = (() => {
               <div class="exercise-item${checked ? ' checked' : ''}"
                    id="ex-${key}-${ex.id}"
                    onclick="WorkoutPage.toggleExercise('${key}', ${ex.id}, this)">
-                <div class="exercise-checkbox">${checked ? '✓' : ''}</div>
+                <div class="exercise-icon">${ex.emoji}</div>
                 <div class="exercise-info">
-                  <div class="exercise-name">${ex.emoji} ${escapeHtml(ex.name)}</div>
+                  <div class="exercise-name">${escapeHtml(ex.name)}</div>
                   <div class="exercise-detail">${ex.sets > 1 ? ex.sets + ' séries × ' : ''}${ex.reps} ${escapeHtml(ex.unit)}</div>
                 </div>
+                <div class="exercise-checkbox">${checked ? '✓' : ''}</div>
               </div>
             `;
           }).join('')}
@@ -194,6 +204,38 @@ const WorkoutPage = (() => {
     document.getElementById('stat-week').textContent = `${weekDone}/${weekTotal}`;
     document.getElementById('stat-streak').textContent = stats.streak;
     document.getElementById('stat-total').textContent = stats.totalCompletedDays;
+
+    renderWeekStrip(dates);
+  }
+
+  const DAY_LETTERS = ['D','L','M','M','J','V','S']; // Sun=0
+
+  function renderWeekStrip(dates) {
+    const strip = document.getElementById('week-strip');
+    if (!strip) return;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    strip.innerHTML = dates.map(date => {
+      const key = dateKey(date);
+      const isToday = date.getTime() === today.getTime();
+      const isFuture = date > today;
+      const doneCount = exercises.filter(ex => entries[`${key}_${ex.id}`] === true).length;
+      const total = exercises.length;
+      const allDone = total > 0 && doneCount === total;
+      const pct = total > 0 ? Math.round(doneCount / total * 100) : 0;
+      const ringC = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : '#ef4444';
+      const state = isFuture ? 'future' : allDone ? 'done' : doneCount > 0 ? 'partial' : 'missed';
+
+      return `
+        <div class="wsd ${state}${isToday ? ' today-dot' : ''}" onclick="document.getElementById('day-${key}')?.scrollIntoView({behavior:'smooth',block:'center'})">
+          <div class="wsd-ring" style="--ring-p:${pct};--ring-c:${ringC}">
+            <span class="wsd-inner">${doneCount}</span>
+          </div>
+          <span class="wsd-lbl">${DAY_LETTERS[date.getDay()]}</span>
+        </div>
+      `;
+    }).join('');
   }
 
   function toggleDay(headerEl) {
@@ -217,7 +259,12 @@ const WorkoutPage = (() => {
     const allDone = doneCount === exercises.length;
     card.classList.toggle('completed', allDone);
     card.querySelector('.day-check').textContent = allDone ? '✓' : '';
-    card.querySelector('.day-xp-lbl').textContent = `${doneCount}/${exercises.length} ✓`;
+    const ringEl = card.querySelector('.day-ring');
+    if (ringEl) {
+      const pct = exercises.length > 0 ? Math.round(doneCount / exercises.length * 100) : 0;
+      ringEl.style.setProperty('--ring-p', pct);
+      ringEl.querySelector('.day-ring-val').textContent = `${doneCount}/${exercises.length}`;
+    }
 
     try {
       const result = await API.toggleChecklist(exerciseId, dateStr);
@@ -261,7 +308,12 @@ const WorkoutPage = (() => {
       card.classList.toggle('completed', wasAllDone);
       card.querySelector('.day-check').textContent = wasAllDone ? '✓' : '';
       const revertDone = exercises.filter(ex => entries[`${dateStr}_${ex.id}`] === true).length;
-      card.querySelector('.day-xp-lbl').textContent = `${revertDone}/${exercises.length} ✓`;
+      const revertRingEl = card.querySelector('.day-ring');
+      if (revertRingEl) {
+        const pct = exercises.length > 0 ? Math.round(revertDone / exercises.length * 100) : 0;
+        revertRingEl.style.setProperty('--ring-p', pct);
+        revertRingEl.querySelector('.day-ring-val').textContent = `${revertDone}/${exercises.length}`;
+      }
       App.showToast('Erreur : ' + err.message);
     }
   }
@@ -292,5 +344,5 @@ const WorkoutPage = (() => {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  return { render, init, toggleDay, toggleExercise, changeWeek };
+  return { render, init, toggleDay, toggleExercise, changeWeek, renderWeekStrip };
 })();

@@ -9,15 +9,13 @@ const HomePage = (() => {
             <span class="header-username">JuGus Do-It 💪</span>
             <span class="header-rank">Classement</span>
           </div>
-          ${user.is_admin ? `<button class="icon-btn" onclick="Router.navigate('admin')" title="Admin">⚙️</button>` : ''}
-          <button class="icon-btn" onclick="Router.navigate('app')" title="Mon programme">📅</button>
           <button class="icon-btn" style="color:var(--text3)" onclick="HomePage.logout()" title="Déconnexion">🚪</button>
         </header>
 
-        <div id="leaderboard-container" style="padding:16px;display:flex;flex-direction:column;gap:12px;">
-          <div class="skeleton-card"></div>
-          <div class="skeleton-card"></div>
-          <div class="skeleton-card"></div>
+        <div id="leaderboard-container" style="padding:0 0 20px;display:flex;flex-direction:column;gap:0;">
+          <div style="padding:16px 16px 8px"><div class="skeleton-card"></div></div>
+          <div style="padding:0 16px 8px"><div class="skeleton-card"></div></div>
+          <div style="padding:0 16px 8px"><div class="skeleton-card"></div></div>
         </div>
       </div>
     `;
@@ -43,29 +41,73 @@ const HomePage = (() => {
       return;
     }
 
-    const medals = ['🥇', '🥈', '🥉'];
+    // Podium (top 3)
+    const podiumUsers = users.slice(0, 3);
+    const listUsers   = users.slice(3);
+
+    let podiumHtml = '';
+    if (podiumUsers.length >= 1) {
+      const slots = [];
+      // order: p2 (2nd) left, p1 (1st) center, p3 (3rd) right
+      const order = [1, 0, 2]; // index in podiumUsers
+      const slotClass = ['p2', 'p1', 'p3'];
+      const crowns = ['', '👑', ''];
+      const posLabel = ['2', '1', '3'];
+
+      for (let s = 0; s < 3; s++) {
+        const u = podiumUsers[order[s]];
+        if (!u) continue;
+        const rank = Gamification.getRank(u.xp);
+        const isMe = u.id === me.id;
+        slots.push(`
+          <div class="podium-slot ${slotClass[s]}">
+            <div class="podium-avatar">
+              ${crowns[s] ? `<span class="podium-crown">${crowns[s]}</span>` : ''}
+              ${rank.emoji}
+            </div>
+            <div class="podium-name">${escapeHtml(u.username)}${isMe ? ' ✦' : ''}</div>
+            <div class="podium-xp">${u.xp} XP</div>
+            <div class="podium-base">${posLabel[s]}</div>
+          </div>
+        `);
+      }
+      podiumHtml = `<div class="podium">${slots.join('')}</div>`;
+    }
+
+    let listHtml = '';
+    if (listUsers.length) {
+      listHtml = `
+        <div class="leaderboard-section-title" style="padding:0 16px 0">Autres joueurs</div>
+        ${listUsers.map((u, i) => {
+          const rank = Gamification.getRank(u.xp);
+          const progress = Gamification.getProgress(u.xp);
+          const isMe = u.id === me.id;
+          return `
+            <div class="leaderboard-card${isMe ? ' leaderboard-me' : ''}">
+              <div class="lb-pos">#${i + 4}</div>
+              <div class="lb-avatar">${rank.emoji}</div>
+              <div class="lb-info">
+                <div class="lb-name">${escapeHtml(u.username)}${isMe ? ' <span style="color:var(--accent3);font-size:11px;">(moi)</span>' : ''}</div>
+                <div class="lb-rank-name">${rank.title}</div>
+                <div class="lb-xp-bar-track">
+                  <div class="lb-xp-bar-fill" style="width:${progress.pct}%"></div>
+                </div>
+              </div>
+              <div class="lb-xp">${u.xp} XP</div>
+            </div>
+          `;
+        }).join('')}
+      `;
+    }
 
     container.innerHTML = `
-      <h2 style="text-align:center;font-size:18px;color:var(--text2);margin-bottom:4px;">🏆 Classement</h2>
-      ${users.map((u, i) => {
-        const rank = Gamification.getRank(u.xp);
-        const progress = Gamification.getProgress(u.xp);
-        const isMe = u.id === me.id;
-        return `
-          <div class="leaderboard-card${isMe ? ' leaderboard-me' : ''}" onclick="Router.navigate('app')">
-            <div class="lb-rank">${medals[i] || `#${i+1}`}</div>
-            <div class="lb-avatar">${rank.emoji}</div>
-            <div class="lb-info">
-              <div class="lb-name">${escapeHtml(u.username)}${isMe ? ' <span style="color:var(--accent3);font-size:11px;">(moi)</span>' : ''}</div>
-              <div class="lb-rank-name">${rank.title}</div>
-              <div class="lb-xp-bar-track">
-                <div class="lb-xp-bar-fill" style="width:${progress.pct}%"></div>
-              </div>
-            </div>
-            <div class="lb-xp">${u.xp} XP</div>
-          </div>
-        `;
-      }).join('')}
+      <div class="home-hero">
+        <h2 style="text-align:center;font-size:16px;font-weight:800;color:var(--text2);letter-spacing:0.5px;text-transform:uppercase;">🏆 Classement</h2>
+        ${podiumHtml}
+      </div>
+      <div class="leaderboard-list">
+        ${listHtml}
+      </div>
     `;
   }
 
