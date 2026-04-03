@@ -284,48 +284,83 @@ const ProfilePage = (() => {
   }
 
   // ── 7. Records Muscu ────────────────────────────────────────
-  function _renderMuscleRecords(records) {
-    const maxWeight = records.length ? Math.max(...records.map(r => r.weight_kg)) : 1;
+  const _MR_CATEGORIES = [
+    { name: 'Poitrine',  icon: '🫸', color: '#e94560' },
+    { name: 'Dos',       icon: '🏋️', color: '#7c5cbf' },
+    { name: 'Épaules',   icon: '🔺', color: '#f97316' },
+    { name: 'Biceps',    icon: '💪', color: '#4ecdc4' },
+    { name: 'Triceps',   icon: '⚡', color: '#38b2ac' },
+    { name: 'Jambes',    icon: '🦵', color: '#22d18b' },
+    { name: 'Abdos',     icon: '🔥', color: '#fbbf24' },
+    { name: 'Autre',     icon: '🎯', color: '#7878aa' },
+  ];
 
-    const cards = records.map(r => {
-      const pct     = Math.max(10, Math.round((r.weight_kg / maxWeight) * 100));
-      const dateStr = r.updated_at
-        ? new Date(r.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-        : '';
-      const editAttrs = _isOwnProfile
-        ? `onclick="ProfilePage.showEditRecordForm(${r.id}, '${_escape(r.exercise_name).replace(/'/g,"\\'")}', ${r.sets}, ${r.weight_kg})"`
-        : '';
-      const delAttrs = _isOwnProfile
-        ? `onclick="ProfilePage.deleteRecord(${r.id})"`
-        : '';
+  function _catMeta(name) {
+    return _MR_CATEGORIES.find(c => c.name === name) || _MR_CATEGORIES[_MR_CATEGORIES.length - 1];
+  }
+
+  function _renderMuscleRecords(records) {
+    // Group by category, respecting the predefined order
+    const groups = {};
+    _MR_CATEGORIES.forEach(c => { groups[c.name] = []; });
+    records.forEach(r => {
+      const cat = (r.category && groups[r.category] !== undefined) ? r.category : 'Autre';
+      groups[cat].push(r);
+    });
+
+    const categoryBlocks = _MR_CATEGORIES.map(cat => {
+      const list = groups[cat.name];
+      if (!list.length) return '';
+
+      const cards = list.map(r => {
+        const dateStr = r.updated_at
+          ? new Date(r.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+          : '';
+        const safeCategory = _escape(r.category || 'Autre').replace(/'/g, "\\'");
+        const safeName     = _escape(r.exercise_name).replace(/'/g, "\\'");
+        const editAttrs = _isOwnProfile
+          ? `onclick="ProfilePage.showEditRecordForm(${r.id}, '${safeName}', ${r.sets}, ${r.weight_kg}, '${safeCategory}')"`
+          : '';
+        const delAttrs = _isOwnProfile
+          ? `onclick="ProfilePage.deleteRecord(${r.id})"`
+          : '';
+        const weightFmt = r.weight_kg % 1 === 0 ? r.weight_kg : r.weight_kg.toFixed(1);
+        return `
+          <div class="mr2-card">
+            <div class="mr2-card-left">
+              <div class="mr2-exercise-name">${_escape(r.exercise_name)}</div>
+              ${dateStr ? `<div class="mr2-date">${dateStr}</div>` : ''}
+            </div>
+            <div class="mr2-card-right">
+              <span class="mr2-badge mr2-badge-sets">🔁 ${r.sets} série${r.sets > 1 ? 's' : ''}</span>
+              <span class="mr2-badge mr2-badge-weight">${weightFmt} kg</span>
+              ${_isOwnProfile ? `
+              <div class="mr2-actions">
+                <button class="mr-btn-icon" title="Modifier" ${editAttrs}>✏️</button>
+                <button class="mr-btn-icon mr-btn-del" title="Supprimer" ${delAttrs}>🗑️</button>
+              </div>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+
       return `
-        <div class="muscle-record-card">
-          <div class="muscle-record-header">
-            <span class="muscle-record-name">${_escape(r.exercise_name)}</span>
-            ${_isOwnProfile ? `
-            <div class="muscle-record-actions">
-              <button class="mr-btn-icon" title="Modifier" ${editAttrs}>✏️</button>
-              <button class="mr-btn-icon mr-btn-del" title="Supprimer" ${delAttrs}>🗑️</button>
-            </div>` : ''}
+        <div class="mr2-group">
+          <div class="mr2-group-header" style="--cat-color:${cat.color}">
+            <span class="mr2-group-icon">${cat.icon}</span>
+            <span class="mr2-group-name">${cat.name}</span>
+            <span class="mr2-group-count">${list.length}</span>
           </div>
-          <div class="muscle-record-stats">
-            <span class="muscle-record-reps">🔁 ${r.sets} série${r.sets > 1 ? 's' : ''}</span>
-            <span class="muscle-record-weight">${r.weight_kg % 1 === 0 ? r.weight_kg : r.weight_kg.toFixed(1)} kg</span>
-          </div>
-          <div class="muscle-record-bar-track">
-            <div class="muscle-record-bar-fill" style="width:${pct}%"></div>
-          </div>
-          ${dateStr ? `<div class="muscle-record-date">Mis à jour le ${dateStr}</div>` : ''}
+          <div class="mr2-group-cards">${cards}</div>
         </div>`;
     }).join('');
 
     const empty = records.length === 0
-      ? `<p class="muscle-records-empty">Aucun record pour l'instant 💪</p>`
+      ? `<p class="muscle-records-empty">Aucun record pour l'instant 💪<br><span style="font-size:12px;color:var(--text3)">Clique sur + pour en ajouter</span></p>`
       : '';
 
-    const addBtn = _isOwnProfile
-      ? `<button class="mr-add-btn" onclick="ProfilePage.showAddRecordForm()">＋ Ajouter un record</button>`
-      : '';
+    const catOptions = _MR_CATEGORIES.map(c =>
+      `<option value="${c.name}">${c.icon} ${c.name}</option>`
+    ).join('');
 
     return `
       <div class="profile-section" id="muscle-records-section" style="animation:fadeIn 0.3s ease 0.22s both">
@@ -338,6 +373,7 @@ const ProfilePage = (() => {
 
         <div id="muscle-record-form" style="display:none" class="muscle-record-form">
           <input id="mr-name" class="mr-input" type="text" placeholder="Exercice (ex: Développé couché haltères)" autocomplete="off" maxlength="100" />
+          <select id="mr-category" class="mr-input mr-select">${catOptions}</select>
           <div class="mr-row">
             <div class="mr-field">
               <label class="mr-label">Séries</label>
@@ -358,7 +394,7 @@ const ProfilePage = (() => {
 
         ${empty}
         <div id="muscle-records-list">
-          ${cards}
+          ${categoryBlocks}
         </div>
       </div>`;
   }
@@ -367,22 +403,24 @@ const ProfilePage = (() => {
   function showAddRecordForm() {
     const form = document.getElementById('muscle-record-form');
     if (!form) return;
-    document.getElementById('mr-name').value    = '';
-    document.getElementById('mr-sets').value    = '';
-    document.getElementById('mr-weight').value  = '';
-    document.getElementById('mr-editing-id').value = '';
+    document.getElementById('mr-name').value             = '';
+    document.getElementById('mr-category').value         = 'Poitrine';
+    document.getElementById('mr-sets').value             = '';
+    document.getElementById('mr-weight').value           = '';
+    document.getElementById('mr-editing-id').value       = '';
     document.getElementById('mr-form-error').textContent = '';
     form.style.display = 'block';
     setTimeout(() => document.getElementById('mr-name').focus(), 50);
   }
 
-  function showEditRecordForm(id, name, sets, weight) {
+  function showEditRecordForm(id, name, sets, weight, category) {
     const form = document.getElementById('muscle-record-form');
     if (!form) return;
-    document.getElementById('mr-name').value    = name;
-    document.getElementById('mr-sets').value    = sets;
-    document.getElementById('mr-weight').value  = weight;
-    document.getElementById('mr-editing-id').value = id;
+    document.getElementById('mr-name').value             = name;
+    document.getElementById('mr-category').value         = category || 'Autre';
+    document.getElementById('mr-sets').value             = sets;
+    document.getElementById('mr-weight').value           = weight;
+    document.getElementById('mr-editing-id').value       = id;
     document.getElementById('mr-form-error').textContent = '';
     form.style.display = 'block';
     form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -394,10 +432,11 @@ const ProfilePage = (() => {
   }
 
   async function saveRecord() {
-    const name   = (document.getElementById('mr-name').value || '').trim();
-    const sets   = parseInt(document.getElementById('mr-sets').value, 10);
-    const weight = parseFloat(document.getElementById('mr-weight').value);
-    const errEl  = document.getElementById('mr-form-error');
+    const name     = (document.getElementById('mr-name').value || '').trim();
+    const category = document.getElementById('mr-category').value;
+    const sets     = parseInt(document.getElementById('mr-sets').value, 10);
+    const weight   = parseFloat(document.getElementById('mr-weight').value);
+    const errEl    = document.getElementById('mr-form-error');
 
     if (!name) { errEl.textContent = 'Nom de l\'exercice requis'; return; }
     if (!sets || sets < 1) { errEl.textContent = 'Nombre de séries invalide'; return; }
@@ -407,7 +446,7 @@ const ProfilePage = (() => {
     if (btn) btn.disabled = true;
     errEl.textContent = '';
     try {
-      await API.saveMuscleRecord(_profileUserId, { exercise_name: name, sets, weight_kg: weight });
+      await API.saveMuscleRecord(_profileUserId, { exercise_name: name, sets, weight_kg: weight, category });
       await _refreshMuscleRecords();
     } catch (err) {
       errEl.textContent = err.message || 'Erreur lors de la sauvegarde';

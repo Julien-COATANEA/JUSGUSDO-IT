@@ -228,8 +228,8 @@ router.get('/:id/muscle-records', requireAuth, async (req, res) => {
   if (!userId || isNaN(userId)) return res.status(400).json({ error: 'ID invalide' });
   try {
     const result = await db.query(
-      `SELECT id, exercise_name, sets, weight_kg::float AS weight_kg, notes, updated_at
-       FROM muscle_records WHERE user_id = $1 ORDER BY exercise_name ASC`,
+      `SELECT id, exercise_name, category, sets, weight_kg::float AS weight_kg, notes, updated_at
+       FROM muscle_records WHERE user_id = $1 ORDER BY category ASC, exercise_name ASC`,
       [userId]
     );
     res.json({ records: result.rows });
@@ -244,18 +244,20 @@ router.post('/:id/muscle-records', requireAuth, async (req, res) => {
   const userId = parseInt(req.params.id, 10);
   if (req.user.id !== userId && !req.user.is_admin)
     return res.status(403).json({ error: 'Interdit' });
-  const { exercise_name, sets, weight_kg, notes } = req.body;
+  const { exercise_name, sets, weight_kg, notes, category } = req.body;
   if (!exercise_name || !sets || weight_kg == null)
     return res.status(400).json({ error: 'Données manquantes' });
+  const VALID_CATEGORIES = ['Poitrine','Dos','Épaules','Biceps','Triceps','Jambes','Abdos','Autre'];
+  const safeCategory = VALID_CATEGORIES.includes(category) ? category : 'Autre';
   try {
     const result = await db.query(
-      `INSERT INTO muscle_records (user_id, exercise_name, sets, weight_kg, notes)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO muscle_records (user_id, exercise_name, sets, weight_kg, notes, category)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (user_id, exercise_name)
        DO UPDATE SET sets = EXCLUDED.sets, weight_kg = EXCLUDED.weight_kg,
-                     notes = EXCLUDED.notes, updated_at = NOW()
-       RETURNING id, exercise_name, sets, weight_kg::float AS weight_kg, notes, updated_at`,
-      [userId, exercise_name.trim(), parseInt(sets, 10), parseFloat(weight_kg), notes || null]
+                     notes = EXCLUDED.notes, category = EXCLUDED.category, updated_at = NOW()
+       RETURNING id, exercise_name, category, sets, weight_kg::float AS weight_kg, notes, updated_at`,
+      [userId, exercise_name.trim(), parseInt(sets, 10), parseFloat(weight_kg), notes || null, safeCategory]
     );
     res.json({ record: result.rows[0] });
   } catch (err) {

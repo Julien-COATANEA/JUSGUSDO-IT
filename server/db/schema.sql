@@ -94,3 +94,5 @@ CREATE TABLE IF NOT EXISTS muscle_records (
   UNIQUE(user_id, exercise_name)
 );
 CREATE INDEX IF NOT EXISTS idx_muscle_records_user ON muscle_records(user_id);
+-- Migration: add category to muscle_records
+ALTER TABLE muscle_records ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'Autre';
