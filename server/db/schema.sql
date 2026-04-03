@@ -40,6 +40,12 @@ CREATE TABLE IF NOT EXISTS checklist_entries (
 CREATE INDEX IF NOT EXISTS idx_checklist_user_date ON checklist_entries(user_id, entry_date);
 CREATE INDEX IF NOT EXISTS idx_exercises_active ON exercises(is_active, order_index);
 
+-- Migration: add schedule column (array of day numbers 0=Sun..6=Sat, empty = every day)
+ALTER TABLE exercises ADD COLUMN IF NOT EXISTS schedule INTEGER[] DEFAULT '{}';
+
+-- Migration: add avatar column
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar VARCHAR(10) DEFAULT '💪';
+
 -- Seed default exercises
 INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index) VALUES
   ('Pompes',  '💪', 1, 20, 'répétitions', 10, 1),

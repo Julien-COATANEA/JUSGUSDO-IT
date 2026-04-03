@@ -102,5 +102,68 @@ const App = (() => {
     _confirmCb = null;
   }
 
-  return { showToast, showLevelUp, closeModal, showConfirm, closeConfirm };
+  // ── Profile modal ──────────────────────────────────────────
+  const AVATARS = [
+    '🐯','🦁','🐻','🐼','🐨','🐸',
+    '🦊','🐙','🦋','🐺','🦄','🐲',
+    '🦖','🦍','🎧','👩‍💻','🧙','🥷',
+    '🔥','💪','⚡','🏆','🚀','🎯',
+  ];
+  let _profileAvatar = null;
+
+  function showProfileModal() {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    _profileAvatar = user.avatar || '💪';
+    document.getElementById('profile-username').value = user.username || '';
+    document.getElementById('profile-error').textContent = '';
+    document.getElementById('profile-avatar-preview').textContent = _profileAvatar;
+    const grid = document.getElementById('avatar-grid');
+    grid.innerHTML = AVATARS.map((a, i) =>
+      `<button type="button" class="avatar-opt${a === _profileAvatar ? ' selected' : ''}" data-idx="${i}">${a}</button>`
+    ).join('');
+    grid.onclick = (e) => {
+      const btn = e.target.closest('.avatar-opt');
+      if (!btn) return;
+      _profileAvatar = AVATARS[parseInt(btn.dataset.idx)];
+      document.getElementById('profile-avatar-preview').textContent = _profileAvatar;
+      grid.querySelectorAll('.avatar-opt').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    };
+    document.getElementById('profile-modal').style.display = 'flex';
+  }
+
+  async function saveProfile() {
+    const username = document.getElementById('profile-username').value.trim().toLowerCase();
+    const errEl = document.getElementById('profile-error');
+    const btn = document.getElementById('profile-save-btn');
+    errEl.textContent = '';
+    if (!username || username.length < 3) {
+      errEl.textContent = 'Pseudo trop court (min 3 caractères)';
+      return;
+    }
+    btn.disabled = true;
+    try {
+      const { token, user } = await API.updateProfile({ username, avatar: _profileAvatar });
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      const usernameEl = document.getElementById('header-username');
+      if (usernameEl) usernameEl.textContent = user.username;
+      const avatarEl = document.getElementById('header-avatar-btn');
+      if (avatarEl) avatarEl.textContent = user.avatar || '💪';
+      if (document.getElementById('players-grid') && typeof HomePage !== 'undefined') HomePage.init();
+      closeProfileModal();
+      showToast('✅ Profil mis à jour !');
+    } catch (err) {
+      errEl.textContent = err.message;
+      btn.disabled = false;
+    }
+  }
+
+  function closeProfileModal() {
+    document.getElementById('profile-modal').style.display = 'none';
+    const btn = document.getElementById('profile-save-btn');
+    if (btn) btn.disabled = false;
+  }
+
+  return { showToast, showLevelUp, closeModal, showConfirm, closeConfirm, showProfileModal, saveProfile, closeProfileModal };
 })();

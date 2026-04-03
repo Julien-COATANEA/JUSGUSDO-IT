@@ -19,6 +19,7 @@ const WorkoutPage = (() => {
             <span class="header-username" id="header-username">${escapeHtml(currentUser.username || '')}</span>
             <span class="header-rank" id="header-rank">Chargement...</span>
           </div>
+          <button class="header-avatar-btn" id="header-avatar-btn" onclick="App.showProfileModal()">${escapeHtml(currentUser.avatar || '💪')}</button>
           <div class="header-xp" id="header-xp-val">0 XP</div>
         </header>
 
@@ -103,6 +104,11 @@ const WorkoutPage = (() => {
     return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
   }
 
+  function getExercisesForDay(date) {
+    const day = date.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    return exercises.filter(ex => !ex.schedule || ex.schedule.length === 0 || ex.schedule.includes(day));
+  }
+
   async function loadWeek() {
     const dates = getWeekDates(weekOffset);
     const start = dateKey(dates[0]);
@@ -149,15 +155,16 @@ const WorkoutPage = (() => {
       const isToday = date.getTime() === today.getTime();
       const isFuture = date > today;
 
-      const doneCount = exercises.filter(ex => entries[`${key}_${ex.id}`] === true).length;
-      const allDone = exercises.length > 0 && doneCount === exercises.length;
+      const dayExercises = getExercisesForDay(date);
+      const doneCount = dayExercises.filter(ex => entries[`${key}_${ex.id}`] === true).length;
+      const allDone = dayExercises.length > 0 && doneCount === dayExercises.length;
 
       if (!isFuture) {
         weekTotal++;
         if (allDone) weekDone++;
       }
 
-      const ringPct = exercises.length > 0 ? Math.round(doneCount / exercises.length * 100) : 0;
+      const ringPct = dayExercises.length > 0 ? Math.round(doneCount / dayExercises.length * 100) : 0;
       const ringColor = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : '#ef4444';
 
       const card = document.createElement('div');
@@ -174,12 +181,14 @@ const WorkoutPage = (() => {
           </div>
           ${isToday ? '<span class="today-badge">Aujourd\'hui</span>' : ''}
           <div class="day-ring" style="--ring-p:${ringPct};--ring-c:${ringColor}">
-            <span class="day-ring-val">${doneCount}/${exercises.length}</span>
+            <span class="day-ring-val">${doneCount}/${dayExercises.length}</span>
           </div>
           ${!isFuture ? `<div class="day-toggle">▼</div>` : ''}
         </div>
         <div class="exercises-list">
-          ${exercises.map(ex => {
+          ${dayExercises.length === 0
+            ? `<p style="color:var(--text3);font-size:13px;text-align:center;padding:12px 0;">Repos 🙌</p>`
+            : dayExercises.map(ex => {
             const checked = entries[`${key}_${ex.id}`] === true;
             return `
               <div class="exercise-item${checked ? ' checked' : ''}"
@@ -220,8 +229,9 @@ const WorkoutPage = (() => {
       const key = dateKey(date);
       const isToday = date.getTime() === today.getTime();
       const isFuture = date > today;
-      const doneCount = exercises.filter(ex => entries[`${key}_${ex.id}`] === true).length;
-      const total = exercises.length;
+      const dayExercises = getExercisesForDay(date);
+      const doneCount = dayExercises.filter(ex => entries[`${key}_${ex.id}`] === true).length;
+      const total = dayExercises.length;
       const allDone = total > 0 && doneCount === total;
       const pct = total > 0 ? Math.round(doneCount / total * 100) : 0;
       const ringC = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : '#ef4444';
@@ -248,22 +258,23 @@ const WorkoutPage = (() => {
     const key = `${dateStr}_${exerciseId}`;
     const wasChecked = entries[key] === true;
     const card = el.closest('.day-card');
-    const wasAllDone = exercises.every(ex => entries[`${dateStr}_${ex.id}`] === true);
+    const dayExercises = getExercisesForDay(new Date(dateStr + 'T00:00:00'));
+    const wasAllDone = dayExercises.every(ex => entries[`${dateStr}_${ex.id}`] === true);
 
     // Optimistic update
     entries[key] = !wasChecked;
     el.classList.toggle('checked', !wasChecked);
     el.querySelector('.exercise-checkbox').textContent = !wasChecked ? '✓' : '';
 
-    const doneCount = exercises.filter(ex => entries[`${dateStr}_${ex.id}`] === true).length;
-    const allDone = doneCount === exercises.length;
+    const doneCount = dayExercises.filter(ex => entries[`${dateStr}_${ex.id}`] === true).length;
+    const allDone = doneCount === dayExercises.length;
     card.classList.toggle('completed', allDone);
     card.querySelector('.day-check').textContent = allDone ? '✓' : '';
     const ringEl = card.querySelector('.day-ring');
     if (ringEl) {
-      const pct = exercises.length > 0 ? Math.round(doneCount / exercises.length * 100) : 0;
+      const pct = dayExercises.length > 0 ? Math.round(doneCount / dayExercises.length * 100) : 0;
       ringEl.style.setProperty('--ring-p', pct);
-      ringEl.querySelector('.day-ring-val').textContent = `${doneCount}/${exercises.length}`;
+      ringEl.querySelector('.day-ring-val').textContent = `${doneCount}/${dayExercises.length}`;
     }
 
     try {
@@ -307,12 +318,12 @@ const WorkoutPage = (() => {
       el.querySelector('.exercise-checkbox').textContent = wasChecked ? '✓' : '';
       card.classList.toggle('completed', wasAllDone);
       card.querySelector('.day-check').textContent = wasAllDone ? '✓' : '';
-      const revertDone = exercises.filter(ex => entries[`${dateStr}_${ex.id}`] === true).length;
+      const revertDone = dayExercises.filter(ex => entries[`${dateStr}_${ex.id}`] === true).length;
       const revertRingEl = card.querySelector('.day-ring');
       if (revertRingEl) {
-        const pct = exercises.length > 0 ? Math.round(revertDone / exercises.length * 100) : 0;
+        const pct = dayExercises.length > 0 ? Math.round(revertDone / dayExercises.length * 100) : 0;
         revertRingEl.style.setProperty('--ring-p', pct);
-        revertRingEl.querySelector('.day-ring-val').textContent = `${revertDone}/${exercises.length}`;
+        revertRingEl.querySelector('.day-ring-val').textContent = `${revertDone}/${dayExercises.length}`;
       }
       App.showToast('Erreur : ' + err.message);
     }

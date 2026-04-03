@@ -23,7 +23,7 @@ const Router = (() => {
 
     const u = JSON.parse(localStorage.getItem('user') || '{}');
     const items = [
-      { route: 'home',  icon: '�', label: 'Équipe' },
+      { route: 'home',  icon: '&#x1F465;', label: 'Équipe' },
       { route: 'app',   icon: '💪', label: 'Programme'  },
       ...(u.is_admin ? [{ route: 'admin', icon: '⚙️', label: 'Admin' }] : []),
     ];

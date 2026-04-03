@@ -58,6 +58,19 @@ const AdminPage = (() => {
                 <label>Ordre d'affichage</label>
                 <input type="number" id="ex-order" value="0" min="0" />
               </div>
+              <div class="form-group">
+                <label>Jours actifs</label>
+                <div class="schedule-picker" id="ex-schedule">
+                  <button type="button" class="sday-btn" data-day="1" onclick="this.classList.toggle('active')">L</button>
+                  <button type="button" class="sday-btn" data-day="2" onclick="this.classList.toggle('active')">M</button>
+                  <button type="button" class="sday-btn" data-day="3" onclick="this.classList.toggle('active')">M</button>
+                  <button type="button" class="sday-btn" data-day="4" onclick="this.classList.toggle('active')">J</button>
+                  <button type="button" class="sday-btn" data-day="5" onclick="this.classList.toggle('active')">V</button>
+                  <button type="button" class="sday-btn" data-day="6" onclick="this.classList.toggle('active')">S</button>
+                  <button type="button" class="sday-btn" data-day="0" onclick="this.classList.toggle('active')">D</button>
+                </div>
+                <p style="font-size:11px;color:var(--text3);margin-top:6px;">Aucun sélectionné = tous les jours</p>
+              </div>
               <p class="form-error" id="ex-form-error"></p>
               <div style="display:flex;gap:10px;margin-top:8px;">
                 <button type="button" class="modal-btn" style="background:var(--card2);color:var(--text2);box-shadow:none;" onclick="AdminPage.closeExModal()">Annuler</button>
@@ -121,6 +134,7 @@ const AdminPage = (() => {
               <div class="admin-ex-detail">
                 ${ex.sets > 1 ? ex.sets + ' séries × ' : ''}${ex.reps} ${escapeHtml(ex.unit)}
                 &nbsp;·&nbsp; ${ex.xp_reward} XP
+                &nbsp;·&nbsp; <span style="color:var(--accent3)">${formatSchedule(ex.schedule)}</span>
                 ${!ex.is_active ? ' · <span style="color:var(--text3)">désactivé</span>' : ''}
               </div>
             </div>
@@ -182,6 +196,10 @@ const AdminPage = (() => {
       document.getElementById('ex-unit').value = ex.unit;
       document.getElementById('ex-xp').value = ex.xp_reward;
       document.getElementById('ex-order').value = ex.order_index;
+      const schedule = ex.schedule || [];
+      document.querySelectorAll('#ex-schedule .sday-btn').forEach(btn => {
+        btn.classList.toggle('active', schedule.includes(parseInt(btn.dataset.day)));
+      });
     } else {
       document.getElementById('ex-modal-title').textContent = 'Nouvel exercice';
       document.getElementById('ex-form').reset();
@@ -189,6 +207,7 @@ const AdminPage = (() => {
       document.getElementById('ex-xp').value = '10';
       document.getElementById('ex-sets').value = '1';
       document.getElementById('ex-unit').value = 'répétitions';
+      document.querySelectorAll('#ex-schedule .sday-btn').forEach(btn => btn.classList.remove('active'));
     }
     modal.style.display = 'flex';
   }
@@ -212,6 +231,7 @@ const AdminPage = (() => {
       unit: document.getElementById('ex-unit').value.trim(),
       xp_reward: parseInt(document.getElementById('ex-xp').value),
       order_index: parseInt(document.getElementById('ex-order').value),
+      schedule: [...document.querySelectorAll('#ex-schedule .sday-btn.active')].map(b => parseInt(b.dataset.day)),
     };
 
     try {
@@ -278,6 +298,12 @@ const AdminPage = (() => {
   function escapeHtml(str) {
     if (!str) return '';
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function formatSchedule(sch) {
+    if (!sch || sch.length === 0 || sch.length === 7) return 'Tous les jours';
+    const labels = { 0: 'Dim', 1: 'Lun', 2: 'Mar', 3: 'Mer', 4: 'Jeu', 5: 'Ven', 6: 'Sam' };
+    return sch.map(d => labels[d]).join(' · ');
   }
 
   return { render, init, switchTab, openExModal, closeExModal, saveExercise, deleteExercise, restoreExercise, toggleAdmin };

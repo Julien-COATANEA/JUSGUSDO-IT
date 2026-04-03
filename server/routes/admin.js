@@ -19,14 +19,14 @@ router.get('/exercises', requireAdmin, async (req, res) => {
 
 // POST /api/admin/exercises — create exercise
 router.post('/exercises', requireAdmin, async (req, res) => {
-  const { name, emoji, sets, reps, unit, xp_reward, order_index } = req.body;
+  const { name, emoji, sets, reps, unit, xp_reward, order_index, schedule } = req.body;
   if (!name || !reps) {
     return res.status(400).json({ error: 'name et reps requis' });
   }
   try {
     const result = await db.query(
-      `INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      `INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index, schedule)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
       [
         name.trim(),
         emoji || '💪',
@@ -35,6 +35,7 @@ router.post('/exercises', requireAdmin, async (req, res) => {
         unit || 'répétitions',
         xp_reward || 10,
         order_index || 0,
+        Array.isArray(schedule) ? schedule : [],
       ]
     );
     res.status(201).json({ exercise: result.rows[0] });
@@ -47,7 +48,7 @@ router.post('/exercises', requireAdmin, async (req, res) => {
 // PUT /api/admin/exercises/:id — update exercise
 router.put('/exercises/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, emoji, sets, reps, unit, xp_reward, order_index, is_active } = req.body;
+  const { name, emoji, sets, reps, unit, xp_reward, order_index, is_active, schedule } = req.body;
   try {
     const result = await db.query(
       `UPDATE exercises
@@ -58,9 +59,10 @@ router.put('/exercises/:id', requireAdmin, async (req, res) => {
            unit = COALESCE($5, unit),
            xp_reward = COALESCE($6, xp_reward),
            order_index = COALESCE($7, order_index),
-           is_active = COALESCE($8, is_active)
-       WHERE id = $9 RETURNING *`,
-      [name, emoji, sets, reps, unit, xp_reward, order_index, is_active, id]
+           is_active = COALESCE($8, is_active),
+           schedule = COALESCE($9, schedule)
+       WHERE id = $10 RETURNING *`,
+      [name, emoji, sets, reps, unit, xp_reward, order_index, is_active, Array.isArray(schedule) ? schedule : null, id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Exercice introuvable' });
     res.json({ exercise: result.rows[0] });

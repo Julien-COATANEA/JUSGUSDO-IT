@@ -8,6 +8,7 @@ const HomePage = (() => {
             <span class="header-username">JuGus Do-It 💪</span>
             <span class="header-rank">Notre progression</span>
           </div>
+          <button class="icon-btn" onclick="App.showProfileModal()" title="Mon profil">✏️</button>
           <button class="icon-btn" style="color:var(--text3)" onclick="HomePage.logout()" title="Déconnexion">🚪</button>
         </header>
 
@@ -48,9 +49,10 @@ const HomePage = (() => {
       const rank     = Gamification.getRank(u.xp);
       const progress = Gamification.getProgress(u.xp);
       const isMe     = u.id === me.id;
+      const avatar   = u.avatar || rank.emoji;
       return `
         <div class="player-card${isMe ? ' is-me' : ''}">
-          <div class="player-avatar">${rank.emoji}</div>
+          <div class="player-avatar">${avatar}</div>
           <div class="player-name">${escapeHtml(u.username)}</div>
           <div class="player-rank-title">${rank.title}</div>
           <div class="player-xp-bar">

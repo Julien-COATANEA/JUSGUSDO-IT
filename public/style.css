@@ -658,6 +658,70 @@ html, body {
 .admin-btn.danger  { color: var(--accent); }
 
 /* ===========================
+   PROFILE MODAL
+=========================== */
+.profile-avatar-preview {
+  font-size: 56px;
+  text-align: center;
+  margin-bottom: 16px;
+  line-height: 1;
+  display: block;
+}
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 7px;
+}
+.avatar-opt {
+  aspect-ratio: 1;
+  font-size: 22px;
+  background: var(--card2);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  padding: 0;
+}
+.avatar-opt.selected { border-color: var(--accent3); background: rgba(78,205,196,0.12); transform: scale(1.1); }
+.avatar-opt:active   { transform: scale(0.88); }
+
+.header-avatar-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  line-height: 1;
+}
+.header-avatar-btn:active { background: rgba(255,255,255,0.12); }
+
+.schedule-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.sday-btn {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--card2);
+  color: var(--text3);
+  font-size: 11px; font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.18s;
+  font-family: inherit;
+}
+.sday-btn.active { background: var(--accent3); border-color: var(--accent3); color: #07070f; }
+.sday-btn:active { transform: scale(0.9); }
+
+/* ===========================
    TOAST & MODALS
 =========================== */
 .toast {

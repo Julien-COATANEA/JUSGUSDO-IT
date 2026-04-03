@@ -39,6 +39,23 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="profile-modal" style="display:none;">
+    <div class="modal-card" style="max-height:92vh;overflow-y:auto;">
+      <h2 style="color:var(--text);font-size:18px;margin-bottom:16px;">Mon profil</h2>
+      <div class="profile-avatar-preview" id="profile-avatar-preview">💪</div>
+      <div class="avatar-grid" id="avatar-grid"></div>
+      <div class="form-group" style="margin-top:16px;">
+        <label>Pseudo</label>
+        <input type="text" id="profile-username" maxlength="20" autocomplete="off" />
+      </div>
+      <p class="form-error" id="profile-error"></p>
+      <div style="display:flex;gap:10px;margin-top:12px;">
+        <button type="button" class="modal-btn" style="background:var(--card2);color:var(--text2);box-shadow:none;" onclick="App.closeProfileModal()">Annuler</button>
+        <button type="button" class="modal-btn" id="profile-save-btn" onclick="App.saveProfile()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/api.js"></script>
   <script src="/js/gamification.js"></script>
   <script src="/js/pages/login.js"></script>
