@@ -76,7 +76,7 @@ const WorkoutPage = (() => {
       exercises = exData.exercises;
       stats = statsData;
       currentUser = meData.user;
-      localStorage.setItem('user', JSON.stringify(currentUser));
+      (localStorage.getItem('token') ? localStorage : sessionStorage).setItem('user', JSON.stringify(currentUser));
 
       updateHUD();
       await loadWeek();
@@ -287,7 +287,7 @@ const WorkoutPage = (() => {
 
       const prevXP = currentUser.xp;
       currentUser.xp = result.xp;
-      localStorage.setItem('user', JSON.stringify(currentUser));
+      (localStorage.getItem('token') ? localStorage : sessionStorage).setItem('user', JSON.stringify(currentUser));
 
       const prevRank = Gamification.getRank(prevXP);
       const newRank = Gamification.getRank(result.xp);

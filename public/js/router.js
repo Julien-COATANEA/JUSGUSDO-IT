@@ -1,14 +1,15 @@
 // ── SPA Router ───────────────────────────────────────────────
 const Router = (() => {
   const PAGES = {
-    login:  { page: LoginPage,   requireAuth: false, requireAdmin: false },
-    home:   { page: HomePage,    requireAuth: true,  requireAdmin: false },
-    app:    { page: WorkoutPage, requireAuth: true,  requireAdmin: false },
-    admin:  { page: AdminPage,   requireAuth: true,  requireAdmin: true  },
+    login:   { page: LoginPage,   requireAuth: false, requireAdmin: false },
+    home:    { page: HomePage,    requireAuth: true,  requireAdmin: false },
+    app:     { page: WorkoutPage, requireAuth: true,  requireAdmin: false },
+    admin:   { page: AdminPage,   requireAuth: true,  requireAdmin: true  },
+    profile: { page: ProfilePage, requireAuth: true,  requireAdmin: false },
   };
 
   function isLoggedIn() {
-    return !!localStorage.getItem('token');
+    return !!(localStorage.getItem('token') || sessionStorage.getItem('token'));
   }
 
   function isAdmin() {
@@ -40,7 +41,9 @@ const Router = (() => {
     document.body.appendChild(nav);
   }
 
-  async function navigate(route) {
+  let _currentRoute = null;
+
+  async function navigate(route, params = {}) {
     const config = PAGES[route];
     if (!config) return navigate('login');
 
@@ -48,11 +51,18 @@ const Router = (() => {
     if (!config.requireAuth && isLoggedIn() && route === 'login') return navigate('home');
     if (config.requireAdmin && !isAdmin()) return navigate('home');
 
+    // Cleanup previous page
+    if (_currentRoute && _currentRoute !== route) {
+      const prev = PAGES[_currentRoute];
+      if (prev?.page?.destroy) prev.page.destroy();
+    }
+    _currentRoute = route;
+
     const app = document.getElementById('app');
     app.innerHTML = config.page.render();
 
     if (config.page.init) {
-      await config.page.init();
+      await config.page.init(params);
     }
 
     renderBottomNav(route);

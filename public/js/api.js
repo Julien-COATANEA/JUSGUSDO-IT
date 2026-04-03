@@ -3,7 +3,7 @@ const API = (() => {
   const BASE = '/api';
 
   function getToken() {
-    return localStorage.getItem('token');
+    return localStorage.getItem('token') || sessionStorage.getItem('token');
   }
 
   async function request(method, path, body) {
@@ -40,6 +40,7 @@ const API = (() => {
 
     // Data
     getUsers: () => request('GET', '/users'),
+    getUserStats: (id) => request('GET', `/users/${id}/stats`),
     getExercises: () => request('GET', '/exercises'),
     getChecklist: (start, end) => request('GET', `/exercises/checklist?start=${start}&end=${end}`),
     toggleChecklist: (exercise_id, entry_date) =>

@@ -34,6 +34,10 @@ const LoginPage = (() => {
           <label>Mot de passe</label>
           <input type="password" id="f-password" placeholder="••••••" autocomplete="current-password" required />
         </div>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:var(--text2);font-weight:500;">
+          <input type="checkbox" id="f-remember" checked style="width:17px;height:17px;accent-color:var(--accent3);cursor:pointer;" />
+          Se souvenir de moi
+        </label>
         <p class="form-error" id="form-error"></p>
         <button type="submit" class="submit-btn" id="submit-btn">Se connecter</button>
       </form>
@@ -86,12 +90,12 @@ const LoginPage = (() => {
     e.preventDefault();
     const username = document.getElementById('f-username').value.trim();
     const password = document.getElementById('f-password').value;
+    const remember = document.getElementById('f-remember')?.checked !== false;
     setLoading(true);
     showError('');
     try {
       const data = await API.login(username, password);
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      _saveSession(data, remember);
       Router.navigate('home');
     } catch (err) {
       showError(err.message);
@@ -112,13 +116,22 @@ const LoginPage = (() => {
     showError('');
     try {
       const data = await API.register(username, password);
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      _saveSession(data, true); // always remember on register
       Router.navigate('home');
     } catch (err) {
       showError(err.message);
       setLoading(false);
     }
+  }
+
+  function _saveSession(data, remember) {
+    const storage = remember ? localStorage : sessionStorage;
+    if (!remember) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
+    storage.setItem('token', data.token);
+    storage.setItem('user', JSON.stringify(data.user));
   }
 
   return { render, switchTab, submitLogin, submitRegister };

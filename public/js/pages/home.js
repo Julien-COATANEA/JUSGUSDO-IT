@@ -1,5 +1,6 @@
 // ── Home / Activity page ─────────────────────────────────────
 const HomePage = (() => {
+  let _refreshTimer = null;
   function render() {
     return `
       <div class="app-page">
@@ -31,10 +32,15 @@ const HomePage = (() => {
       document.getElementById('activity-container').innerHTML =
         `<p style="color:var(--text3);text-align:center;padding:40px 0">Erreur de chargement</p>`;
     }
+    clearInterval(_refreshTimer);
+    _refreshTimer = setInterval(async () => {
+      if (!document.getElementById('players-grid')) { clearInterval(_refreshTimer); return; }
+      try { const { users } = await API.getUsers(); renderActivity(users); } catch (_) {}
+    }, 60_000);
   }
 
   function renderActivity(users) {
-    const me = JSON.parse(localStorage.getItem('user') || '{}');
+    const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
     const grid = document.getElementById('players-grid');
     if (!grid) return;
 
@@ -45,13 +51,13 @@ const HomePage = (() => {
 
     if (users.length === 1) grid.classList.add('single');
 
-    grid.innerHTML = users.map(u => {
+    grid.innerHTML = users.map((u, i) => {
       const rank     = Gamification.getRank(u.xp);
       const progress = Gamification.getProgress(u.xp);
       const isMe     = u.id === me.id;
       const avatar   = u.avatar || rank.emoji;
       return `
-        <div class="player-card${isMe ? ' is-me' : ''}">
+        <div class="player-card${isMe ? ' is-me' : ''}" style="animation:fadeIn 0.3s ease both;animation-delay:${i * 0.06}s" onclick="Router.navigate('profile',{userId:${u.id}})" role="button" tabindex="0">
           <div class="player-avatar">${avatar}</div>
           <div class="player-name">${escapeHtml(u.username)}</div>
           <div class="player-rank-title">${rank.title}</div>
@@ -75,6 +81,8 @@ const HomePage = (() => {
       if (!ok) return;
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('user');
       Router.navigate('login');
     });
   }
@@ -83,5 +91,7 @@ const HomePage = (() => {
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  return { render, init, logout };
+  function destroy() { clearInterval(_refreshTimer); }
+
+  return { render, init, logout, destroy };
 })();
