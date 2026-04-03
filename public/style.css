@@ -909,6 +909,7 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
+  margin-bottom: 16px;
 }
 .profile-section-title { font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
 .profile-top-ex {
@@ -960,7 +961,7 @@ html, body {
   padding: 13px 16px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  margin-bottom: 0;
+  margin-bottom: 16px;
 }
 .profile-today-badge.done    { background: rgba(34,209,139,0.08);  border-color: rgba(34,209,139,0.2); }
 .profile-today-badge.partial { background: rgba(251,191,36,0.07);  border-color: rgba(251,191,36,0.15); }
