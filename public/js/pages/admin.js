@@ -216,6 +216,7 @@ const AdminPage = (() => {
     editingId = id;
     const modal = document.getElementById('ex-modal');
     document.getElementById('ex-form-error').textContent = '';
+    document.getElementById('ex-submit-btn').disabled = false;
 
     if (id) {
       const ex = exercises.find(e => e.id === id);
