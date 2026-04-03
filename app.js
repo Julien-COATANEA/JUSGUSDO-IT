@@ -55,23 +55,18 @@ function goBack() {
 }
 
 function changeWeek(delta) {
+  if (delta < 0 && weekOffset === 0) return; // can't go before today
   weekOffset += delta;
   renderWeek();
 }
 
 // ── WEEK RENDERING ───────────────────────────────────────────
 function getWeekDates(offset) {
-  const now = new Date();
-  const dayOfWeek = now.getDay(); // 0=Sun
-  // Treat Monday as first day of week
-  const diffToMonday = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diffToMonday + offset * 7);
-  monday.setHours(0, 0, 0, 0);
-
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
+    const d = new Date(today);
+    d.setDate(today.getDate() + i + offset * 7);
     return d;
   });
 }
@@ -90,10 +85,6 @@ function renderWeek() {
   const labelEl = document.getElementById('week-label');
   if (weekOffset === 0) {
     labelEl.textContent = `Cette semaine`;
-  } else if (weekOffset === -1) {
-    labelEl.textContent = `Semaine dernière`;
-  } else if (weekOffset < -1) {
-    labelEl.textContent = `${first.getDate()} ${MONTHS_FR[first.getMonth()]} – ${last.getDate()} ${MONTHS_FR[last.getMonth()]}`;
   } else {
     labelEl.textContent = `${first.getDate()} ${MONTHS_FR[first.getMonth()]} – ${last.getDate()} ${MONTHS_FR[last.getMonth()]}`;
   }
@@ -162,6 +153,10 @@ function toggleDay(headerEl) {
 
 // ── TOGGLE EXERCISE ──────────────────────────────────────────
 function toggleExercise(el, key, exId) {
+  // Block past days
+  const today = new Date(); today.setHours(0,0,0,0);
+  const [y,m,d] = key.split('-').map(Number);
+  if (new Date(y, m-1, d) < today) return;
   const dayData = getDayData(key);
   const wasChecked = dayData[exId] === true;
   const wasAllDone = isAllDone(dayData);

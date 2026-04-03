@@ -51,10 +51,6 @@ const AdminPage = (() => {
                 <input type="text" id="ex-unit" value="répétitions" placeholder="répétitions / secondes..." />
               </div>
               <div class="form-group">
-                <label>XP par complétion</label>
-                <input type="number" id="ex-xp" value="10" min="1" max="100" />
-              </div>
-              <div class="form-group">
                 <label>Ordre d'affichage</label>
                 <input type="number" id="ex-order" value="0" min="0" />
               </div>
@@ -194,7 +190,6 @@ const AdminPage = (() => {
       document.getElementById('ex-sets').value = ex.sets;
       document.getElementById('ex-reps').value = ex.reps;
       document.getElementById('ex-unit').value = ex.unit;
-      document.getElementById('ex-xp').value = ex.xp_reward;
       document.getElementById('ex-order').value = ex.order_index;
       const schedule = ex.schedule || [];
       document.querySelectorAll('#ex-schedule .sday-btn').forEach(btn => {
@@ -204,7 +199,6 @@ const AdminPage = (() => {
       document.getElementById('ex-modal-title').textContent = 'Nouvel exercice';
       document.getElementById('ex-form').reset();
       document.getElementById('ex-emoji').value = '💪';
-      document.getElementById('ex-xp').value = '10';
       document.getElementById('ex-sets').value = '1';
       document.getElementById('ex-unit').value = 'répétitions';
       document.querySelectorAll('#ex-schedule .sday-btn').forEach(btn => btn.classList.remove('active'));
@@ -229,7 +223,7 @@ const AdminPage = (() => {
       sets: parseInt(document.getElementById('ex-sets').value),
       reps: parseInt(document.getElementById('ex-reps').value),
       unit: document.getElementById('ex-unit').value.trim(),
-      xp_reward: parseInt(document.getElementById('ex-xp').value),
+      xp_reward: 10,
       order_index: parseInt(document.getElementById('ex-order').value),
       schedule: [...document.querySelectorAll('#ex-schedule .sday-btn.active')].map(b => parseInt(b.dataset.day)),
     };

@@ -47,7 +47,14 @@ ALTER TABLE exercises ADD COLUMN IF NOT EXISTS schedule INTEGER[] DEFAULT '{}';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar VARCHAR(10) DEFAULT '💪';
 
 -- Migration: unique constraint on exercise name to prevent seed duplicates
-ALTER TABLE exercises ADD CONSTRAINT IF NOT EXISTS exercises_name_unique UNIQUE (name);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'exercises_name_unique'
+  ) THEN
+    ALTER TABLE exercises ADD CONSTRAINT exercises_name_unique UNIQUE (name);
+  END IF;
+END$$;
 
 -- Seed default exercises
 INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index) VALUES
