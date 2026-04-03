@@ -51,13 +51,33 @@ const ProfilePage = (() => {
 
     return `
       ${_renderHero(avatar, name, rank, progress, stats)}
-      ${_renderTodayBadge(stats)}
-      ${_renderCalendar(stats.calendar)}
-      ${_renderXpChart(stats.xp_history)}
-      ${_renderChallenges(stats)}
-      ${_renderTopEx(stats.top_exercises)}
-      ${_renderMuscleRecords(records)}
+
+      <div class="profile-tabs">
+        <button class="profile-tab active" id="ptab-stats"   onclick="ProfilePage.switchTab('stats')">📊 Stats</button>
+        <button class="profile-tab"        id="ptab-records" onclick="ProfilePage.switchTab('records')">🏋️ Records</button>
+      </div>
+
+      <div id="profile-panel-stats">
+        ${_renderTodayBadge(stats)}
+        ${_renderCalendar(stats.calendar)}
+        ${_renderXpChart(stats.xp_history)}
+        ${_renderChallenges(stats)}
+        ${_renderTopEx(stats.top_exercises)}
+      </div>
+
+      <div id="profile-panel-records" style="display:none">
+        ${_renderMuscleRecords(records)}
+      </div>
     `;
+  }
+
+  // ── Tab switch ──────────────────────────────────────────────
+  function switchTab(tab) {
+    const isRecords = tab === 'records';
+    document.getElementById('profile-panel-stats').style.display   = isRecords ? 'none' : 'block';
+    document.getElementById('profile-panel-records').style.display = isRecords ? 'block' : 'none';
+    document.getElementById('ptab-stats').classList.toggle('active',   !isRecords);
+    document.getElementById('ptab-records').classList.toggle('active',  isRecords);
   }
 
   // ── 1. Hero card ────────────────────────────────────────────
@@ -411,8 +431,10 @@ const ProfilePage = (() => {
     const tmp = document.createElement('div');
     tmp.innerHTML = _renderMuscleRecords(records);
     section.replaceWith(tmp.firstElementChild);
+    // Stay on the records tab after refresh
+    switchTab('records');
   }
 
-  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, saveRecord, deleteRecord };
+  return { render, init, switchTab, showAddRecordForm, showEditRecordForm, cancelRecordForm, saveRecord, deleteRecord };
 })();
 

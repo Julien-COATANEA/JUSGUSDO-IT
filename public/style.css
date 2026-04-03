@@ -973,6 +973,38 @@ html, body {
 .profile-top-ex-times { font-size: 13px; font-weight: 800; color: var(--accent3); }
 
 /* ===========================
+   PROFILE — TAB BAR
+=========================== */
+.profile-tabs {
+  display: flex;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.profile-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  padding: 10px 8px;
+  border-radius: 11px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  letter-spacing: 0.1px;
+}
+.profile-tab.active {
+  background: var(--card2);
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* ===========================
    PROFILE — MUSCLE RECORDS
 =========================== */
 .muscle-records-title-row {

@@ -49,7 +49,14 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
          WHERE ce.user_id = $1
          GROUP BY entry_date
        ),
-       active_count AS (SELECT COUNT(*) AS cnt FROM exercises WHERE is_active = TRUE)
+       active_count AS (
+         SELECT COUNT(*) AS cnt FROM exercises e
+         WHERE e.is_active = TRUE
+           AND (
+             NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
+             OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
+           )
+       )
        SELECT COUNT(*) AS full_days
        FROM day_counts, active_count
        WHERE done >= active_count.cnt AND active_count.cnt > 0`,
@@ -65,7 +72,14 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
          WHERE ce.user_id = $1
          GROUP BY entry_date
        ),
-       active_count AS (SELECT COUNT(*) AS cnt FROM exercises WHERE is_active = TRUE)
+       active_count AS (
+         SELECT COUNT(*) AS cnt FROM exercises e
+         WHERE e.is_active = TRUE
+           AND (
+             NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
+             OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
+           )
+       )
        SELECT entry_date
        FROM day_counts, active_count
        WHERE done >= active_count.cnt AND active_count.cnt > 0
@@ -92,7 +106,15 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
          WHERE user_id = $1 AND entry_date = CURRENT_DATE AND completed = TRUE`,
         [userId]
       ),
-      db.query(`SELECT COUNT(*) AS total FROM exercises WHERE is_active = TRUE`),
+      db.query(
+        `SELECT COUNT(*) AS total FROM exercises e
+         WHERE e.is_active = TRUE
+           AND (
+             NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
+             OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
+           )`,
+        [userId]
+      ),
     ]);
 
     // 28-day calendar aligned to ISO weeks (Mon→Sun), 4 full weeks
@@ -101,7 +123,14 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
               SELECT (CURRENT_DATE - (EXTRACT(ISODOW FROM CURRENT_DATE)::int - 1) - 21)::date AS start_date,
                      (CURRENT_DATE - (EXTRACT(ISODOW FROM CURRENT_DATE)::int - 1) + 6)::date  AS end_date
             ),
-            active_count AS (SELECT COUNT(*) AS cnt FROM exercises WHERE is_active = TRUE),
+            active_count AS (
+              SELECT COUNT(*) AS cnt FROM exercises e
+              WHERE e.is_active = TRUE
+                AND (
+                  NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
+                  OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
+                )
+            ),
             day_data AS (
               SELECT entry_date,
                      COUNT(*) FILTER (WHERE completed) AS done
