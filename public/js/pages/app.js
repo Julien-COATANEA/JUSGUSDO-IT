@@ -255,6 +255,11 @@ const WorkoutPage = (() => {
   }
 
   async function toggleExercise(dateStr, exerciseId, el) {
+    // Block past days
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (new Date(y, m - 1, d) < today) return;
+
     const key = `${dateStr}_${exerciseId}`;
     const wasChecked = entries[key] === true;
     const card = el.closest('.day-card');
