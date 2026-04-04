@@ -1467,6 +1467,11 @@ html, body {
   content: '🏆';
   font-size: 10px;
 }
+.muscu-ex-date {
+  font-weight: 500;
+  color: var(--text3);
+  font-size: 11px;
+}
 .muscu-ex-action {
   flex-shrink: 0;
   width: 36px;

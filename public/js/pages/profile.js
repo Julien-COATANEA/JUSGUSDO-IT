@@ -363,6 +363,9 @@ const ProfilePage = (() => {
                   const rec = recMap[ex.toLowerCase()];
                   const hasRec = !!rec;
                   const weightFmt = hasRec ? (rec.weight_kg % 1 === 0 ? rec.weight_kg : rec.weight_kg.toFixed(1)) : null;
+                  const recDateStr = (hasRec && rec.updated_at)
+                    ? new Date(rec.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+                    : null;
                   const safeEx  = _escape(ex).replace(/'/g, "\\'");
                   const safeCat = _escape(session.name).replace(/'/g, "\\'");
                   const clickAttr = _isOwnProfile
@@ -375,7 +378,7 @@ const ProfilePage = (() => {
                     <span class="muscu-ex-dot" style="background:${session.color}"></span>
                     <div class="muscu-ex-main">
                       <span class="muscu-ex-name">${_escape(ex)}</span>
-                      ${hasRec ? `<span class="muscu-ex-sub">${rec.sets} série${rec.sets > 1 ? 's' : ''} · ${weightFmt} kg</span>` : ''}
+                      ${hasRec ? `<span class="muscu-ex-sub">${rec.sets} série${rec.sets > 1 ? 's' : ''} · ${weightFmt} kg${recDateStr ? `<span class="muscu-ex-date"> · ${recDateStr}</span>` : ''}</span>` : ''}
                     </div>
                     ${_isOwnProfile ? `<span class="muscu-ex-action${hasRec ? ' has-rec' : ''}">${hasRec ? '✏️' : '＋'}</span>` : ''}
                   </div>`;
@@ -488,6 +491,11 @@ const ProfilePage = (() => {
     if (!overlay) return;
     document.getElementById('mr-form-date').textContent = _todayLabel();
     document.getElementById('mr-form-error').textContent = '';
+    const btn = overlay.querySelector('.mr-sheet-save-btn');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Enregistrer le record';
+    }
     overlay.style.display = 'flex';
     document.body.style.overflow = 'hidden';
   }
