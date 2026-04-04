@@ -54,7 +54,7 @@ const ProfilePage = (() => {
 
       <div class="profile-tabs">
         <button class="profile-tab active" id="ptab-stats"   onclick="ProfilePage.switchTab('stats')">📊 Stats</button>
-        <button class="profile-tab"        id="ptab-records" onclick="ProfilePage.switchTab('records')">🏋️ Records</button>
+        <button class="profile-tab"        id="ptab-records" onclick="ProfilePage.switchTab('records')">🏋️ Muscu</button>
       </div>
 
       <div id="profile-panel-stats">
@@ -283,20 +283,88 @@ const ProfilePage = (() => {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  // ── 7. Records Muscu ────────────────────────────────────────
-  const _MR_CATEGORIES = [
-    { name: 'Poitrine',  icon: '🫸', color: '#e94560' },
-    { name: 'Dos',       icon: '🏋️', color: '#7c5cbf' },
-    { name: 'Épaules',   icon: '🔺', color: '#f97316' },
-    { name: 'Biceps',    icon: '💪', color: '#4ecdc4' },
-    { name: 'Triceps',   icon: '⚡', color: '#38b2ac' },
-    { name: 'Jambes',    icon: '🦵', color: '#22d18b' },
-    { name: 'Abdos',     icon: '🔥', color: '#fbbf24' },
-    { name: 'Autre',     icon: '🎯', color: '#7878aa' },
+  // ── 7. Muscu — Séances & Records ────────────────────────────
+  const _MUSCU_SESSIONS = [
+    {
+      name: 'Pecs Triceps', icon: '💪', color: '#e94560',
+      exercises: [
+        'Développé Couché Haltères',
+        'Développé Couché Barres',
+        'Développé Couché Incliné',
+        'Écarté Poulie',
+        'Triceps Corde (extension poulie basse)',
+        'Triceps Corde (extension poulie haute)',
+        'Dips',
+      ],
+    },
+    {
+      name: 'Dos Biceps', icon: '🏋️', color: '#7c5cbf',
+      exercises: [
+        'Tirage Bucheron',
+        'Tirage Verticale',
+        'Tirage Horizontale',
+        'Traction',
+        'Curl Haltère',
+        'Curl Barre',
+        'Curl Marteau',
+      ],
+    },
+    {
+      name: 'Jambes', icon: '🦵', color: '#22d18b',
+      exercises: [
+        'Ischios Assis',
+        'Leg Extension',
+        'Presses',
+        'Adducteurs',
+        'Fentes',
+        'Squats',
+        'Mollets',
+      ],
+    },
+    {
+      name: 'Full', icon: '⚡', color: '#fbbf24',
+      exercises: [
+        'Développé Couché Barre',
+        'Traction',
+        'Triceps Corde / Élévation Latérale',
+        'Épaules',
+        'Curl Haltère',
+      ],
+    },
   ];
+
+  const _MR_CATEGORIES = _MUSCU_SESSIONS.map(s => ({ name: s.name, icon: s.icon, color: s.color }));
 
   function _catMeta(name) {
     return _MR_CATEGORIES.find(c => c.name === name) || _MR_CATEGORIES[_MR_CATEGORIES.length - 1];
+  }
+
+  function _renderMuscuSessions() {
+    return `
+      <div class="muscu-sessions-label">📋 Programme des séances</div>
+      <div class="muscu-sessions">
+        ${_MUSCU_SESSIONS.map((session, idx) => `
+          <div class="muscu-session-card" id="mscard-${idx}" style="--session-color:${session.color}">
+            <div class="muscu-session-header" onclick="this.closest('.muscu-session-card').classList.toggle('open')">
+              <span class="muscu-session-icon">${session.icon}</span>
+              <span class="muscu-session-name">${session.name}</span>
+              <span class="muscu-session-count">${session.exercises.length}</span>
+              <span class="muscu-session-chevron">▾</span>
+            </div>
+            <div class="muscu-session-body">
+              <div class="muscu-session-body-inner">
+                ${session.exercises.map(ex => `
+                  <div class="muscu-ex-row">
+                    <span class="muscu-ex-dot" style="background:${session.color}"></span>
+                    <span class="muscu-ex-name">${_escape(ex)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
   }
 
   function _renderMuscleRecords(records) {
@@ -304,7 +372,7 @@ const ProfilePage = (() => {
     const groups = {};
     _MR_CATEGORIES.forEach(c => { groups[c.name] = []; });
     records.forEach(r => {
-      const cat = (r.category && groups[r.category] !== undefined) ? r.category : 'Autre';
+      const cat = (r.category && groups[r.category] !== undefined) ? r.category : _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name;
       groups[cat].push(r);
     });
 
@@ -316,7 +384,7 @@ const ProfilePage = (() => {
         const dateStr = r.updated_at
           ? new Date(r.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
           : '';
-        const safeCategory = _escape(r.category || 'Autre').replace(/'/g, "\\'");
+        const safeCategory = _escape(r.category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name).replace(/'/g, "\\'");
         const safeName     = _escape(r.exercise_name).replace(/'/g, "\\'");
         const editAttrs = _isOwnProfile
           ? `onclick="ProfilePage.showEditRecordForm(${r.id}, '${safeName}', ${r.sets}, ${r.weight_kg}, '${safeCategory}')"`
@@ -364,8 +432,9 @@ const ProfilePage = (() => {
 
     return `
       <div class="profile-section" id="muscle-records-section" style="animation:fadeIn 0.3s ease 0.22s both">
-        <div class="muscle-records-title-row">
-          <div class="profile-section-title" style="margin-bottom:0">🏋️ Records Muscu</div>
+        ${_renderMuscuSessions()}
+        <div class="muscle-records-title-row" style="margin-top:22px">
+          <div class="profile-section-title" style="margin-bottom:0">🏋️ Mes Records</div>
           ${_isOwnProfile ? `<button class="icon-btn mr-plus-btn" onclick="ProfilePage.showAddRecordForm()" title="Ajouter un record">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>` : ''}
@@ -404,7 +473,7 @@ const ProfilePage = (() => {
     const form = document.getElementById('muscle-record-form');
     if (!form) return;
     document.getElementById('mr-name').value             = '';
-    document.getElementById('mr-category').value         = 'Poitrine';
+    document.getElementById('mr-category').value         = _MR_CATEGORIES[0].name;
     document.getElementById('mr-sets').value             = '';
     document.getElementById('mr-weight').value           = '';
     document.getElementById('mr-editing-id').value       = '';
@@ -417,7 +486,7 @@ const ProfilePage = (() => {
     const form = document.getElementById('muscle-record-form');
     if (!form) return;
     document.getElementById('mr-name').value             = name;
-    document.getElementById('mr-category').value         = category || 'Autre';
+    document.getElementById('mr-category').value         = category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name;
     document.getElementById('mr-sets').value             = sets;
     document.getElementById('mr-weight').value           = weight;
     document.getElementById('mr-editing-id').value       = id;
