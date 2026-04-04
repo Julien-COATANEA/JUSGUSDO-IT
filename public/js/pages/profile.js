@@ -442,85 +442,102 @@ const ProfilePage = (() => {
           </button>
         </div>` : ''}
 
-        <div id="muscle-record-form" style="display:none" class="muscle-record-form">
-          <div id="mr-form-context" class="mr-form-context" style="display:none"></div>
-          <input id="mr-name" class="mr-input" type="text" placeholder="Nom de l'exercice" autocomplete="off" maxlength="100" />
+        ${extraHtml}
+      </div>
+
+      <div id="mr-modal-overlay" class="mr-modal-overlay" style="display:none" onclick="ProfilePage.cancelRecordForm()">
+        <div class="mr-sheet" onclick="event.stopPropagation()">
+          <div class="mr-sheet-handle"></div>
+          <div class="mr-sheet-header">
+            <div class="mr-sheet-exercise" id="mr-form-context">Record</div>
+            <div class="mr-sheet-date" id="mr-form-date"></div>
+          </div>
+          <input id="mr-name" type="text" class="mr-input mr-name-input" placeholder="Nom de l'exercice" autocomplete="off" maxlength="100" />
           <select id="mr-category" class="mr-input mr-select">${catOptions}</select>
-          <div class="mr-row">
-            <div class="mr-field">
-              <label class="mr-label">Séries</label>
-              <input id="mr-sets" class="mr-input" type="number" min="1" max="100" placeholder="4" inputmode="numeric" />
+          <div class="mr-big-row">
+            <div class="mr-big-group">
+              <div class="mr-big-label">Séries</div>
+              <input id="mr-sets" class="mr-big-input" type="number" min="1" max="100" placeholder="4" inputmode="numeric" />
             </div>
-            <div class="mr-field">
-              <label class="mr-label">Poids (kg)</label>
-              <input id="mr-weight" class="mr-input" type="number" min="0" step="0.5" placeholder="80" inputmode="decimal" />
+            <div class="mr-big-divider"></div>
+            <div class="mr-big-group">
+              <div class="mr-big-label">Poids</div>
+              <div class="mr-big-input-wrap">
+                <input id="mr-weight" class="mr-big-input" type="number" min="0" step="0.5" placeholder="80" inputmode="decimal" />
+                <span class="mr-big-unit">kg</span>
+              </div>
             </div>
           </div>
           <div id="mr-form-error" class="mr-form-error"></div>
-          <div class="mr-form-actions">
-            <button class="mr-save-btn" onclick="ProfilePage.saveRecord()">Enregistrer</button>
-            <button class="mr-cancel-btn" onclick="ProfilePage.cancelRecordForm()">Annuler</button>
-          </div>
+          <button class="mr-sheet-save-btn" onclick="ProfilePage.saveRecord()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Enregistrer le record
+          </button>
+          <button class="mr-sheet-cancel-btn" onclick="ProfilePage.cancelRecordForm()">Annuler</button>
           <input type="hidden" id="mr-editing-id" value="" />
         </div>
-
-        ${extraHtml}
       </div>`;
   }
 
-  // ── Muscle records interaction ───────────────────────────────
-  function showAddRecordForm() {
-    const form = document.getElementById('muscle-record-form');
-    if (!form) return;
-    const ctxEl = document.getElementById('mr-form-context');
-    if (ctxEl) { ctxEl.style.display = 'none'; ctxEl.textContent = ''; }
-    document.getElementById('mr-name').value             = '';
-    document.getElementById('mr-name').style.display     = 'block';
-    document.getElementById('mr-category').value         = _MR_CATEGORIES[0].name;
-    document.getElementById('mr-sets').value             = '';
-    document.getElementById('mr-weight').value           = '';
-    document.getElementById('mr-editing-id').value       = '';
+  function _todayLabel() {
+    return new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  function _openSheet() {
+    const overlay = document.getElementById('mr-modal-overlay');
+    if (!overlay) return;
+    document.getElementById('mr-form-date').textContent = _todayLabel();
     document.getElementById('mr-form-error').textContent = '';
-    form.style.display = 'block';
-    setTimeout(() => document.getElementById('mr-name').focus(), 50);
+    overlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function showAddRecordForm() {
+    const ctxEl = document.getElementById('mr-form-context');
+    if (ctxEl) ctxEl.textContent = '+ Exercice personnalisé';
+    const nameEl = document.getElementById('mr-name');
+    if (nameEl) { nameEl.value = ''; nameEl.style.display = 'block'; }
+    const catEl = document.getElementById('mr-category');
+    if (catEl) { catEl.value = _MR_CATEGORIES[0].name; catEl.style.display = 'block'; }
+    document.getElementById('mr-sets').value   = '';
+    document.getElementById('mr-weight').value = '';
+    document.getElementById('mr-editing-id').value = '';
+    _openSheet();
+    setTimeout(() => document.getElementById('mr-name').focus(), 300);
   }
 
   function showEditRecordForm(id, name, sets, weight, category) {
-    const form = document.getElementById('muscle-record-form');
-    if (!form) return;
     const ctxEl = document.getElementById('mr-form-context');
-    if (ctxEl) { ctxEl.textContent = '📌 ' + name; ctxEl.style.display = 'block'; }
-    document.getElementById('mr-name').value             = name;
-    document.getElementById('mr-name').style.display     = 'none';
-    document.getElementById('mr-category').value         = category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name;
-    document.getElementById('mr-sets').value             = sets;
-    document.getElementById('mr-weight').value           = weight;
-    document.getElementById('mr-editing-id').value       = id;
-    document.getElementById('mr-form-error').textContent = '';
-    form.style.display = 'block';
-    form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (ctxEl) ctxEl.textContent = name;
+    const nameEl = document.getElementById('mr-name');
+    if (nameEl) { nameEl.value = name; nameEl.style.display = 'none'; }
+    const catEl = document.getElementById('mr-category');
+    if (catEl) { catEl.value = category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name; catEl.style.display = 'none'; }
+    document.getElementById('mr-sets').value   = sets;
+    document.getElementById('mr-weight').value = weight;
+    document.getElementById('mr-editing-id').value = id;
+    _openSheet();
+    setTimeout(() => document.getElementById('mr-sets').focus(), 300);
   }
 
   function cancelRecordForm() {
-    const form = document.getElementById('muscle-record-form');
-    if (form) form.style.display = 'none';
+    const overlay = document.getElementById('mr-modal-overlay');
+    if (overlay) overlay.style.display = 'none';
+    document.body.style.overflow = '';
   }
 
   function openSessionRecord(exerciseName, category) {
-    const form = document.getElementById('muscle-record-form');
-    if (!form) return;
     const ctxEl = document.getElementById('mr-form-context');
-    if (ctxEl) { ctxEl.textContent = '📌 ' + exerciseName; ctxEl.style.display = 'block'; }
-    document.getElementById('mr-name').value             = exerciseName;
-    document.getElementById('mr-name').style.display     = 'none';
-    document.getElementById('mr-category').value         = category || _MR_CATEGORIES[0].name;
-    document.getElementById('mr-sets').value             = '';
-    document.getElementById('mr-weight').value           = '';
-    document.getElementById('mr-editing-id').value       = '';
-    document.getElementById('mr-form-error').textContent = '';
-    form.style.display = 'block';
-    form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    setTimeout(() => document.getElementById('mr-sets').focus(), 350);
+    if (ctxEl) ctxEl.textContent = exerciseName;
+    const nameEl = document.getElementById('mr-name');
+    if (nameEl) { nameEl.value = exerciseName; nameEl.style.display = 'none'; }
+    const catEl = document.getElementById('mr-category');
+    if (catEl) { catEl.value = category || _MR_CATEGORIES[0].name; catEl.style.display = 'none'; }
+    document.getElementById('mr-sets').value   = '';
+    document.getElementById('mr-weight').value = '';
+    document.getElementById('mr-editing-id').value = '';
+    _openSheet();
+    setTimeout(() => document.getElementById('mr-sets').focus(), 300);
   }
 
   async function saveRecord() {
@@ -534,15 +551,16 @@ const ProfilePage = (() => {
     if (!sets || sets < 1) { errEl.textContent = 'Nombre de séries invalide'; return; }
     if (isNaN(weight) || weight < 0) { errEl.textContent = 'Poids invalide'; return; }
 
-    const btn = document.querySelector('.mr-save-btn');
-    if (btn) btn.disabled = true;
+    const btn = document.querySelector('.mr-sheet-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
     errEl.textContent = '';
     try {
       await API.saveMuscleRecord(_profileUserId, { exercise_name: name, sets, weight_kg: weight, category });
+      cancelRecordForm();
       await _refreshMuscleRecords();
     } catch (err) {
       errEl.textContent = err.message || 'Erreur lors de la sauvegarde';
-      if (btn) btn.disabled = false;
+      if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Enregistrer le record'; }
     }
   }
 
