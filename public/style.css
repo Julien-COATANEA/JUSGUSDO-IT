@@ -1028,20 +1028,20 @@ html, body {
 .muscle-record-form {
   background: var(--bg2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 14px;
-  margin-bottom: 14px;
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
 }
 .mr-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
 }
-.mr-field { display: flex; flex-direction: column; gap: 5px; }
-.mr-label { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+.mr-field { display: flex; flex-direction: column; gap: 7px; }
+.mr-label { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
 .mr-input {
   background: var(--card2);
   border: 1.5px solid var(--border);
@@ -1204,8 +1204,8 @@ html, body {
 .muscu-sessions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 12px;
+  margin-bottom: 8px;
 }
 
 .muscu-sessions-label {
@@ -1214,27 +1214,28 @@ html, body {
   color: var(--text3);
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .muscu-session-card {
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--session-color, var(--accent3));
+  border-left: 4px solid var(--session-color, var(--accent3));
   overflow: hidden;
   background: var(--card);
   transition: box-shadow 0.2s;
 }
 .muscu-session-card.open {
-  box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+  box-shadow: 0 6px 28px rgba(0,0,0,0.3);
+  border-color: rgba(255,255,255,0.1);
 }
 
 .muscu-session-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 14px 0 12px;
-  min-height: 52px;
+  gap: 14px;
+  padding: 0 16px 0 14px;
+  min-height: 64px;
   cursor: pointer;
   user-select: none;
   touch-action: manipulation;
@@ -1243,40 +1244,40 @@ html, body {
 }
 .muscu-session-header:active { background: rgba(255,255,255,0.05); }
 
-.muscu-session-icon { font-size: 20px; line-height: 1; flex-shrink: 0; }
+.muscu-session-icon { font-size: 24px; line-height: 1; flex-shrink: 0; }
 .muscu-session-name {
   flex: 1;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.5px;
   color: var(--session-color, var(--accent3));
 }
 .muscu-session-count {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text3);
-  background: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.07);
   border-radius: 20px;
-  padding: 3px 9px;
+  padding: 4px 11px;
   flex-shrink: 0;
 }
 .muscu-session-chevron {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(255,255,255,0.06);
-  font-size: 11px;
+  background: rgba(255,255,255,0.07);
+  font-size: 12px;
   color: var(--text3);
   flex-shrink: 0;
   transition: transform 0.25s cubic-bezier(0.4,0,0.2,1), background 0.2s;
 }
 .muscu-session-card.open .muscu-session-chevron {
   transform: rotate(180deg);
-  background: rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.12);
   color: var(--text2);
 }
 
@@ -1286,22 +1287,22 @@ html, body {
   transition: max-height 0.3s cubic-bezier(0.4,0,0.2,1);
 }
 .muscu-session-card.open .muscu-session-body {
-  max-height: 600px;
+  max-height: 800px;
 }
 .muscu-session-body-inner {
-  padding: 8px 14px 14px;
+  padding: 4px 16px 16px;
   border-top: 1px solid var(--border);
 }
 
 .muscu-ex-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 44px;
-  padding: 7px 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  border-radius: 8px;
-  margin: 0 -8px;
+  gap: 14px;
+  min-height: 52px;
+  padding: 10px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-radius: 10px;
+  margin: 2px -10px;
 }
 .muscu-ex-row:last-child { border-bottom: none; }
 
@@ -1310,25 +1311,25 @@ html, body {
   touch-action: manipulation;
   transition: background 0.15s;
 }
-.muscu-ex-row.muscu-ex-tappable:active { background: rgba(255,255,255,0.07); }
+.muscu-ex-row.muscu-ex-tappable:active { background: rgba(255,255,255,0.08); }
 
 .muscu-ex-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 .muscu-ex-main {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 .muscu-ex-name {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text);
   line-height: 1.35;
 }
@@ -1336,48 +1337,56 @@ html, body {
   font-size: 12px;
   font-weight: 700;
   color: var(--accent3);
-  letter-spacing: 0.1px;
+  letter-spacing: 0.2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.muscu-ex-sub::before {
+  content: '🏆';
+  font-size: 10px;
 }
 .muscu-ex-action {
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(255,255,255,0.06);
-  font-size: 14px;
+  background: rgba(255,255,255,0.07);
+  font-size: 16px;
   color: var(--text3);
   font-weight: 800;
   transition: background 0.15s;
 }
 .muscu-ex-action.has-rec {
-  background: rgba(78,205,196,0.1);
-  font-size: 13px;
+  background: rgba(78,205,196,0.12);
+  font-size: 15px;
 }
 .muscu-ex-row.muscu-ex-tappable:active .muscu-ex-action {
-  background: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.15);
 }
 
 .muscu-session-recs {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   background: rgba(255,255,255,0.08);
   border-radius: 20px;
-  padding: 3px 9px;
+  padding: 4px 11px;
   flex-shrink: 0;
 }
 
 /* Form context label (shows exercise name above inputs) */
 .mr-form-context {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text);
   background: rgba(255,255,255,0.04);
-  border-radius: 8px;
-  padding: 8px 12px;
-  border-left: 3px solid var(--accent3);
+  border-radius: 10px;
+  padding: 12px 16px;
+  border-left: 4px solid var(--accent3);
+  line-height: 1.4;
 }
 
 /* ===========================
