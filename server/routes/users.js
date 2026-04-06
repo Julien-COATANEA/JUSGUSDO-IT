@@ -292,14 +292,15 @@ router.get('/:id/minigame-status', requireAuth, async (req, res) => {
   if (!userId || isNaN(userId)) return res.status(400).json({ error: 'ID invalide' });
   try {
     const playRes = await db.query(
-      `SELECT won FROM minigame_plays WHERE user_id = $1 AND play_date = CURRENT_DATE`,
+      `SELECT level, won FROM minigame_plays WHERE user_id = $1 AND play_date = CURRENT_DATE`,
       [userId]
     );
     const userRes = await db.query(`SELECT tokens FROM users WHERE id = $1`, [userId]);
+    const levels = { easy: null, medium: null, hard: null };
+    playRes.rows.forEach(r => { levels[r.level] = r.won; });
     res.json({
-      played_today: playRes.rows.length > 0,
-      won_today:    playRes.rows[0]?.won ?? null,
-      tokens:       userRes.rows[0]?.tokens ?? 0,
+      levels,
+      tokens: userRes.rows[0]?.tokens ?? 0,
     });
   } catch (err) {
     console.error(err);
@@ -311,19 +312,20 @@ router.get('/:id/minigame-status', requireAuth, async (req, res) => {
 router.post('/:id/minigame-result', requireAuth, async (req, res) => {
   const userId = parseInt(req.params.id, 10);
   if (req.user.id !== userId) return res.status(403).json({ error: 'Interdit' });
-  const { won } = req.body;
-  if (typeof won !== 'boolean') return res.status(400).json({ error: 'Données manquantes' });
+  const { won, level } = req.body;
+  const VALID_LEVELS = ['easy', 'medium', 'hard'];
+  if (typeof won !== 'boolean' || !VALID_LEVELS.includes(level))
+    return res.status(400).json({ error: 'Données manquantes' });
   try {
-    // Check not already played today
     const existing = await db.query(
-      `SELECT id FROM minigame_plays WHERE user_id = $1 AND play_date = CURRENT_DATE`,
-      [userId]
+      `SELECT id FROM minigame_plays WHERE user_id = $1 AND play_date = CURRENT_DATE AND level = $2`,
+      [userId, level]
     );
-    if (existing.rows.length > 0) return res.status(409).json({ error: 'Déjà joué aujourd\'hui' });
+    if (existing.rows.length > 0) return res.status(409).json({ error: 'Déjà joué ce niveau aujourd\'hui' });
 
     await db.query(
-      `INSERT INTO minigame_plays (user_id, play_date, won) VALUES ($1, CURRENT_DATE, $2)`,
-      [userId, won]
+      `INSERT INTO minigame_plays (user_id, play_date, won, level) VALUES ($1, CURRENT_DATE, $2, $3)`,
+      [userId, won, level]
     );
     let tokens = null;
     if (won) {

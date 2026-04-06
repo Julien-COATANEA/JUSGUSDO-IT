@@ -985,21 +985,25 @@ html, body {
   gap: 4px;
 }
 .profile-stat-card--token {
-  background: linear-gradient(135deg, rgba(251,191,36,0.10) 0%, rgba(251,143,36,0.06) 100%);
-  border-color: rgba(251,191,36,0.35);
-  box-shadow: 0 0 14px rgba(251,191,36,0.15), inset 0 1px 0 rgba(255,255,255,0.06);
+  background: linear-gradient(135deg, rgba(100,180,255,0.10) 0%, rgba(124,92,191,0.07) 100%);
+  border-color: rgba(100,180,255,0.35);
+  box-shadow: 0 0 14px rgba(100,180,255,0.15), inset 0 1px 0 rgba(255,255,255,0.06);
   position: relative;
   overflow: hidden;
-  animation: ptb-pulse 3s ease-in-out infinite;
+  animation: gem-pulse 3s ease-in-out infinite;
 }
 .profile-stat-card--token::before {
   content: '';
   position: absolute;
   top: 0; left: -60%;
   width: 40%; height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+  background: linear-gradient(90deg, transparent, rgba(200,230,255,0.15), transparent);
   animation: ptb-shimmer 3s ease-in-out infinite;
   pointer-events: none;
+}
+@keyframes gem-pulse {
+  0%,100% { box-shadow: 0 0 8px  rgba(100,180,255,0.15), inset 0 1px 0 rgba(255,255,255,0.06); }
+  50%      { box-shadow: 0 0 20px rgba(100,180,255,0.40), inset 0 1px 0 rgba(255,255,255,0.10); }
 }
 .profile-stat-icon  { font-size: 20px; }
 .profile-stat-value { font-size: 18px; font-weight: 900; color: var(--text); letter-spacing: -0.3px; }
@@ -1902,4 +1906,67 @@ html, body {
 }
 .mg-already-icon  { font-size: 48px; }
 .mg-already-text  { font-size: 14px; color: var(--text2); text-align: center; line-height: 1.6; }
-.mg-token-count   { font-size: 16px; font-weight: 800; color: var(--gold); }
+.mg-token-count   { font-size: 16px; font-weight: 800; color: #7dd3fc; }
+
+/* Level recap pills (all-done screen) */
+.mg-level-recap {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 4px;
+}
+.mg-recap-pill {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--lvl, var(--border));
+  color: var(--text2);
+}
+
+/* Gems today indicator */
+.mg-gems-today {
+  font-size: 13px;
+  font-weight: 700;
+  color: #7dd3fc;
+  text-align: center;
+  margin-top: -8px;
+}
+
+/* Level selection grid */
+.mg-level-grid {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+.mg-level-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--lvl-color, var(--border));
+  background: color-mix(in srgb, var(--lvl-color, transparent) 8%, var(--card2));
+  transition: transform 0.15s, box-shadow 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+.mg-level-available {
+  cursor: pointer;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--lvl-color) 20%, transparent);
+}
+.mg-level-available:active {
+  transform: scale(0.95);
+}
+.mg-level-done {
+  opacity: 0.5;
+  filter: grayscale(0.4);
+}
+.mg-level-emoji  { font-size: 22px; }
+.mg-level-name   { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.4px; }
+.mg-level-reward { font-size: 13px; font-weight: 800; color: #7dd3fc; }
+.mg-level-result { font-size: 18px; font-weight: 900; }

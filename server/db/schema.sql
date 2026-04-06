@@ -110,3 +110,15 @@ CREATE TABLE IF NOT EXISTS minigame_plays (
   won BOOLEAN NOT NULL DEFAULT FALSE,
   UNIQUE(user_id, play_date)
 );
+-- Migration: add level to minigame_plays (easy/medium/hard, 1 play per level per day)
+ALTER TABLE minigame_plays ADD COLUMN IF NOT EXISTS level VARCHAR(10) DEFAULT 'easy';
+DO $$
+BEGIN
+  -- Replace old (user_id, play_date) unique with (user_id, play_date, level)
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'minigame_plays_user_id_play_date_key') THEN
+    ALTER TABLE minigame_plays DROP CONSTRAINT minigame_plays_user_id_play_date_key;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'minigame_plays_user_id_play_date_level_key') THEN
+    ALTER TABLE minigame_plays ADD CONSTRAINT minigame_plays_user_id_play_date_level_key UNIQUE (user_id, play_date, level);
+  END IF;
+END$$;

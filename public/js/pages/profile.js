@@ -91,9 +91,9 @@ const ProfilePage = (() => {
     ];
     const tokenCard = tokens > 0
       ? `<div class="profile-stat-card profile-stat-card--token">
-           <span class="profile-stat-icon ptb-icon" style="filter:drop-shadow(0 0 5px rgba(251,191,36,0.8))">🪙</span>
-           <span class="profile-stat-value" style="color:var(--gold);text-shadow:0 0 10px rgba(251,191,36,0.5)">${tokens}</span>
-           <span class="profile-stat-label">Jeton${tokens > 1 ? 's' : ''}</span>
+           <span class="profile-stat-icon ptb-icon" style="filter:drop-shadow(0 0 5px rgba(100,180,255,0.9))">💎</span>
+           <span class="profile-stat-value" style="color:#7dd3fc;text-shadow:0 0 10px rgba(100,180,255,0.5)">${tokens}</span>
+           <span class="profile-stat-label">Gemme${tokens > 1 ? 's' : ''}</span>
          </div>`
       : '';
     return `

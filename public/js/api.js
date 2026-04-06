@@ -64,6 +64,6 @@ const API = (() => {
 
     // Mini-game
     getMinigameStatus: (userId) => request('GET', `/users/${userId}/minigame-status`),
-    postMinigameResult: (userId, won) => request('POST', `/users/${userId}/minigame-result`, { won }),
+    postMinigameResult: (userId, won, level) => request('POST', `/users/${userId}/minigame-result`, { won, level }),
   };
 })();
