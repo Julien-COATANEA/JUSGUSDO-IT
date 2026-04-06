@@ -1638,6 +1638,91 @@ html, body {
 /* ===========================
    PROFILE — CALENDAR
 =========================== */
+/* Calendar section header */
+.cal-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cal-filter-row {
+  display: flex;
+  gap: 4px;
+}
+.cal-filter-btn {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 100px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text3);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.cal-filter-btn.active {
+  background: var(--accent3);
+  color: var(--bg);
+  border-color: var(--accent3);
+}
+
+/* Heatmap layout */
+.cal-heatmap-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  overflow: hidden;
+}
+.cal-day-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.cal-month-spacer {
+  height: 14px;
+}
+.cal-day-lbl {
+  width: 12px;
+  height: 12px;
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text3);
+  text-align: center;
+  line-height: 12px;
+  text-transform: uppercase;
+}
+.cal-scroll-inner {
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.cal-scroll-inner::-webkit-scrollbar { display: none; }
+.cal-weeks-row {
+  display: flex;
+  gap: 2px;
+}
+.cal-week-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.cal-month-label {
+  height: 14px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text3);
+  white-space: nowrap;
+  line-height: 14px;
+  text-transform: capitalize;
+}
+
+/* Keep old grid for any legacy usage */
 .cal-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -1652,10 +1737,11 @@ html, body {
   padding-bottom: 4px;
 }
 .cal-cell {
-  aspect-ratio: 1;
-  border-radius: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
   background: rgba(255,255,255,0.04);
-  transition: transform 0.15s;
+  flex-shrink: 0;
 }
 .cal-cell.full    { background: var(--green); opacity: 0.85; }
 .cal-cell.partial { background: var(--gold);  opacity: 0.55; }

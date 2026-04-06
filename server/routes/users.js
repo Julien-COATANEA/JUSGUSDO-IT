@@ -119,34 +119,46 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
 
     // 28-day calendar aligned to ISO weeks (Mon→Sun), 4 full weeks
     const calendarRes = await db.query(
-      `WITH week_start AS (
-              SELECT (CURRENT_DATE - (EXTRACT(ISODOW FROM CURRENT_DATE)::int - 1) - 21)::date AS start_date,
-                     (CURRENT_DATE - (EXTRACT(ISODOW FROM CURRENT_DATE)::int - 1) + 6)::date  AS end_date
-            ),
-            active_count AS (
-              SELECT COUNT(*) AS cnt FROM exercises e
-              WHERE e.is_active = TRUE
-                AND (
-                  NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
-                  OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
-                )
-            ),
-            day_data AS (
-              SELECT entry_date,
-                     COUNT(*) FILTER (WHERE completed) AS done
-              FROM checklist_entries
-              WHERE user_id = $1
-                AND entry_date >= (SELECT start_date FROM week_start)
-              GROUP BY entry_date
-            )
-       SELECT d.entry_date,
-              COALESCE(dd.done, 0) AS done,
-              ac.cnt AS total
-       FROM week_start ws,
-            generate_series(ws.start_date, ws.end_date, '1 day'::interval) AS d(entry_date)
-       CROSS JOIN active_count ac
-       LEFT JOIN day_data dd ON dd.entry_date = d.entry_date
-       ORDER BY d.entry_date`,
+      `WITH cur_monday AS (
+         SELECT (CURRENT_DATE - (EXTRACT(ISODOW FROM CURRENT_DATE)::int - 1))::date AS d
+       ),
+       user_first AS (
+         SELECT COALESCE(MIN(entry_date), CURRENT_DATE) AS first_date
+         FROM checklist_entries WHERE user_id = $1
+       ),
+       bounds AS (
+         SELECT
+           GREATEST(
+             (uf.first_date - (EXTRACT(ISODOW FROM uf.first_date)::int - 1))::date,
+             (cm.d - 357)::date
+           ) AS start_date,
+           (cm.d + 6)::date AS end_date
+         FROM cur_monday cm, user_first uf
+       ),
+       active_count AS (
+         SELECT COUNT(*) AS cnt FROM exercises e
+         WHERE e.is_active = TRUE
+           AND (
+             NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
+             OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
+           )
+       ),
+       day_data AS (
+         SELECT entry_date,
+                COUNT(*) FILTER (WHERE completed) AS done
+         FROM checklist_entries
+         WHERE user_id = $1
+           AND entry_date >= (SELECT start_date FROM bounds)
+         GROUP BY entry_date
+       )
+  SELECT d.entry_date,
+         COALESCE(dd.done, 0) AS done,
+         ac.cnt AS total
+  FROM bounds b,
+       generate_series(b.start_date, b.end_date, '1 day'::interval) AS d(entry_date)
+  CROSS JOIN active_count ac
+  LEFT JOIN day_data dd ON dd.entry_date = d.entry_date
+  ORDER BY d.entry_date`,
       [userId]
     );
 

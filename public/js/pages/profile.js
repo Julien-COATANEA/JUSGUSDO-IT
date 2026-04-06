@@ -1,7 +1,8 @@
 // ── Profile / Stats page ─────────────────────────────────────
 const ProfilePage = (() => {
-  let _profileUserId = null;
-  let _isOwnProfile  = false;
+  let _profileUserId  = null;
+  let _isOwnProfile   = false;
+  let _calendarWeeks  = [];
 
   function render() {
     return `
@@ -143,25 +144,43 @@ const ProfilePage = (() => {
     const today = new Date().toISOString().split('T')[0];
     const DAY_LABELS = ['L','M','M','J','V','S','D'];
 
-    const cells = calendar.map(d => {
-      const pct  = d.total > 0 ? d.done / d.total : 0;
-      const cls  = d.date > today ? 'future'
-                 : pct >= 1       ? 'full'
-                 : pct > 0        ? 'partial'
-                 :                  'empty';
-      const isToday = d.date === today;
-      return `<div class="cal-cell ${cls}${isToday ? ' cal-today' : ''}" title="${d.date} · ${d.done}/${d.total}"></div>`;
-    });
+    // Group into ISO weeks of 7 (data already aligned to Monday)
+    _calendarWeeks = [];
+    for (let i = 0; i < calendar.length; i += 7) {
+      _calendarWeeks.push(calendar.slice(i, i + 7));
+    }
+    const totalWeeks = _calendarWeeks.length;
+    const defaultN   = Math.min(13, totalWeeks);
 
-    // Calendar always starts on Monday (ISO-aligned), so headers are fixed
-    const headerLabels = DAY_LABELS.map(l => `<div class="cal-label">${l}</div>`);
+    const FILTERS = [
+      { label: '4 sem',  n: 4  },
+      { label: '13 sem', n: 13 },
+      { label: '6 mois', n: 26 },
+      { label: 'Tout',   n: totalWeeks },
+    ];
+
+    const filtersHtml = FILTERS.map(f =>
+      `<button class="cal-filter-btn${f.n === defaultN ? ' active' : ''}" onclick="ProfilePage.setCalFilter(${f.n}, this)">${f.label}</button>`
+    ).join('');
+
+    const dayLabelsHtml = `<div class="cal-day-labels">
+      <div class="cal-month-spacer"></div>
+      ${DAY_LABELS.map(l => `<div class="cal-day-lbl">${l}</div>`).join('')}
+    </div>`;
 
     return `
-      <div class="profile-section" style="animation:fadeIn 0.3s ease 0.1s both">
-        <div class="profile-section-title">Activité — 4 semaines</div>
-        <div class="cal-grid">
-          ${headerLabels.join('')}
-          ${cells.join('')}
+      <div class="profile-section" style="animation:fadeIn 0.3s ease 0.1s both" id="cal-section">
+        <div class="cal-section-header">
+          <div class="profile-section-title" style="margin-bottom:0">Activité</div>
+          <div class="cal-filter-row">${filtersHtml}</div>
+        </div>
+        <div class="cal-heatmap-wrap">
+          ${dayLabelsHtml}
+          <div class="cal-scroll-inner" id="cal-scroll-inner">
+            <div class="cal-weeks-row" id="cal-weeks-row">
+              ${_renderWeeks(_calendarWeeks.slice(-defaultN), today)}
+            </div>
+          </div>
         </div>
         <div class="cal-legend">
           <div class="cal-cell full"  style="width:12px;height:12px;border-radius:3px;flex-shrink:0"></div><span>Complet</span>
@@ -169,6 +188,43 @@ const ProfilePage = (() => {
           <div class="cal-cell empty" style="width:12px;height:12px;border-radius:3px;flex-shrink:0"></div><span>Aucun</span>
         </div>
       </div>`;
+  }
+
+  function _renderWeeks(weeks, today) {
+    let lastMonth = null;
+    return weeks.map(week => {
+      const d = new Date(week[0].date + 'T12:00:00');
+      const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
+      let monthLabel = '';
+      if (monthKey !== lastMonth) {
+        lastMonth = monthKey;
+        monthLabel = d.toLocaleDateString('fr-FR', { month: 'short' });
+      }
+      const cells = week.map(day => {
+        const pct = day.total > 0 ? day.done / day.total : 0;
+        const cls = day.date > today ? 'future'
+                  : pct >= 1        ? 'full'
+                  : pct > 0         ? 'partial'
+                  :                   'empty';
+        return `<div class="cal-cell ${cls}${day.date === today ? ' cal-today' : ''}" title="${day.date} · ${day.done}/${day.total}"></div>`;
+      }).join('');
+      return `<div class="cal-week-col"><div class="cal-month-label">${monthLabel}</div>${cells}</div>`;
+    }).join('');
+  }
+
+  function setCalFilter(n, btn) {
+    document.querySelectorAll('.cal-filter-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    const weeksRow = document.getElementById('cal-weeks-row');
+    if (!weeksRow) return;
+    const today = new Date().toISOString().split('T')[0];
+    weeksRow.innerHTML = _renderWeeks(
+      n >= _calendarWeeks.length ? _calendarWeeks : _calendarWeeks.slice(-n),
+      today
+    );
+    // Scroll to right (most recent)
+    const inner = document.getElementById('cal-scroll-inner');
+    if (inner) inner.scrollLeft = inner.scrollWidth;
   }
 
   // ── 4. Graphique XP 30 jours (SVG inline) ──────────────────
@@ -616,6 +672,6 @@ const ProfilePage = (() => {
     switchTab('records');
   }
 
-  return { render, init, switchTab, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord };
+  return { render, init, switchTab, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, setCalFilter };
 })();
 
