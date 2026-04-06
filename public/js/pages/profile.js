@@ -50,7 +50,7 @@ const ProfilePage = (() => {
     const name     = _escape(user.username.charAt(0).toUpperCase() + user.username.slice(1));
 
     return `
-      ${_renderHero(avatar, name, rank, progress, stats)}
+      ${_renderHero(avatar, name, rank, progress, stats, user.tokens)}
 
       <div class="profile-tabs">
         <button class="profile-tab active" id="ptab-stats"   onclick="ProfilePage.switchTab('stats')">📊 Stats</button>
@@ -81,7 +81,7 @@ const ProfilePage = (() => {
   }
 
   // ── 1. Hero card ────────────────────────────────────────────
-  function _renderHero(avatar, name, rank, progress, stats) {
+  function _renderHero(avatar, name, rank, progress, stats, tokens) {
     const simpleCards = [
       { label: 'Exercices',      value: stats.total_completed,            icon: '✅' },
       { label: 'Jours complets', value: stats.full_days,                  icon: '🔥' },
@@ -89,6 +89,13 @@ const ProfilePage = (() => {
       { label: 'Série actuelle', value: stats.current_streak + '\u202fj', icon: '⚡' },
       { label: 'Jours actifs',   value: stats.active_days,                icon: '📅' },
     ];
+    const tokenCard = tokens > 0
+      ? `<div class="profile-stat-card profile-stat-card--token">
+           <span class="profile-stat-icon ptb-icon" style="filter:drop-shadow(0 0 5px rgba(251,191,36,0.8))">🪙</span>
+           <span class="profile-stat-value" style="color:var(--gold);text-shadow:0 0 10px rgba(251,191,36,0.5)">${tokens}</span>
+           <span class="profile-stat-label">Jeton${tokens > 1 ? 's' : ''}</span>
+         </div>`
+      : '';
     return `
       <div class="profile-hero" style="animation:fadeIn 0.3s ease">
         <div class="profile-hero-avatar">${avatar}</div>
@@ -111,6 +118,7 @@ const ProfilePage = (() => {
             <span class="profile-stat-value">${c.value}</span>
             <span class="profile-stat-label">${c.label}</span>
           </div>`).join('')}
+        ${tokenCard}
       </div>`;
   }
 
@@ -363,6 +371,7 @@ const ProfilePage = (() => {
                   const rec = recMap[ex.toLowerCase()];
                   const hasRec = !!rec;
                   const weightFmt = hasRec ? (rec.weight_kg % 1 === 0 ? rec.weight_kg : rec.weight_kg.toFixed(1)) : null;
+                  const repsFmt = (hasRec && rec.reps != null) ? rec.reps : null;
                   const recDateStr = (hasRec && rec.updated_at)
                     ? new Date(rec.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
                     : null;
@@ -370,15 +379,19 @@ const ProfilePage = (() => {
                   const safeCat = _escape(session.name).replace(/'/g, "\\'");
                   const clickAttr = _isOwnProfile
                     ? (hasRec
-                        ? `onclick="ProfilePage.showEditRecordForm(${rec.id}, '${safeEx}', ${rec.sets}, ${rec.weight_kg}, '${safeCat}')"`
+                        ? `onclick="ProfilePage.showEditRecordForm(${rec.id}, '${safeEx}', ${rec.sets}, ${rec.reps != null ? rec.reps : 'null'}, ${rec.weight_kg}, '${safeCat}')"`
                         : `onclick="ProfilePage.openSessionRecord('${safeEx}', '${safeCat}')"`)
                     : '';
                   return `
-                  <div class="muscu-ex-row${_isOwnProfile ? ' muscu-ex-tappable' : ''}" ${clickAttr}>
-                    <span class="muscu-ex-dot" style="background:${session.color}"></span>
-                    <div class="muscu-ex-main">
+                  <div class="muscu-ex-row${_isOwnProfile ? ' muscu-ex-tappable' : ''}${hasRec ? ' has-record' : ''}" ${clickAttr}>
+                    <div class="muscu-ex-left">
                       <span class="muscu-ex-name">${_escape(ex)}</span>
-                      ${hasRec ? `<span class="muscu-ex-sub">${rec.sets} série${rec.sets > 1 ? 's' : ''} · ${weightFmt} kg${recDateStr ? `<span class="muscu-ex-date"> · ${recDateStr}</span>` : ''}</span>` : ''}
+                      ${hasRec ? `<div class="muscu-ex-tags">
+                        <span class="muscu-ex-tag"><span class="muscu-ex-tag-val">${rec.sets}</span> série${rec.sets > 1 ? 's' : ''}</span>
+                        ${repsFmt !== null ? `<span class="muscu-ex-tag"><span class="muscu-ex-tag-val">${repsFmt}</span> rép.</span>` : ''}
+                        <span class="muscu-ex-tag weight"><span class="muscu-ex-tag-val">${weightFmt}</span> kg</span>
+                        ${recDateStr ? `<span class="muscu-ex-tag date">${recDateStr}</span>` : ''}
+                      </div>` : `<span class="muscu-ex-empty">Aucun record</span>`}
                     </div>
                     ${_isOwnProfile ? `<span class="muscu-ex-action${hasRec ? ' has-rec' : ''}">${hasRec ? '✏️' : '＋'}</span>` : ''}
                   </div>`;

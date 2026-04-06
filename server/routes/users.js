@@ -26,7 +26,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
 
   try {
     const userRes = await db.query(
-      'SELECT id, username, xp, avatar FROM users WHERE id = $1',
+      'SELECT id, username, xp, avatar, COALESCE(tokens, 0) AS tokens FROM users WHERE id = $1',
       [userId]
     );
     if (!userRes.rows[0]) return res.status(404).json({ error: 'Utilisateur introuvable' });
