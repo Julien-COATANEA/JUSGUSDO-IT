@@ -98,3 +98,15 @@ CREATE INDEX IF NOT EXISTS idx_muscle_records_user ON muscle_records(user_id);
 ALTER TABLE muscle_records ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'Autre';
 -- Migration: add reps to muscle_records
 ALTER TABLE muscle_records ADD COLUMN IF NOT EXISTS reps INTEGER;
+
+-- Migration: tokens (earned via mini-game)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tokens INTEGER DEFAULT 0;
+
+-- Mini-game daily plays tracking
+CREATE TABLE IF NOT EXISTS minigame_plays (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  play_date DATE NOT NULL,
+  won BOOLEAN NOT NULL DEFAULT FALSE,
+  UNIQUE(user_id, play_date)
+);

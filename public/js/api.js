@@ -61,5 +61,9 @@ const API = (() => {
     getMuscleRecords: (userId) => request('GET', `/users/${userId}/muscle-records`),
     saveMuscleRecord: (userId, data) => request('POST', `/users/${userId}/muscle-records`, data),
     deleteMuscleRecord: (userId, recordId) => request('DELETE', `/users/${userId}/muscle-records/${recordId}`),
+
+    // Mini-game
+    getMinigameStatus: (userId) => request('GET', `/users/${userId}/minigame-status`),
+    postMinigameResult: (userId, won) => request('POST', `/users/${userId}/minigame-result`, { won }),
   };
 })();

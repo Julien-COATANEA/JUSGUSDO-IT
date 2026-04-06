@@ -1,13 +1,27 @@
 // ── Home / Activity page ─────────────────────────────────────
 const HomePage = (() => {
-  let _refreshTimer = null;
-  let _todayStatus  = null;
+  let _refreshTimer  = null;
+  let _todayStatus   = null;
+  let _eggTaps       = 0;
+  let _eggTimer      = null;
+
+  function _onLogoTap() {
+    _eggTaps++;
+    clearTimeout(_eggTimer);
+    if (_eggTaps >= 5) {
+      _eggTaps = 0;
+      MiniGame.open();
+      return;
+    }
+    _eggTimer = setTimeout(() => { _eggTaps = 0; }, 1200);
+  }
+
   function render() {
     return `
       <div class="app-page">
         <header class="app-header">
           <div class="header-info" style="flex:1">
-            <span class="header-username">JuGus Do-It 💪</span>
+            <span class="header-username" id="home-logo-tap" onclick="HomePage._onLogoTap()" style="cursor:default;user-select:none">JuGus Do-It 💪</span>
             <span class="header-rank">Notre progression</span>
           </div>
           <button class="icon-btn" onclick="App.showProfileModal()" title="Mon profil"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
@@ -90,6 +104,9 @@ const HomePage = (() => {
         }
       }
 
+      const tokenBadge = (u.tokens > 0)
+        ? `<div class="player-token-badge">🪙 ${u.tokens}</div>`
+        : '';
       return `
         <div class="player-card${isMe ? ' is-me' : ''}" style="animation:fadeIn 0.3s ease both;animation-delay:${i * 0.06}s" onclick="Router.navigate('profile',{userId:${u.id}})" role="button" tabindex="0">
           <div class="player-avatar">${avatar}</div>
@@ -107,6 +124,7 @@ const HomePage = (() => {
           </div>
           <div class="player-card-side">
             <div class="player-xp-badge">${u.xp} XP</div>
+            ${tokenBadge}
             ${dayBadge}
           </div>
         </div>
@@ -131,5 +149,5 @@ const HomePage = (() => {
 
   function destroy() { clearInterval(_refreshTimer); }
 
-  return { render, init, logout, destroy };
+  return { render, init, logout, destroy, _onLogoTap };
 })();

@@ -1620,3 +1620,163 @@ html, body {
 }
 .challenge-item.done .challenge-bar-fill { background: var(--green); }
 .challenge-progress { font-size: 10px; font-weight: 700; color: var(--text3); }
+
+/* ===========================
+   PLAYER TOKEN BADGE
+=========================== */
+.player-token-badge {
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: rgba(251,191,36,0.12);
+  color: var(--gold);
+  border: 1px solid rgba(251,191,36,0.25);
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+/* ===========================
+   MINI-GAME OVERLAY
+=========================== */
+.mg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.mg-overlay.mg-visible { opacity: 1; }
+.mg-overlay.mg-visible .mg-sheet {
+  transform: translateY(0);
+}
+
+.mg-sheet {
+  background: var(--card);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 12px 24px 40px;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  transform: translateY(100%);
+  transition: transform 0.35s cubic-bezier(0.34,1.2,0.64,1);
+}
+
+.mg-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.mg-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  text-align: center;
+}
+
+.mg-subtitle {
+  font-size: 13px;
+  color: var(--text2);
+  text-align: center;
+  margin-top: -8px;
+}
+
+/* Track */
+.mg-track-wrap {
+  width: 100%;
+  padding: 0 4px;
+}
+.mg-track {
+  position: relative;
+  height: 48px;
+  background: var(--card2);
+  border-radius: 100px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+/* Green zone */
+.mg-zone-green {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: calc(50% - 12%);
+  width: 24%;
+  background: rgba(34,209,139,0.25);
+  border-left:  2px solid rgba(34,209,139,0.5);
+  border-right: 2px solid rgba(34,209,139,0.5);
+  transition: background 0.3s;
+}
+.mg-zone-flash-win  { background: rgba(34,209,139,0.55) !important; }
+.mg-zone-flash-lose { background: rgba(239,68,68,0.25)  !important; }
+
+/* Moving bar */
+.mg-bar {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 32px;
+  background: var(--accent);
+  border-radius: 5px;
+  box-shadow: 0 0 12px var(--accent);
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.mg-bar-win  { background: var(--green) !important; box-shadow: 0 0 16px var(--green) !important; }
+.mg-bar-lose { background: var(--red)   !important; box-shadow: 0 0 12px var(--red)   !important; }
+
+.mg-tap-hint {
+  font-size: 13px;
+  color: var(--text3);
+  font-weight: 600;
+  text-align: center;
+  animation: mg-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mg-pulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+.mg-result {
+  text-align: center;
+  line-height: 1.6;
+  animation: fadeIn 0.3s ease;
+}
+.mg-result-win  { font-size: 22px; font-weight: 900; color: var(--gold); }
+.mg-result-lose { font-size: 20px; font-weight: 800; color: var(--red); }
+.mg-result-total { font-size: 13px; color: var(--text2); font-weight: 600; }
+
+.mg-close-btn {
+  margin-top: 4px;
+  padding: 12px 32px;
+  background: var(--card2);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.mg-close-btn:active { background: var(--border); }
+
+/* Already-played state */
+.mg-already {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+.mg-already-icon  { font-size: 48px; }
+.mg-already-text  { font-size: 14px; color: var(--text2); text-align: center; line-height: 1.6; }
+.mg-token-count   { font-size: 16px; font-weight: 800; color: var(--gold); }

@@ -8,7 +8,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT id, username, is_admin, xp, avatar
+      `SELECT id, username, is_admin, xp, avatar, tokens
        FROM users
        ORDER BY username ASC`
     );
@@ -280,6 +280,63 @@ router.delete('/:id/muscle-records/:recordId', requireAuth, async (req, res) => 
       [recordId, userId]
     );
     res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// GET /api/users/:id/minigame-status
+router.get('/:id/minigame-status', requireAuth, async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (!userId || isNaN(userId)) return res.status(400).json({ error: 'ID invalide' });
+  try {
+    const playRes = await db.query(
+      `SELECT won FROM minigame_plays WHERE user_id = $1 AND play_date = CURRENT_DATE`,
+      [userId]
+    );
+    const userRes = await db.query(`SELECT tokens FROM users WHERE id = $1`, [userId]);
+    res.json({
+      played_today: playRes.rows.length > 0,
+      won_today:    playRes.rows[0]?.won ?? null,
+      tokens:       userRes.rows[0]?.tokens ?? 0,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/users/:id/minigame-result
+router.post('/:id/minigame-result', requireAuth, async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (req.user.id !== userId) return res.status(403).json({ error: 'Interdit' });
+  const { won } = req.body;
+  if (typeof won !== 'boolean') return res.status(400).json({ error: 'Données manquantes' });
+  try {
+    // Check not already played today
+    const existing = await db.query(
+      `SELECT id FROM minigame_plays WHERE user_id = $1 AND play_date = CURRENT_DATE`,
+      [userId]
+    );
+    if (existing.rows.length > 0) return res.status(409).json({ error: 'Déjà joué aujourd\'hui' });
+
+    await db.query(
+      `INSERT INTO minigame_plays (user_id, play_date, won) VALUES ($1, CURRENT_DATE, $2)`,
+      [userId, won]
+    );
+    let tokens = null;
+    if (won) {
+      const upd = await db.query(
+        `UPDATE users SET tokens = COALESCE(tokens, 0) + 1 WHERE id = $1 RETURNING tokens`,
+        [userId]
+      );
+      tokens = upd.rows[0].tokens;
+    } else {
+      const sel = await db.query(`SELECT tokens FROM users WHERE id = $1`, [userId]);
+      tokens = sel.rows[0]?.tokens ?? 0;
+    }
+    res.json({ ok: true, won, tokens });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });
