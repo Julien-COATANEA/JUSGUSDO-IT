@@ -105,7 +105,11 @@ const HomePage = (() => {
       }
 
       const tokenBadge = (u.tokens > 0)
-        ? `<div class="player-token-badge">🪙 ${u.tokens}</div>`
+        ? `<div class="player-token-badge">
+             <span class="ptb-icon">&#x1FA99;</span>
+             <span class="ptb-count">${u.tokens}</span>
+             <span class="ptb-label">jeton${u.tokens > 1 ? 's' : ''}</span>
+           </div>`
         : '';
       return `
         <div class="player-card${isMe ? ' is-me' : ''}" style="animation:fadeIn 0.3s ease both;animation-delay:${i * 0.06}s" onclick="Router.navigate('profile',{userId:${u.id}})" role="button" tabindex="0">

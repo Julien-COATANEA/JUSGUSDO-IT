@@ -1661,15 +1661,58 @@ html, body {
    PLAYER TOKEN BADGE
 =========================== */
 .player-token-badge {
-  font-size: 12px;
-  font-weight: 800;
-  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 11px 5px 8px;
   border-radius: 100px;
-  background: rgba(251,191,36,0.12);
-  color: var(--gold);
-  border: 1px solid rgba(251,191,36,0.25);
+  background: linear-gradient(135deg, rgba(251,191,36,0.18) 0%, rgba(251,143,36,0.10) 100%);
+  border: 1px solid rgba(251,191,36,0.4);
+  box-shadow: 0 0 10px rgba(251,191,36,0.2), inset 0 1px 0 rgba(255,255,255,0.08);
   white-space: nowrap;
-  letter-spacing: 0.2px;
+  position: relative;
+  overflow: hidden;
+  animation: ptb-pulse 3s ease-in-out infinite;
+}
+/* Shimmer sweep */
+.player-token-badge::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -60%;
+  width: 40%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+  animation: ptb-shimmer 3s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes ptb-shimmer {
+  0%   { left: -60%; }
+  60%  { left: 130%; }
+  100% { left: 130%; }
+}
+@keyframes ptb-pulse {
+  0%,100% { box-shadow: 0 0 8px  rgba(251,191,36,0.20), inset 0 1px 0 rgba(255,255,255,0.08); }
+  50%      { box-shadow: 0 0 18px rgba(251,191,36,0.45), inset 0 1px 0 rgba(255,255,255,0.12); }
+}
+.ptb-icon {
+  font-size: 15px;
+  line-height: 1;
+  filter: drop-shadow(0 0 4px rgba(251,191,36,0.7));
+}
+.ptb-count {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--gold);
+  letter-spacing: -0.5px;
+  text-shadow: 0 0 8px rgba(251,191,36,0.6);
+}
+.ptb-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(251,191,36,0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  align-self: flex-end;
+  margin-bottom: 1px;
 }
 
 /* ===========================
