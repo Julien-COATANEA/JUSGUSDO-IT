@@ -413,11 +413,11 @@ const ProfilePage = (() => {
               <div class="mr2-exercise-name">${_escape(r.exercise_name)}</div>
             </div>
             <div class="mr2-card-right">
-              <span class="mr2-badge mr2-badge-sets">🔁 ${r.sets} série${r.sets > 1 ? 's' : ''}</span>
+              <span class="mr2-badge mr2-badge-sets">🔁 ${r.sets} série${r.sets > 1 ? 's' : ''}${r.reps != null ? ` · ${r.reps} rép` : ''}</span>
               <span class="mr2-badge mr2-badge-weight">${weightFmt} kg</span>
               ${_isOwnProfile ? `
               <div class="mr2-actions">
-                <button class="mr-btn-icon" title="Modifier" onclick="ProfilePage.showEditRecordForm(${r.id}, '${safeName}', ${r.sets}, ${r.weight_kg}, '${safeCategory}')">✏️</button>
+                <button class="mr-btn-icon" title="Modifier" onclick="ProfilePage.showEditRecordForm(${r.id}, '${safeName}', ${r.sets}, ${r.reps != null ? r.reps : "''"},  ${r.weight_kg}, '${safeCategory}')">✏️</button>
                 <button class="mr-btn-icon mr-btn-del" title="Supprimer" onclick="ProfilePage.deleteRecord(${r.id})">🗑️</button>
               </div>` : ''}
             </div>
@@ -461,6 +461,11 @@ const ProfilePage = (() => {
             <div class="mr-big-group">
               <div class="mr-big-label">Séries</div>
               <input id="mr-sets" class="mr-big-input" type="number" min="1" max="100" placeholder="4" inputmode="numeric" />
+            </div>
+            <div class="mr-big-divider"></div>
+            <div class="mr-big-group">
+              <div class="mr-big-label">Répétitions</div>
+              <input id="mr-reps" class="mr-big-input" type="number" min="1" max="9999" placeholder="10" inputmode="numeric" />
             </div>
             <div class="mr-big-divider"></div>
             <div class="mr-big-group">
@@ -508,13 +513,14 @@ const ProfilePage = (() => {
     const catEl = document.getElementById('mr-category');
     if (catEl) { catEl.value = _MR_CATEGORIES[0].name; catEl.style.display = 'block'; }
     document.getElementById('mr-sets').value   = '';
+    document.getElementById('mr-reps').value   = '';
     document.getElementById('mr-weight').value = '';
     document.getElementById('mr-editing-id').value = '';
     _openSheet();
     setTimeout(() => document.getElementById('mr-name').focus(), 300);
   }
 
-  function showEditRecordForm(id, name, sets, weight, category) {
+  function showEditRecordForm(id, name, sets, reps, weight, category) {
     const ctxEl = document.getElementById('mr-form-context');
     if (ctxEl) ctxEl.textContent = name;
     const nameEl = document.getElementById('mr-name');
@@ -522,6 +528,7 @@ const ProfilePage = (() => {
     const catEl = document.getElementById('mr-category');
     if (catEl) { catEl.value = category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name; catEl.style.display = 'none'; }
     document.getElementById('mr-sets').value   = sets;
+    document.getElementById('mr-reps').value   = reps != null ? reps : '';
     document.getElementById('mr-weight').value = weight;
     document.getElementById('mr-editing-id').value = id;
     _openSheet();
@@ -542,6 +549,7 @@ const ProfilePage = (() => {
     const catEl = document.getElementById('mr-category');
     if (catEl) { catEl.value = category || _MR_CATEGORIES[0].name; catEl.style.display = 'none'; }
     document.getElementById('mr-sets').value   = '';
+    document.getElementById('mr-reps').value   = '';
     document.getElementById('mr-weight').value = '';
     document.getElementById('mr-editing-id').value = '';
     _openSheet();
@@ -552,18 +560,21 @@ const ProfilePage = (() => {
     const name     = (document.getElementById('mr-name').value || '').trim();
     const category = document.getElementById('mr-category').value;
     const sets     = parseInt(document.getElementById('mr-sets').value, 10);
+    const repsRaw  = document.getElementById('mr-reps').value.trim();
+    const reps     = repsRaw !== '' ? parseInt(repsRaw, 10) : null;
     const weight   = parseFloat(document.getElementById('mr-weight').value);
     const errEl    = document.getElementById('mr-form-error');
 
     if (!name) { errEl.textContent = 'Nom de l\'exercice requis'; return; }
     if (!sets || sets < 1) { errEl.textContent = 'Nombre de séries invalide'; return; }
+    if (reps !== null && (isNaN(reps) || reps < 1)) { errEl.textContent = 'Nombre de répétitions invalide'; return; }
     if (isNaN(weight) || weight < 0) { errEl.textContent = 'Poids invalide'; return; }
 
     const btn = document.querySelector('.mr-sheet-save-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
     errEl.textContent = '';
     try {
-      await API.saveMuscleRecord(_profileUserId, { exercise_name: name, sets, weight_kg: weight, category });
+      await API.saveMuscleRecord(_profileUserId, { exercise_name: name, sets, reps, weight_kg: weight, category });
       cancelRecordForm();
       await _refreshMuscleRecords();
     } catch (err) {
