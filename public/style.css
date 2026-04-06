@@ -1656,11 +1656,12 @@ html, body {
   font-weight: 700;
   padding: 4px 9px;
   border-radius: 100px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255,255,255,0.15);
   background: transparent;
-  color: var(--text3);
+  color: var(--text2);
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
+  font-family: inherit;
 }
 .cal-filter-btn.active {
   background: var(--accent3);
