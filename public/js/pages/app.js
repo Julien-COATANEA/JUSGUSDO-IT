@@ -191,6 +191,10 @@ const WorkoutPage = (() => {
             ? `<p style="color:var(--text3);font-size:13px;text-align:center;padding:12px 0;">Repos 🙌</p>`
             : dayExercises.map(ex => {
             const checked = entries[`${key}_${ex.id}`] === true;
+            const metaTags = ex.is_running
+              ? `<span class="exercise-tag running">🏃 Course</span>`
+              : `<span class="exercise-tag"><span class="exercise-tag-val">${ex.sets}</span> série${ex.sets > 1 ? 's' : ''}</span>
+                 <span class="exercise-tag"><span class="exercise-tag-val">${ex.reps}</span> rép.</span>`;
             return `
               <div class="exercise-item${checked ? ' checked' : ''}${isPast ? ' disabled' : ''}"
                    id="ex-${key}-${ex.id}"
@@ -198,7 +202,7 @@ const WorkoutPage = (() => {
                 <div class="exercise-icon">${ex.is_running ? '🏃' : ex.emoji}</div>
                 <div class="exercise-info">
                   <div class="exercise-name">${escapeHtml(ex.name)}</div>
-                  ${ex.is_running ? '' : `<div class="exercise-detail">${ex.sets > 1 ? ex.sets + ' séries × ' : ''}${ex.reps} ${escapeHtml(ex.unit)}</div>`}
+                  <div class="exercise-meta">${metaTags}</div>
                 </div>
                 <div class="exercise-checkbox">${checked ? '✓' : ''}</div>
               </div>

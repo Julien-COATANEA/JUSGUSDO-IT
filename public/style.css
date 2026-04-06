@@ -456,12 +456,12 @@ html, body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 13px;
+  padding: 14px 14px;
   background: var(--bg3);
   border-radius: var(--radius-sm);
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.15s, transform 0.1s, border-color 0.2s;
   border: 1px solid transparent;
   margin-top: 8px;
 }
@@ -469,11 +469,11 @@ html, body {
 .exercise-item:active  { transform: scale(0.98); }
 
 .exercise-icon {
-  font-size: 24px;
-  width: 42px;
-  height: 42px;
+  font-size: 22px;
+  width: 44px;
+  height: 44px;
   background: var(--card2);
-  border-radius: 10px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -483,8 +483,44 @@ html, body {
 .exercise-item.checked .exercise-icon { background: rgba(34,209,139,0.1); }
 .exercise-info { flex: 1; min-width: 0; }
 .exercise-name { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -0.1px; }
-.exercise-detail { font-size: 12px; color: var(--text2); margin-top: 3px; font-weight: 500; }
+.exercise-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.exercise-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px;
+  padding: 3px 8px;
+  line-height: 1.2;
+}
+.exercise-tag-val {
+  font-weight: 800;
+  color: var(--accent3);
+  font-size: 12px;
+}
+.exercise-tag.running {
+  color: var(--gold);
+  background: rgba(251,191,36,0.08);
+  border-color: rgba(251,191,36,0.15);
+}
+[data-theme="light"] .exercise-tag {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] .exercise-tag-val {
+  color: #3a9e8f;
+}
 .exercise-item.checked .exercise-name { text-decoration: line-through; color: var(--text2); }
+.exercise-item.checked .exercise-tag { opacity: 0.5; }
 
 .exercise-checkbox {
   width: 26px;
