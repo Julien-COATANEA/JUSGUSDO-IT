@@ -48,6 +48,8 @@ const ProfilePage = (() => {
       if (_isOwnProfile && wizzData?.unread > 0) {
         API.markWizzRead(_profileUserId).catch(() => {});
       }
+      // Initialise notification status UI
+      if (_isOwnProfile) _updateNotifUI().catch(() => {});
     } catch (err) {
       container.innerHTML = `<p style="color:var(--text3);text-align:center;padding:40px 0">Erreur de chargement</p>`;
     }
@@ -78,6 +80,7 @@ const ProfilePage = (() => {
         ${_renderXpChart(stats.xp_history)}
         ${_renderChallenges(stats)}
         ${_renderTopEx(stats.top_exercises)}
+        ${_isOwnProfile ? _renderNotifSection() : ''}
       </div>
 
       <div id="profile-panel-records" style="display:none">
@@ -759,6 +762,62 @@ const ProfilePage = (() => {
     switchTab('records');
   }
 
-  return { render, init, switchTab, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, calPage, setCalFilter };
+  // ── 8. Notifications push ───────────────────────────────────
+  function _renderNotifSection() {
+    if (typeof Notifications === 'undefined' || !Notifications.isSupported()) return '';
+    return `
+      <div class="profile-section" id="notif-section" style="animation:fadeIn 0.3s ease 0.22s both">
+        <div class="profile-section-title">🔔 Rappel quotidien</div>
+        <div class="notif-row" id="notif-row" style="display:flex;align-items:center;gap:12px;margin-top:8px">
+          <span class="notif-status-text" id="notif-status-text" style="flex:1;font-size:13px;color:var(--text2)">Vérification…</span>
+          <button class="notif-toggle-btn" id="notif-toggle-btn" onclick="ProfilePage.toggleNotif()" style="display:none;padding:6px 14px;border-radius:20px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:var(--accent3);color:#fff">—</button>
+        </div>
+        <p style="font-size:12px;color:var(--text3);margin-top:6px;line-height:1.4">Rappel à 00h50 : &laquo;&thinsp;Faites vos exercices du jour !&thinsp;&raquo;</p>
+      </div>`;
+  }
+
+  async function _updateNotifUI() {
+    const statusEl = document.getElementById('notif-status-text');
+    const btnEl    = document.getElementById('notif-toggle-btn');
+    if (!statusEl || !btnEl) return;
+
+    const status = await Notifications.currentStatus();
+    if (status === 'unsupported') {
+      statusEl.textContent = 'Notifications non supportées sur cet appareil.';
+      return;
+    }
+    if (status === 'denied') {
+      statusEl.textContent = 'Notifications bloquées — autorisez-les dans les réglages.';
+      return;
+    }
+    if (status === 'subscribed') {
+      statusEl.textContent = 'Rappel activé ✅';
+      btnEl.textContent    = 'Désactiver';
+      btnEl.style.background = 'var(--card2)';
+      btnEl.style.color      = 'var(--text2)';
+    } else {
+      statusEl.textContent   = 'Rappel désactivé';
+      btnEl.textContent      = 'Activer';
+      btnEl.style.background = 'var(--accent3)';
+      btnEl.style.color      = '#fff';
+    }
+    btnEl.style.display = 'inline-block';
+  }
+
+  async function toggleNotif() {
+    const btnEl = document.getElementById('notif-toggle-btn');
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '…'; }
+
+    const status = await Notifications.currentStatus();
+    if (status === 'subscribed') {
+      await Notifications.unsubscribe();
+    } else {
+      await Notifications.subscribe();
+    }
+    await _updateNotifUI();
+    if (btnEl) btnEl.disabled = false;
+  }
+
+  return { render, init, switchTab, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, calPage, setCalFilter, toggleNotif };
 })();
 

@@ -99,6 +99,18 @@ ALTER TABLE muscle_records ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT
 -- Migration: add reps to muscle_records
 ALTER TABLE muscle_records ADD COLUMN IF NOT EXISTS reps INTEGER;
 
+-- Migration: push notification subscriptions
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint   TEXT NOT NULL,
+  p256dh     TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(endpoint)
+);
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
+
 -- Migration: tokens (earned via mini-game)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tokens INTEGER DEFAULT 0;
 

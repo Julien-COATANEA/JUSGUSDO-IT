@@ -1,0 +1,14 @@
+{
+  "name": "JuGus Do-It 💪",
+  "short_name": "JuGus",
+  "description": "Tracker d'exercices quotidiens",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f0f1a",
+  "theme_color": "#0f0f1a",
+  "icons": [
+    { "src": "/logo-ju.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/logo-ju.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -19,6 +19,14 @@ const exercisesRoutes = require('./routes/exercises');
 const usersRoutes = require('./routes/users');
 const adminRoutes = require('./routes/admin');
 
+// Push notifications (optional — only enabled when VAPID keys are set)
+let pushModule = null;
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  pushModule = require('./routes/push');
+} else {
+  console.warn('⚠️  VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY not set — push notifications disabled.');
+}
+
 const app = express();
 
 app.use(cors());
@@ -32,6 +40,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/exercises', exercisesRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/admin', adminRoutes);
+if (pushModule) app.use('/api/push', pushModule.router);
 
 // SPA fallback — serve index.html for all non-API routes
 app.get(/^(?!\/api).*/, (req, res) => {
@@ -50,9 +59,26 @@ initDB()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`🚀 JuGus Do-It server running on port ${PORT}`);
+      if (pushModule) _scheduleDailyPush();
     });
   })
   .catch((err) => {
     console.error('❌ Failed to initialize database:', err);
     process.exit(1);
   });
+
+// ── Daily push notification at 00:50 ────────────────────────
+function _scheduleDailyPush() {
+  const now    = new Date();
+  const next   = new Date();
+  next.setHours(0, 50, 0, 0);
+  if (now >= next) next.setDate(next.getDate() + 1); // already past 00h50 today → schedule tomorrow
+
+  const msUntil = next - now;
+  console.log(`⏰ Next exercise reminder scheduled for ${next.toLocaleString('fr-FR')}`);
+
+  setTimeout(async () => {
+    await pushModule.sendDailyReminder();
+    _scheduleDailyPush(); // reschedule for next day
+  }, msUntil);
+}
