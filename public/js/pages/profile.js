@@ -3,6 +3,7 @@ const ProfilePage = (() => {
   let _profileUserId  = null;
   let _isOwnProfile   = false;
   let _calendarWeeks  = [];
+  let _calPage        = 0; // 0 = most recent 4 weeks, higher = older
 
   function render() {
     return `
@@ -155,7 +156,9 @@ const ProfilePage = (() => {
       </div>`;
   }
 
-  // ── 3. Calendrier 28 jours ──────────────────────────────────
+  // ── 3. Calendrier paginé (4 semaines par page) ─────────────
+  const _CAL_PAGE_SIZE = 4;
+
   function _renderCalendar(calendar) {
     if (!calendar || !calendar.length) return '';
     const today = new Date().toISOString().split('T')[0];
@@ -166,19 +169,11 @@ const ProfilePage = (() => {
     for (let i = 0; i < calendar.length; i += 7) {
       _calendarWeeks.push(calendar.slice(i, i + 7));
     }
-    const totalWeeks = _calendarWeeks.length;
-    const defaultN   = Math.min(13, totalWeeks);
+    _calPage = 0; // reset to most recent page
 
-    const FILTERS = [
-      { label: '4 sem',  n: 4  },
-      { label: '13 sem', n: 13 },
-      { label: '6 mois', n: 26 },
-      { label: 'Tout',   n: totalWeeks },
-    ];
-
-    const filtersHtml = FILTERS.map(f =>
-      `<button class="cal-filter-btn${f.n === defaultN ? ' active' : ''}" onclick="ProfilePage.setCalFilter(${f.n}, this)">${f.label}</button>`
-    ).join('');
+    const maxPage = Math.max(0, Math.ceil(_calendarWeeks.length / _CAL_PAGE_SIZE) - 1);
+    const weeksSlice = _calWeeksForPage(0);
+    const pagerLabel = _calPagerLabel(weeksSlice);
 
     const dayLabelsHtml = `<div class="cal-day-labels">
       <div class="cal-month-spacer"></div>
@@ -189,22 +184,62 @@ const ProfilePage = (() => {
       <div class="profile-section" style="animation:fadeIn 0.3s ease 0.1s both" id="cal-section">
         <div class="cal-section-header">
           <div class="profile-section-title" style="margin-bottom:0">Activité</div>
-          <div class="cal-filter-row">${filtersHtml}</div>
+          <div class="cal-pager">
+            <button class="cal-pager-btn" id="cal-prev" onclick="ProfilePage.calPage(1)" title="Semaines précédentes" ${maxPage === 0 ? 'disabled' : ''}>‹</button>
+            <span class="cal-pager-label" id="cal-pager-label">${pagerLabel}</span>
+            <button class="cal-pager-btn" id="cal-next" onclick="ProfilePage.calPage(-1)" title="Semaines suivantes" disabled>›</button>
+          </div>
         </div>
-        <div class="cal-heatmap-wrap ${_calSizeClass(defaultN)}" id="cal-heatmap-wrap">
+        <div class="cal-heatmap-wrap cal-sz-lg" id="cal-heatmap-wrap">
           ${dayLabelsHtml}
-          <div class="cal-scroll-inner" id="cal-scroll-inner">
-            <div class="cal-weeks-row" id="cal-weeks-row">
-              ${_renderWeeks(_calendarWeeks.slice(-defaultN), today)}
-            </div>
+          <div class="cal-weeks-row" id="cal-weeks-row">
+            ${_renderWeeks(weeksSlice, today)}
           </div>
         </div>
         <div class="cal-legend">
-          <div class="cal-cell full"  style="width:12px;height:12px;border-radius:3px;flex-shrink:0"></div><span>Complet</span>
-          <div class="cal-cell partial" style="width:12px;height:12px;border-radius:3px;flex-shrink:0"></div><span>Partiel</span>
-          <div class="cal-cell empty" style="width:12px;height:12px;border-radius:3px;flex-shrink:0"></div><span>Aucun</span>
+          <div class="cal-cell full"  style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Complet</span>
+          <div class="cal-cell partial" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Partiel</span>
+          <div class="cal-cell empty" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Aucun</span>
         </div>
       </div>`;
+  }
+
+  function _calWeeksForPage(page) {
+    const total = _calendarWeeks.length;
+    const end   = total - page * _CAL_PAGE_SIZE;
+    const start = Math.max(0, end - _CAL_PAGE_SIZE);
+    return _calendarWeeks.slice(start, Math.max(0, end));
+  }
+
+  function _calPagerLabel(weeks) {
+    if (!weeks.length) return '';
+    const firstDay = weeks[0][0].date;
+    const lastWeek = weeks[weeks.length - 1];
+    const lastDay  = lastWeek[lastWeek.length - 1].date;
+    const opts     = { day: 'numeric', month: 'short' };
+    const first    = new Date(firstDay + 'T12:00:00').toLocaleDateString('fr-FR', opts);
+    const last     = new Date(lastDay  + 'T12:00:00').toLocaleDateString('fr-FR', opts);
+    return `${first} – ${last}`;
+  }
+
+  function calPage(delta) {
+    // delta +1 = go to older weeks (page++), delta -1 = go to newer (page--)
+    const maxPage = Math.max(0, Math.ceil(_calendarWeeks.length / _CAL_PAGE_SIZE) - 1);
+    _calPage = Math.max(0, Math.min(maxPage, _calPage + delta));
+
+    const today      = new Date().toISOString().split('T')[0];
+    const weeksSlice = _calWeeksForPage(_calPage);
+
+    const weeksRow = document.getElementById('cal-weeks-row');
+    if (weeksRow) weeksRow.innerHTML = _renderWeeks(weeksSlice, today);
+
+    const labelEl = document.getElementById('cal-pager-label');
+    if (labelEl) labelEl.textContent = _calPagerLabel(weeksSlice);
+
+    const prevBtn = document.getElementById('cal-prev');
+    const nextBtn = document.getElementById('cal-next');
+    if (prevBtn) prevBtn.disabled = _calPage >= maxPage;
+    if (nextBtn) nextBtn.disabled = _calPage <= 0;
   }
 
   function _renderWeeks(weeks, today) {
@@ -230,6 +265,7 @@ const ProfilePage = (() => {
   }
 
   function _calSizeClass(n) {
+    // kept for compatibility but no longer used by the paginated calendar
     if (n <= 4)  return 'cal-sz-lg';
     if (n <= 13) return 'cal-sz-md';
     if (n <= 26) return 'cal-sz-sm';
@@ -237,24 +273,7 @@ const ProfilePage = (() => {
   }
 
   function setCalFilter(n, btn) {
-    document.querySelectorAll('.cal-filter-btn').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-    const weeksRow = document.getElementById('cal-weeks-row');
-    if (!weeksRow) return;
-    // Swap size class on wrapper
-    const wrap = document.getElementById('cal-heatmap-wrap');
-    if (wrap) {
-      wrap.classList.remove('cal-sz-lg', 'cal-sz-md', 'cal-sz-sm', 'cal-sz-xs');
-      wrap.classList.add(_calSizeClass(n));
-    }
-    const today = new Date().toISOString().split('T')[0];
-    weeksRow.innerHTML = _renderWeeks(
-      n >= _calendarWeeks.length ? _calendarWeeks : _calendarWeeks.slice(-n),
-      today
-    );
-    // Scroll to right (most recent)
-    const inner = document.getElementById('cal-scroll-inner');
-    if (inner) inner.scrollLeft = inner.scrollWidth;
+    // Legacy — no longer used; pagination handled by calPage()
   }
 
   // ── 4. Graphique XP 30 jours (SVG inline) ──────────────────
@@ -740,6 +759,6 @@ const ProfilePage = (() => {
     switchTab('records');
   }
 
-  return { render, init, switchTab, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, setCalFilter };
+  return { render, init, switchTab, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, calPage, setCalFilter };
 })();
 

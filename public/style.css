@@ -1692,6 +1692,51 @@ html, body {
   border-color: var(--accent3);
 }
 
+/* Pagination controls */
+.cal-pager {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cal-pager-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.cal-pager-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.25);
+  color: var(--text);
+  transform: scale(1.05);
+}
+.cal-pager-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+.cal-pager-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+.cal-pager-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  min-width: 110px;
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
 /* Heatmap layout */
 /* Heatmap adaptive sizing via CSS custom properties */
 .cal-heatmap-wrap {
@@ -1699,19 +1744,19 @@ html, body {
   align-items: flex-start;
   gap: 4px;
   overflow: hidden;
-  /* defaults = cal-sz-sm (13 sem) */
-  --cal-sz:    14px;
-  --cal-gap:   3px;
-  --cal-lbl-h: 16px;
-  --cal-lbl-fs:10px;
-  --cal-br:    4px;
+  /* defaults = cal-sz-lg (4 sem, grandes cases) */
+  --cal-sz:    24px;
+  --cal-gap:   5px;
+  --cal-lbl-h: 20px;
+  --cal-lbl-fs:11px;
+  --cal-br:    6px;
 }
-/* 4 sem : grandes cases */
+/* 4 sem : grandes cases (défaut de la pagination) */
 .cal-heatmap-wrap.cal-sz-lg {
-  --cal-sz:    22px;
-  --cal-gap:   4px;
-  --cal-lbl-h: 18px;
-  --cal-lbl-fs:12px;
+  --cal-sz:    24px;
+  --cal-gap:   5px;
+  --cal-lbl-h: 20px;
+  --cal-lbl-fs:11px;
   --cal-br:    6px;
 }
 /* 13 sem : cases moyennes (défaut) */
@@ -1811,13 +1856,20 @@ html, body {
   border-radius: var(--cal-br);
   background: rgba(255,255,255,0.04);
   flex-shrink: 0;
-  transition: width 0.15s, height 0.15s;
+  transition: width 0.15s, height 0.15s, transform 0.1s, opacity 0.1s;
+  cursor: default;
+  position: relative;
 }
-.cal-cell.full    { background: var(--green); opacity: 0.85; }
-.cal-cell.partial { background: var(--gold);  opacity: 0.55; }
-.cal-cell.empty   { background: rgba(255,255,255,0.04); }
-.cal-cell.future  { background: rgba(255,255,255,0.02); opacity: 0.4; }
-.cal-cell.cal-today { outline: 2px solid var(--accent3); outline-offset: 1px; }
+.cal-cell:not(.future):hover {
+  transform: scale(1.2);
+  z-index: 1;
+  opacity: 1 !important;
+}
+.cal-cell.full    { background: var(--green); opacity: 0.9; }
+.cal-cell.partial { background: var(--gold);  opacity: 0.65; }
+.cal-cell.empty   { background: rgba(255,255,255,0.06); }
+.cal-cell.future  { background: rgba(255,255,255,0.02); opacity: 0.35; }
+.cal-cell.cal-today { outline: 2px solid var(--accent3); outline-offset: 2px; }
 .cal-legend {
   display: flex;
   align-items: center;
