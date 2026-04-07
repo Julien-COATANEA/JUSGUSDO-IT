@@ -3,8 +3,8 @@ const HomePage = (() => {
   let _refreshTimer  = null;
   let _todayStatus   = null;
 
-  // Troll message catalogue (also referenced in profile.js)
-  const TROLL_MSGS = {
+  // Vanne message catalogue (also referenced in profile.js)
+  const VANNE_MSGS = {
     lazy:   { text: "Il paraît que t'as séché l'entraînement 😅",   emoji: '😴' },
     weak:   { text: "Mon grand-père soulève plus que toi 👴",         emoji: '💪' },
     ghost:  { text: "La salle te cherche… elle t'a pas vu 👻",        emoji: '👻' },
@@ -103,8 +103,8 @@ const HomePage = (() => {
         }
       }
 
-      const trollBtn = !isMe
-        ? `<button class="player-troll-btn" onclick="event.stopPropagation();HomePage.openTrollSheet(${u.id},'${name}')" title="Envoyer un troll 😜">😜</button>`
+      const vanneBtn = !isMe
+        ? `<button class="player-vanne-btn" onclick="event.stopPropagation();HomePage.openVanneSheet(${u.id},'${name}')" title="Balancer une vanne 🔥">🔥</button>`
         : '';
       return `
         <div class="player-card${isMe ? ' is-me' : ''}" style="animation:fadeIn 0.3s ease both;animation-delay:${i * 0.06}s" onclick="Router.navigate('profile',{userId:${u.id}})" role="button" tabindex="0">
@@ -123,7 +123,7 @@ const HomePage = (() => {
           </div>
           <div class="player-card-side">
             <div class="player-xp-badge">${u.xp} XP</div>
-            ${trollBtn}
+            ${vanneBtn}
             ${dayBadge}
           </div>
         </div>
@@ -131,78 +131,85 @@ const HomePage = (() => {
     }).join('');
   }
 
-  // ── Troll sheet ─────────────────────────────────────────────
-  function openTrollSheet(targetId, targetName) {
+  // ── Vanne sheet ─────────────────────────────────────────────
+  async function openVanneSheet(targetId, targetName) {
     const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
-    const tokens = me.tokens ?? 0;
-    const existing = document.getElementById('troll-overlay');
+    if (!me.id) return;
+    const existing = document.getElementById('vanne-overlay');
     if (existing) existing.remove();
 
-    const msgsHtml = Object.entries(TROLL_MSGS).map(([key, m]) =>
-      `<button class="troll-msg-btn" onclick="HomePage.sendTroll(${targetId},'${key}',this)">
-         <span class="troll-msg-emoji">${m.emoji}</span>
-         <span class="troll-msg-text">${m.text}</span>
-         <span class="troll-msg-cost">💎×1</span>
+    // Fetch live token count (localStorage may be stale)
+    let tokens = 0;
+    try {
+      const status = await API.getMinigameStatus(me.id);
+      tokens = status.tokens ?? 0;
+    } catch (_) {}
+
+    const msgsHtml = Object.entries(VANNE_MSGS).map(([key, m]) =>
+      `<button class="vanne-msg-btn" onclick="HomePage.sendVanne(${targetId},'${key}',this)">
+         <span class="vanne-msg-emoji">${m.emoji}</span>
+         <span class="vanne-msg-text">${m.text}</span>
+         <span class="vanne-msg-cost">💎×1</span>
        </button>`
     ).join('');
 
     const overlay = document.createElement('div');
-    overlay.id = 'troll-overlay';
-    overlay.className = 'troll-overlay';
+    overlay.id = 'vanne-overlay';
+    overlay.className = 'vanne-overlay';
     overlay.innerHTML = `
-      <div class="troll-sheet" onclick="event.stopPropagation()">
+      <div class="vanne-sheet" onclick="event.stopPropagation()">
         <div class="mg-handle"></div>
-        <div class="troll-sheet-header">
-          <div class="troll-sheet-title">😜 Troller ${targetName}</div>
-          <div class="troll-sheet-balance">Tu as <strong>${tokens}</strong> 💎</div>
+        <div class="vanne-sheet-header">
+          <div class="vanne-sheet-title">🔥 Vanner ${targetName}</div>
+          <div class="vanne-sheet-balance">Tu as <strong>${tokens}</strong> 💎</div>
         </div>
         ${tokens < 1
-          ? `<div class="troll-no-gems">Pas assez de gemmes 😢<br><small>Gagne des 💎 au mini-jeu !</small></div>`
-          : `<div class="troll-msgs-list">${msgsHtml}</div>`
+          ? `<div class="vanne-no-gems">Pas assez de gemmes 😢<br><small>Gagne des 💎 au mini-jeu !</small></div>`
+          : `<div class="vanne-msgs-list">${msgsHtml}</div>`
         }
-        <div id="troll-feedback" class="troll-feedback" style="display:none"></div>
-        <button class="troll-close-btn" onclick="HomePage.closeTrollSheet()">Fermer</button>
+        <div id="vanne-feedback" class="vanne-feedback" style="display:none"></div>
+        <button class="vanne-close-btn" onclick="HomePage.closeVanneSheet()">Fermer</button>
       </div>`;
-    overlay.addEventListener('click', closeTrollSheet);
+    overlay.addEventListener('click', closeVanneSheet);
     document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('troll-visible'));
+    requestAnimationFrame(() => overlay.classList.add('vanne-visible'));
   }
 
-  async function sendTroll(targetId, key, btnEl) {
-    const allBtns = document.querySelectorAll('.troll-msg-btn');
+  async function sendVanne(targetId, key, btnEl) {
+    const allBtns = document.querySelectorAll('.vanne-msg-btn');
     allBtns.forEach(b => b.disabled = true);
     try {
-      const res = await API.sendTroll(targetId, key);
+      const res = await API.sendVanne(targetId, key);
       // Update local token count
       const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
       me.tokens = res.tokens;
       const storage = localStorage.getItem('user') ? localStorage : sessionStorage;
       storage.setItem('user', JSON.stringify(me));
       // Show feedback
-      const fb = document.getElementById('troll-feedback');
+      const fb = document.getElementById('vanne-feedback');
       if (fb) {
         fb.style.display = 'block';
-        fb.innerHTML = `✅ Troll envoyé ! Il reste <strong>${res.tokens}</strong> 💎`;
+        fb.innerHTML = `✅ Vanne envoyée ! Il reste <strong>${res.tokens}</strong> 💎`;
       }
-      const msgList = document.querySelector('.troll-msgs-list');
+      const msgList = document.querySelector('.vanne-msgs-list');
       if (msgList) msgList.style.display = 'none';
-      const bal = document.querySelector('.troll-sheet-balance');
+      const bal = document.querySelector('.vanne-sheet-balance');
       if (bal) bal.style.display = 'none';
     } catch (err) {
-      const fb = document.getElementById('troll-feedback');
+      const fb = document.getElementById('vanne-feedback');
       if (fb) {
         fb.style.display = 'block';
-        fb.className = 'troll-feedback troll-feedback--err';
+        fb.className = 'vanne-feedback vanne-feedback--err';
         fb.textContent = err.message || 'Erreur lors de l\'envoi';
       }
       allBtns.forEach(b => b.disabled = false);
     }
   }
 
-  function closeTrollSheet() {
-    const overlay = document.getElementById('troll-overlay');
+  function closeVanneSheet() {
+    const overlay = document.getElementById('vanne-overlay');
     if (!overlay) return;
-    overlay.classList.remove('troll-visible');
+    overlay.classList.remove('vanne-visible');
     setTimeout(() => overlay.remove(), 280);
   }
 
@@ -223,5 +230,5 @@ const HomePage = (() => {
 
   function destroy() { clearInterval(_refreshTimer); }
 
-  return { render, init, logout, destroy, openTrollSheet, sendTroll, closeTrollSheet, TROLL_MSGS };
+  return { render, init, logout, destroy, openVanneSheet, sendVanne, closeVanneSheet, VANNE_MSGS };
 })();

@@ -37,15 +37,15 @@ const ProfilePage = (() => {
         API.getUserStats(_profileUserId),
         API.getMuscleRecords(_profileUserId),
       ];
-      if (_isOwnProfile) fetches.push(API.getTrolls(_profileUserId));
+      if (_isOwnProfile) fetches.push(API.getVannes(_profileUserId));
       const results = await Promise.all(fetches);
       const { user, stats } = results[0];
       const { records }     = results[1];
-      const trollData       = _isOwnProfile ? results[2] : null;
-      container.innerHTML = _renderAll(user, stats, records, trollData);
+      const vanneData       = _isOwnProfile ? results[2] : null;
+      container.innerHTML = _renderAll(user, stats, records, vanneData);
       // Mark as read silently
-      if (_isOwnProfile && trollData?.unread > 0) {
-        API.markTrollsRead(_profileUserId).catch(() => {});
+      if (_isOwnProfile && vanneData?.unread > 0) {
+        API.markVannesRead(_profileUserId).catch(() => {});
       }
     } catch (err) {
       container.innerHTML = `<p style="color:var(--text3);text-align:center;padding:40px 0">Erreur de chargement</p>`;
@@ -53,12 +53,12 @@ const ProfilePage = (() => {
   }
 
   // ── Main renderer ───────────────────────────────────────────
-  function _renderAll(user, stats, records = [], trollData = null) {
+  function _renderAll(user, stats, records = [], vanneData = null) {
     const rank     = Gamification.getRank(user.xp);
     const progress = Gamification.getProgress(user.xp);
     const avatar   = user.avatar || rank.emoji;
     const name     = _escape(user.username.charAt(0).toUpperCase() + user.username.slice(1));
-    const hasUnread = trollData?.unread > 0;
+    const hasUnread = vanneData?.unread > 0;
 
     return `
       ${_renderHero(avatar, name, rank, progress, stats, user.tokens)}
@@ -66,8 +66,8 @@ const ProfilePage = (() => {
       <div class="profile-tabs">
         <button class="profile-tab active" id="ptab-stats"   onclick="ProfilePage.switchTab('stats')">📊 Stats</button>
         <button class="profile-tab"        id="ptab-records" onclick="ProfilePage.switchTab('records')">🏋️ Muscu</button>
-        ${trollData !== null
-          ? `<button class="profile-tab" id="ptab-trolls" onclick="ProfilePage.switchTab('trolls')">😜 Trolls${hasUnread ? ` <span class="troll-tab-badge">${trollData.unread}</span>` : ''}</button>`
+        ${vanneData !== null
+          ? `<button class="profile-tab" id="ptab-vannes" onclick="ProfilePage.switchTab('vannes')">🔥 Vannes${hasUnread ? ` <span class="vanne-tab-badge">${vanneData.unread}</span>` : ''}</button>`
           : ''}
       </div>
 
@@ -83,13 +83,13 @@ const ProfilePage = (() => {
         ${_renderMuscleRecords(records)}
       </div>
 
-      ${trollData !== null ? `<div id="profile-panel-trolls" style="display:none">${_renderTrolls(trollData.trolls)}</div>` : ''}
+      ${vanneData !== null ? `<div id="profile-panel-vannes" style="display:none">${_renderVannes(vanneData.vannes)}</div>` : ''}
     `;
   }
 
   // ── Tab switch ──────────────────────────────────────────────
   function switchTab(tab) {
-    const panels = ['stats', 'records', 'trolls'];
+    const panels = ['stats', 'records', 'vannes'];
     panels.forEach(p => {
       const panel = document.getElementById(`profile-panel-${p}`);
       const btn   = document.getElementById(`ptab-${p}`);
@@ -490,10 +490,10 @@ const ProfilePage = (() => {
     `;
   }
 
-  // ── Trolls received ────────────────────────────────────────
-  function _renderTrolls(trolls) {
-    // TROLL_MSGS may be defined in home.js (same page context) or fallback inline
-    const MSGS = (typeof HomePage !== 'undefined' && HomePage.TROLL_MSGS) || {
+  // ── Vannes received ────────────────────────────────────────
+  function _renderVannes(vannes) {
+    // VANNE_MSGS may be defined in home.js (same page context) or fallback inline
+    const MSGS = (typeof HomePage !== 'undefined' && HomePage.VANNE_MSGS) || {
       lazy:   { text: "Il paraît que t'as séché l'entraînement 😅",   emoji: '😴' },
       weak:   { text: "Mon grand-père soulève plus que toi 👴",         emoji: '💪' },
       ghost:  { text: "La salle te cherche… elle t'a pas vu 👻",        emoji: '👻' },
@@ -503,28 +503,28 @@ const ProfilePage = (() => {
       snail:  { text: "Tu bats le record mondial… de lenteur 🐌",        emoji: '🐌' },
     };
 
-    if (!trolls || trolls.length === 0) {
+    if (!vannes || vannes.length === 0) {
       return `<div class="profile-section" style="animation:fadeIn 0.3s ease both">
-        <div class="profile-section-title" style="margin-bottom:12px">😇 Aucun troll reçu</div>
-        <p style="color:var(--text2);font-size:14px">Personne ne t'a encore trollé… ou c'est parce que tout le monde te respecte 💪</p>
+        <div class="profile-section-title" style="margin-bottom:12px">😇 Aucune vanne reçue</div>
+        <p style="color:var(--text2);font-size:14px">Personne ne t'a encore vanné… ou c'est parce que tout le monde te respecte 💪</p>
       </div>`;
     }
 
-    const items = trolls.map(t => {
-      const msg  = MSGS[t.message_key] || { text: t.message_key, emoji: '😜' };
+    const items = vannes.map(t => {
+      const msg  = MSGS[t.message_key] || { text: t.message_key, emoji: '🔥' };
       const date = new Date(t.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-      return `<div class="troll-received-item${t.read ? '' : ' troll-unread'}">
-        <span class="troll-item-emoji">${msg.emoji}</span>
-        <div class="troll-item-body">
-          <div class="troll-item-text">${_escape(msg.text)}</div>
-          <div class="troll-item-meta">De <strong>${_escape(t.sender_name)}</strong> · ${date}</div>
+      return `<div class="vanne-received-item${t.read ? '' : ' vanne-unread'}">
+        <span class="vanne-item-emoji">${msg.emoji}</span>
+        <div class="vanne-item-body">
+          <div class="vanne-item-text">${_escape(msg.text)}</div>
+          <div class="vanne-item-meta">De <strong>${_escape(t.sender_name)}</strong> · ${date}</div>
         </div>
       </div>`;
     }).join('');
 
     return `<div class="profile-section" style="animation:fadeIn 0.3s ease both">
-      <div class="profile-section-title" style="margin-bottom:12px">😜 Trolls reçus</div>
-      <div class="troll-received-list">${items}</div>
+      <div class="profile-section-title" style="margin-bottom:12px">🔥 Vannes reçues</div>
+      <div class="vanne-received-list">${items}</div>
     </div>`;
   }
 
