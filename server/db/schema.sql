@@ -110,6 +110,17 @@ CREATE TABLE IF NOT EXISTS minigame_plays (
   won BOOLEAN NOT NULL DEFAULT FALSE,
   UNIQUE(user_id, play_date)
 );
+-- Trolls table (spend 1 gem to send a pre-defined troll to another user)
+CREATE TABLE IF NOT EXISTS trolls (
+  id          SERIAL PRIMARY KEY,
+  sender_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  receiver_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  message_key VARCHAR(50) NOT NULL,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  read        BOOLEAN DEFAULT FALSE
+);
+CREATE INDEX IF NOT EXISTS idx_trolls_receiver ON trolls(receiver_id, read);
+
 -- Migration: add level to minigame_plays (easy/medium/hard, 1 play per level per day)
 ALTER TABLE minigame_plays ADD COLUMN IF NOT EXISTS level VARCHAR(10) DEFAULT 'easy';
 DO $$

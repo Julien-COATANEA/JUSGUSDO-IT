@@ -65,5 +65,10 @@ const API = (() => {
     // Mini-game
     getMinigameStatus: (userId) => request('GET', `/users/${userId}/minigame-status`),
     postMinigameResult: (userId, won, level) => request('POST', `/users/${userId}/minigame-result`, { won, level }),
+
+    // Trolls
+    sendTroll: (targetId, message_key) => request('POST', `/users/${targetId}/send-troll`, { message_key }),
+    getTrolls: (userId) => request('GET', `/users/${userId}/trolls`),
+    markTrollsRead: (userId) => request('PATCH', `/users/${userId}/trolls/read`, {}),
   };
 })();

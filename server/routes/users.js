@@ -357,4 +357,67 @@ router.post('/:id/minigame-result', requireAuth, async (req, res) => {
   }
 });
 
+// ── TROLLS ──────────────────────────────────────────────────
+
+const VALID_TROLL_KEYS = ['lazy', 'weak', 'ghost', 'turtle', 'cake', 'skip', 'snail'];
+
+// POST /api/users/:id/send-troll  (send a troll to user :id, costs 1 gem from sender)
+router.post('/:id/send-troll', requireAuth, async (req, res) => {
+  const receiverId = parseInt(req.params.id, 10);
+  const senderId   = req.user.id;
+  if (!receiverId || isNaN(receiverId)) return res.status(400).json({ error: 'ID invalide' });
+  if (senderId === receiverId) return res.status(400).json({ error: 'Impossible de se troller soi-même' });
+  const { message_key } = req.body;
+  if (!VALID_TROLL_KEYS.includes(message_key)) return res.status(400).json({ error: 'Message invalide' });
+  try {
+    // Check sender has at least 1 gem
+    const senderRes = await db.query('SELECT tokens FROM users WHERE id = $1', [senderId]);
+    const tokens = senderRes.rows[0]?.tokens ?? 0;
+    if (tokens < 1) return res.status(402).json({ error: 'Pas assez de gemmes (1 💎 requis)' });
+    // Deduct gem, insert troll
+    await db.query('UPDATE users SET tokens = tokens - 1 WHERE id = $1', [senderId]);
+    await db.query(
+      'INSERT INTO trolls (sender_id, receiver_id, message_key) VALUES ($1, $2, $3)',
+      [senderId, receiverId, message_key]
+    );
+    const upd = await db.query('SELECT tokens FROM users WHERE id = $1', [senderId]);
+    res.json({ ok: true, tokens: upd.rows[0].tokens });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// GET /api/users/:id/trolls — trolls received by user :id
+router.get('/:id/trolls', requireAuth, async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (req.user.id !== userId) return res.status(403).json({ error: 'Interdit' });
+  try {
+    const result = await db.query(
+      `SELECT t.id, t.message_key, t.created_at, t.read, u.username AS sender_name
+       FROM trolls t JOIN users u ON u.id = t.sender_id
+       WHERE t.receiver_id = $1 ORDER BY t.created_at DESC LIMIT 30`,
+      [userId]
+    );
+    const unread = result.rows.filter(r => !r.read).length;
+    res.json({ trolls: result.rows, unread });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// PATCH /api/users/:id/trolls/read — mark all trolls as read
+router.patch('/:id/trolls/read', requireAuth, async (req, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (req.user.id !== userId) return res.status(403).json({ error: 'Interdit' });
+  try {
+    await db.query('UPDATE trolls SET read = TRUE WHERE receiver_id = $1', [userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;

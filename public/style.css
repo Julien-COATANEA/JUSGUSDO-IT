@@ -1670,30 +1670,72 @@ html, body {
 }
 
 /* Heatmap layout */
+/* Heatmap adaptive sizing via CSS custom properties */
 .cal-heatmap-wrap {
   display: flex;
   align-items: flex-start;
   gap: 4px;
   overflow: hidden;
+  /* defaults = cal-sz-sm (13 sem) */
+  --cal-sz:    14px;
+  --cal-gap:   3px;
+  --cal-lbl-h: 16px;
+  --cal-lbl-fs:10px;
+  --cal-br:    4px;
+}
+/* 4 sem : grandes cases */
+.cal-heatmap-wrap.cal-sz-lg {
+  --cal-sz:    22px;
+  --cal-gap:   4px;
+  --cal-lbl-h: 18px;
+  --cal-lbl-fs:12px;
+  --cal-br:    6px;
+}
+/* 13 sem : cases moyennes (défaut) */
+.cal-heatmap-wrap.cal-sz-md {
+  --cal-sz:    14px;
+  --cal-gap:   3px;
+  --cal-lbl-h: 16px;
+  --cal-lbl-fs:10px;
+  --cal-br:    4px;
+}
+/* 6 mois : petites cases */
+.cal-heatmap-wrap.cal-sz-sm {
+  --cal-sz:    10px;
+  --cal-gap:   2px;
+  --cal-lbl-h: 14px;
+  --cal-lbl-fs:9px;
+  --cal-br:    3px;
+}
+/* Tout : très petites cases */
+.cal-heatmap-wrap.cal-sz-xs {
+  --cal-sz:    8px;
+  --cal-gap:   1px;
+  --cal-lbl-h: 12px;
+  --cal-lbl-fs:8px;
+  --cal-br:    2px;
 }
 .cal-day-labels {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--cal-gap);
   flex-shrink: 0;
+  transition: gap 0.15s;
 }
 .cal-month-spacer {
-  height: 14px;
+  height: var(--cal-lbl-h);
+  transition: height 0.15s;
 }
 .cal-day-lbl {
-  width: 12px;
-  height: 12px;
+  width: var(--cal-sz);
+  height: var(--cal-sz);
   font-size: 8px;
   font-weight: 700;
-  color: var(--text3);
+  color: var(--text2);
   text-align: center;
-  line-height: 12px;
+  line-height: var(--cal-sz);
   text-transform: uppercase;
+  transition: width 0.15s, height 0.15s;
 }
 .cal-scroll-inner {
   overflow-x: auto;
@@ -1705,22 +1747,25 @@ html, body {
 .cal-scroll-inner::-webkit-scrollbar { display: none; }
 .cal-weeks-row {
   display: flex;
-  gap: 2px;
+  gap: var(--cal-gap);
+  transition: gap 0.15s;
 }
 .cal-week-col {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--cal-gap);
   flex-shrink: 0;
+  transition: gap 0.15s;
 }
 .cal-month-label {
-  height: 14px;
-  font-size: 9px;
+  height: var(--cal-lbl-h);
+  font-size: var(--cal-lbl-fs);
   font-weight: 700;
-  color: var(--text3);
+  color: var(--text2);
   white-space: nowrap;
-  line-height: 14px;
+  line-height: var(--cal-lbl-h);
   text-transform: capitalize;
+  transition: height 0.15s, font-size 0.15s;
 }
 
 /* Keep old grid for any legacy usage */
@@ -1738,11 +1783,12 @@ html, body {
   padding-bottom: 4px;
 }
 .cal-cell {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
+  width: var(--cal-sz);
+  height: var(--cal-sz);
+  border-radius: var(--cal-br);
   background: rgba(255,255,255,0.04);
   flex-shrink: 0;
+  transition: width 0.15s, height 0.15s;
 }
 .cal-cell.full    { background: var(--green); opacity: 0.85; }
 .cal-cell.partial { background: var(--gold);  opacity: 0.55; }
@@ -2057,3 +2103,173 @@ html, body {
 .mg-level-name   { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.4px; }
 .mg-level-reward { font-size: 13px; font-weight: 800; color: #7dd3fc; }
 .mg-level-result { font-size: 18px; font-weight: 900; }
+
+/* ===========================
+   HOME — MINIGAME BUTTON
+=========================== */
+.home-minigame-btn {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 11px;
+  border-radius: 100px;
+  border: none;
+  background: linear-gradient(135deg, var(--accent3), var(--accent));
+  color: #07070f;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.2px;
+  transition: opacity 0.15s, transform 0.15s;
+  flex-shrink: 0;
+}
+.home-minigame-btn:hover { opacity: 0.85; transform: scale(1.04); }
+
+/* ===========================
+   HOME — TROLL BUTTON ON CARD
+=========================== */
+.player-troll-btn {
+  font-size: 18px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.player-troll-btn:hover { transform: scale(1.25); }
+
+/* ===========================
+   TROLL SEND OVERLAY
+=========================== */
+.troll-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 1200;
+  display: flex;
+  align-items: flex-end;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.troll-overlay.troll-visible { opacity: 1; }
+.troll-sheet {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--card2);
+  border-radius: 20px 20px 0 0;
+  padding: 12px 20px 36px;
+  max-height: 80vh;
+  overflow-y: auto;
+  transform: translateY(30px);
+  transition: transform 0.28s cubic-bezier(.25,.8,.25,1);
+}
+.troll-overlay.troll-visible .troll-sheet { transform: translateY(0); }
+.troll-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.troll-sheet-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+}
+.troll-sheet-balance {
+  font-size: 13px;
+  color: var(--text2);
+  font-weight: 600;
+}
+.troll-msgs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.troll-msg-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+.troll-msg-btn:hover:not(:disabled) { background: var(--card2); border-color: var(--accent3); }
+.troll-msg-btn:disabled { opacity: 0.5; cursor: default; }
+.troll-msg-emoji { font-size: 20px; flex-shrink: 0; }
+.troll-msg-text { flex: 1; font-size: 13px; font-weight: 600; color: var(--text); }
+.troll-msg-cost { font-size: 12px; font-weight: 700; color: #7dd3fc; flex-shrink: 0; }
+.troll-no-gems {
+  text-align: center;
+  font-size: 15px;
+  color: var(--text2);
+  padding: 24px 0;
+  font-weight: 600;
+  line-height: 1.8;
+}
+.troll-feedback {
+  margin: 14px 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--green);
+  text-align: center;
+}
+.troll-feedback--err { color: var(--red); }
+.troll-close-btn {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 14px;
+  border: none;
+  background: rgba(255,255,255,0.06);
+  color: var(--text2);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* ===========================
+   PROFILE — TROLLS RECEIVED
+=========================== */
+.troll-tab-badge {
+  display: inline-block;
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  border-radius: 100px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  vertical-align: middle;
+  line-height: 1.4;
+}
+.troll-received-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.troll-received-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.troll-received-item.troll-unread {
+  border-color: var(--accent3);
+  background: color-mix(in srgb, var(--card) 85%, var(--accent3) 15%);
+}
+.troll-item-emoji { font-size: 22px; flex-shrink: 0; line-height: 1.3; }
+.troll-item-body { flex: 1; min-width: 0; }
+.troll-item-text { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.troll-item-meta { font-size: 11px; color: var(--text2); font-weight: 500; }

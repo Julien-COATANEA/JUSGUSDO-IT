@@ -33,22 +33,32 @@ const ProfilePage = (() => {
     _isOwnProfile  = _profileUserId === currentUser.id;
 
     try {
-      const [{ user, stats }, { records }] = await Promise.all([
+      const fetches = [
         API.getUserStats(_profileUserId),
         API.getMuscleRecords(_profileUserId),
-      ]);
-      container.innerHTML = _renderAll(user, stats, records);
+      ];
+      if (_isOwnProfile) fetches.push(API.getTrolls(_profileUserId));
+      const results = await Promise.all(fetches);
+      const { user, stats } = results[0];
+      const { records }     = results[1];
+      const trollData       = _isOwnProfile ? results[2] : null;
+      container.innerHTML = _renderAll(user, stats, records, trollData);
+      // Mark as read silently
+      if (_isOwnProfile && trollData?.unread > 0) {
+        API.markTrollsRead(_profileUserId).catch(() => {});
+      }
     } catch (err) {
       container.innerHTML = `<p style="color:var(--text3);text-align:center;padding:40px 0">Erreur de chargement</p>`;
     }
   }
 
   // ── Main renderer ───────────────────────────────────────────
-  function _renderAll(user, stats, records = []) {
+  function _renderAll(user, stats, records = [], trollData = null) {
     const rank     = Gamification.getRank(user.xp);
     const progress = Gamification.getProgress(user.xp);
     const avatar   = user.avatar || rank.emoji;
     const name     = _escape(user.username.charAt(0).toUpperCase() + user.username.slice(1));
+    const hasUnread = trollData?.unread > 0;
 
     return `
       ${_renderHero(avatar, name, rank, progress, stats, user.tokens)}
@@ -56,6 +66,9 @@ const ProfilePage = (() => {
       <div class="profile-tabs">
         <button class="profile-tab active" id="ptab-stats"   onclick="ProfilePage.switchTab('stats')">📊 Stats</button>
         <button class="profile-tab"        id="ptab-records" onclick="ProfilePage.switchTab('records')">🏋️ Muscu</button>
+        ${trollData !== null
+          ? `<button class="profile-tab" id="ptab-trolls" onclick="ProfilePage.switchTab('trolls')">😜 Trolls${hasUnread ? ` <span class="troll-tab-badge">${trollData.unread}</span>` : ''}</button>`
+          : ''}
       </div>
 
       <div id="profile-panel-stats">
@@ -69,16 +82,20 @@ const ProfilePage = (() => {
       <div id="profile-panel-records" style="display:none">
         ${_renderMuscleRecords(records)}
       </div>
+
+      ${trollData !== null ? `<div id="profile-panel-trolls" style="display:none">${_renderTrolls(trollData.trolls)}</div>` : ''}
     `;
   }
 
   // ── Tab switch ──────────────────────────────────────────────
   function switchTab(tab) {
-    const isRecords = tab === 'records';
-    document.getElementById('profile-panel-stats').style.display   = isRecords ? 'none' : 'block';
-    document.getElementById('profile-panel-records').style.display = isRecords ? 'block' : 'none';
-    document.getElementById('ptab-stats').classList.toggle('active',   !isRecords);
-    document.getElementById('ptab-records').classList.toggle('active',  isRecords);
+    const panels = ['stats', 'records', 'trolls'];
+    panels.forEach(p => {
+      const panel = document.getElementById(`profile-panel-${p}`);
+      const btn   = document.getElementById(`ptab-${p}`);
+      if (panel) panel.style.display = p === tab ? 'block' : 'none';
+      if (btn)   btn.classList.toggle('active', p === tab);
+    });
   }
 
   // ── 1. Hero card ────────────────────────────────────────────
@@ -174,7 +191,7 @@ const ProfilePage = (() => {
           <div class="profile-section-title" style="margin-bottom:0">Activité</div>
           <div class="cal-filter-row">${filtersHtml}</div>
         </div>
-        <div class="cal-heatmap-wrap">
+        <div class="cal-heatmap-wrap ${_calSizeClass(defaultN)}" id="cal-heatmap-wrap">
           ${dayLabelsHtml}
           <div class="cal-scroll-inner" id="cal-scroll-inner">
             <div class="cal-weeks-row" id="cal-weeks-row">
@@ -212,11 +229,24 @@ const ProfilePage = (() => {
     }).join('');
   }
 
+  function _calSizeClass(n) {
+    if (n <= 4)  return 'cal-sz-lg';
+    if (n <= 13) return 'cal-sz-md';
+    if (n <= 26) return 'cal-sz-sm';
+    return 'cal-sz-xs';
+  }
+
   function setCalFilter(n, btn) {
     document.querySelectorAll('.cal-filter-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
     const weeksRow = document.getElementById('cal-weeks-row');
     if (!weeksRow) return;
+    // Swap size class on wrapper
+    const wrap = document.getElementById('cal-heatmap-wrap');
+    if (wrap) {
+      wrap.classList.remove('cal-sz-lg', 'cal-sz-md', 'cal-sz-sm', 'cal-sz-xs');
+      wrap.classList.add(_calSizeClass(n));
+    }
     const today = new Date().toISOString().split('T')[0];
     weeksRow.innerHTML = _renderWeeks(
       n >= _calendarWeeks.length ? _calendarWeeks : _calendarWeeks.slice(-n),
@@ -458,6 +488,44 @@ const ProfilePage = (() => {
         }).join('')}
       </div>
     `;
+  }
+
+  // ── Trolls received ────────────────────────────────────────
+  function _renderTrolls(trolls) {
+    // TROLL_MSGS may be defined in home.js (same page context) or fallback inline
+    const MSGS = (typeof HomePage !== 'undefined' && HomePage.TROLL_MSGS) || {
+      lazy:   { text: "Il paraît que t'as séché l'entraînement 😅",   emoji: '😴' },
+      weak:   { text: "Mon grand-père soulève plus que toi 👴",         emoji: '💪' },
+      ghost:  { text: "La salle te cherche… elle t'a pas vu 👻",        emoji: '👻' },
+      turtle: { text: "Ta progression est en mode tortue 🐢",           emoji: '🐢' },
+      cake:   { text: "T'as mangé le gâteau au lieu de squatter 🎂",    emoji: '🎂' },
+      skip:   { text: "Toujours le même exo depuis 3 mois… 🥱",         emoji: '🥱' },
+      snail:  { text: "Tu bats le record mondial… de lenteur 🐌",        emoji: '🐌' },
+    };
+
+    if (!trolls || trolls.length === 0) {
+      return `<div class="profile-section" style="animation:fadeIn 0.3s ease both">
+        <div class="profile-section-title" style="margin-bottom:12px">😇 Aucun troll reçu</div>
+        <p style="color:var(--text2);font-size:14px">Personne ne t'a encore trollé… ou c'est parce que tout le monde te respecte 💪</p>
+      </div>`;
+    }
+
+    const items = trolls.map(t => {
+      const msg  = MSGS[t.message_key] || { text: t.message_key, emoji: '😜' };
+      const date = new Date(t.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+      return `<div class="troll-received-item${t.read ? '' : ' troll-unread'}">
+        <span class="troll-item-emoji">${msg.emoji}</span>
+        <div class="troll-item-body">
+          <div class="troll-item-text">${_escape(msg.text)}</div>
+          <div class="troll-item-meta">De <strong>${_escape(t.sender_name)}</strong> · ${date}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="profile-section" style="animation:fadeIn 0.3s ease both">
+      <div class="profile-section-title" style="margin-bottom:12px">😜 Trolls reçus</div>
+      <div class="troll-received-list">${items}</div>
+    </div>`;
   }
 
   function _renderMuscleRecords(records) {
