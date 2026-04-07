@@ -67,12 +67,12 @@ initDB()
     process.exit(1);
   });
 
-// ── Daily push notification at 00:50 ────────────────────────
+// ── Daily push notification at 00:53 ────────────────────────
 function _scheduleDailyPush() {
   const now    = new Date();
   const next   = new Date();
-  next.setHours(0, 50, 0, 0);
-  if (now >= next) next.setDate(next.getDate() + 1); // already past 00h50 today → schedule tomorrow
+  next.setHours(0, 53, 0, 0);
+  if (now >= next) next.setDate(next.getDate() + 1); // already past 00h53 today → schedule tomorrow
 
   const msUntil = next - now;
   console.log(`⏰ Next exercise reminder scheduled for ${next.toLocaleString('fr-FR')}`);

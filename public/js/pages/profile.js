@@ -772,7 +772,7 @@ const ProfilePage = (() => {
           <span class="notif-status-text" id="notif-status-text" style="flex:1;font-size:13px;color:var(--text2)">Vérification…</span>
           <button class="notif-toggle-btn" id="notif-toggle-btn" onclick="ProfilePage.toggleNotif()" style="display:none;padding:6px 14px;border-radius:20px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:var(--accent3);color:#fff">—</button>
         </div>
-        <p style="font-size:12px;color:var(--text3);margin-top:6px;line-height:1.4">Rappel à 00h50 : &laquo;&thinsp;Faites vos exercices du jour !&thinsp;&raquo;</p>
+        <p style="font-size:12px;color:var(--text3);margin-top:6px;line-height:1.4">Rappel à 00h53 : &laquo;&thinsp;Faites vos exercices du jour !&thinsp;&raquo;</p>
       </div>`;
   }
 
