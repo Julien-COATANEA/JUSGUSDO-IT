@@ -37,15 +37,15 @@ const ProfilePage = (() => {
         API.getUserStats(_profileUserId),
         API.getMuscleRecords(_profileUserId),
       ];
-      if (_isOwnProfile) fetches.push(API.getVannes(_profileUserId));
+      if (_isOwnProfile) fetches.push(API.getWizz(_profileUserId));
       const results = await Promise.all(fetches);
       const { user, stats } = results[0];
       const { records }     = results[1];
-      const vanneData       = _isOwnProfile ? results[2] : null;
-      container.innerHTML = _renderAll(user, stats, records, vanneData);
+      const wizzData        = _isOwnProfile ? results[2] : null;
+      container.innerHTML = _renderAll(user, stats, records, wizzData);
       // Mark as read silently
-      if (_isOwnProfile && vanneData?.unread > 0) {
-        API.markVannesRead(_profileUserId).catch(() => {});
+      if (_isOwnProfile && wizzData?.unread > 0) {
+        API.markWizzRead(_profileUserId).catch(() => {});
       }
     } catch (err) {
       container.innerHTML = `<p style="color:var(--text3);text-align:center;padding:40px 0">Erreur de chargement</p>`;
@@ -53,12 +53,12 @@ const ProfilePage = (() => {
   }
 
   // ── Main renderer ───────────────────────────────────────────
-  function _renderAll(user, stats, records = [], vanneData = null) {
+  function _renderAll(user, stats, records = [], wizzData = null) {
     const rank     = Gamification.getRank(user.xp);
     const progress = Gamification.getProgress(user.xp);
     const avatar   = user.avatar || rank.emoji;
     const name     = _escape(user.username.charAt(0).toUpperCase() + user.username.slice(1));
-    const hasUnread = vanneData?.unread > 0;
+    const hasUnread = wizzData?.unread > 0;
 
     return `
       ${_renderHero(avatar, name, rank, progress, stats, user.tokens)}
@@ -66,8 +66,8 @@ const ProfilePage = (() => {
       <div class="profile-tabs">
         <button class="profile-tab active" id="ptab-stats"   onclick="ProfilePage.switchTab('stats')">📊 Stats</button>
         <button class="profile-tab"        id="ptab-records" onclick="ProfilePage.switchTab('records')">🏋️ Muscu</button>
-        ${vanneData !== null
-          ? `<button class="profile-tab" id="ptab-vannes" onclick="ProfilePage.switchTab('vannes')">🔥 Vannes${hasUnread ? ` <span class="vanne-tab-badge">${vanneData.unread}</span>` : ''}</button>`
+        ${wizzData !== null
+          ? `<button class="profile-tab" id="ptab-wizz" onclick="ProfilePage.switchTab('wizz')">⚡ Wizz${hasUnread ? ` <span class="wizz-tab-badge">${wizzData.unread}</span>` : ''}</button>`
           : ''}
       </div>
 
@@ -83,13 +83,13 @@ const ProfilePage = (() => {
         ${_renderMuscleRecords(records)}
       </div>
 
-      ${vanneData !== null ? `<div id="profile-panel-vannes" style="display:none">${_renderVannes(vanneData.vannes)}</div>` : ''}
+      ${wizzData !== null ? `<div id="profile-panel-wizz" style="display:none">${_renderWizz(wizzData.wizzes)}</div>` : ''}
     `;
   }
 
   // ── Tab switch ──────────────────────────────────────────────
   function switchTab(tab) {
-    const panels = ['stats', 'records', 'vannes'];
+    const panels = ['stats', 'records', 'wizz'];
     panels.forEach(p => {
       const panel = document.getElementById(`profile-panel-${p}`);
       const btn   = document.getElementById(`ptab-${p}`);
@@ -490,41 +490,41 @@ const ProfilePage = (() => {
     `;
   }
 
-  // ── Vannes received ────────────────────────────────────────
-  function _renderVannes(vannes) {
-    // VANNE_MSGS may be defined in home.js (same page context) or fallback inline
-    const MSGS = (typeof HomePage !== 'undefined' && HomePage.VANNE_MSGS) || {
-      lazy:   { text: "Il paraît que t'as séché l'entraînement 😅",   emoji: '😴' },
-      weak:   { text: "Mon grand-père soulève plus que toi 👴",         emoji: '💪' },
-      ghost:  { text: "La salle te cherche… elle t'a pas vu 👻",        emoji: '👻' },
-      turtle: { text: "Ta progression est en mode tortue 🐢",           emoji: '🐢' },
-      cake:   { text: "T'as mangé le gâteau au lieu de squatter 🎂",    emoji: '🎂' },
-      skip:   { text: "Toujours le même exo depuis 3 mois… 🥱",         emoji: '🥱' },
-      snail:  { text: "Tu bats le record mondial… de lenteur 🐌",        emoji: '🐌' },
+  // ── Wizz received ─────────────────────────────────────────
+  function _renderWizz(wizzes) {
+    // WIZZ_MSGS may be defined in home.js (same page context) or fallback inline
+    const MSGS = (typeof HomePage !== 'undefined' && HomePage.WIZZ_MSGS) || {
+      lazy:   { text: "Toujours en échauffement ou tu comptes vraiment t'y mettre ? 😏", emoji: '😴' },
+      weak:   { text: "Même ta gourde porte plus lourd que toi aujourd'hui 🫣",           emoji: '🏋️' },
+      ghost:  { text: "La salle t'a vu passer... puis plus rien 👻",                      emoji: '👻' },
+      turtle: { text: "À ce rythme, même l'échauffement te distance 🐢",                  emoji: '🐢' },
+      cake:   { text: "T'as pris un PR sur le buffet, pas sur la barre 🍰",               emoji: '🍰' },
+      skip:   { text: "Toujours la même perf, collector mais pas menaçante 😮‍💨",         emoji: '😮‍💨' },
+      snail:  { text: "Le chrono s'est endormi avant la fin de ta série 🐌",              emoji: '🐌' },
     };
 
-    if (!vannes || vannes.length === 0) {
+    if (!wizzes || wizzes.length === 0) {
       return `<div class="profile-section" style="animation:fadeIn 0.3s ease both">
-        <div class="profile-section-title" style="margin-bottom:12px">😇 Aucune vanne reçue</div>
-        <p style="color:var(--text2);font-size:14px">Personne ne t'a encore vanné… ou c'est parce que tout le monde te respecte 💪</p>
+        <div class="profile-section-title" style="margin-bottom:12px">😇 Aucun wizz reçu</div>
+        <p style="color:var(--text2);font-size:14px">Aucun petit pique pour l'instant — profite-en 💪</p>
       </div>`;
     }
 
-    const items = vannes.map(t => {
-      const msg  = MSGS[t.message_key] || { text: t.message_key, emoji: '🔥' };
+    const items = wizzes.map(t => {
+      const msg  = MSGS[t.message_key] || { text: t.message_key, emoji: '⚡' };
       const date = new Date(t.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-      return `<div class="vanne-received-item${t.read ? '' : ' vanne-unread'}">
-        <span class="vanne-item-emoji">${msg.emoji}</span>
-        <div class="vanne-item-body">
-          <div class="vanne-item-text">${_escape(msg.text)}</div>
-          <div class="vanne-item-meta">De <strong>${_escape(t.sender_name)}</strong> · ${date}</div>
+      return `<div class="wizz-received-item${t.read ? '' : ' wizz-unread'}">
+        <span class="wizz-item-emoji">${msg.emoji}</span>
+        <div class="wizz-item-body">
+          <div class="wizz-item-text">${_escape(msg.text)}</div>
+          <div class="wizz-item-meta">De <strong>${_escape(t.sender_name)}</strong> · ${date}</div>
         </div>
       </div>`;
     }).join('');
 
     return `<div class="profile-section" style="animation:fadeIn 0.3s ease both">
-      <div class="profile-section-title" style="margin-bottom:12px">🔥 Vannes reçues</div>
-      <div class="vanne-received-list">${items}</div>
+      <div class="profile-section-title" style="margin-bottom:12px">⚡ Wizz reçus</div>
+      <div class="wizz-received-list">${items}</div>
     </div>`;
   }
 
