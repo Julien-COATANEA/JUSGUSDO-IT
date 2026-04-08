@@ -101,15 +101,22 @@ ALTER TABLE muscle_records ADD COLUMN IF NOT EXISTS reps INTEGER;
 
 -- Migration: push notification subscriptions
 CREATE TABLE IF NOT EXISTS push_subscriptions (
-  id         SERIAL PRIMARY KEY,
-  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  endpoint   TEXT NOT NULL,
-  p256dh     TEXT NOT NULL,
-  auth       TEXT NOT NULL,
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  id            SERIAL PRIMARY KEY,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint      TEXT NOT NULL,
+  p256dh        TEXT NOT NULL,
+  auth          TEXT NOT NULL,
+  reminder_time TIME DEFAULT TIME '19:00',
+  time_zone     VARCHAR(100) DEFAULT 'Europe/Paris',
+  last_sent_on  DATE,
+  updated_at    TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(endpoint)
 );
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS reminder_time TIME DEFAULT TIME '19:00';
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS time_zone VARCHAR(100) DEFAULT 'Europe/Paris';
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS last_sent_on DATE;
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_reminder_time ON push_subscriptions(reminder_time);
 
 -- Migration: tokens (earned via mini-game)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tokens INTEGER DEFAULT 0;

@@ -59,7 +59,7 @@ initDB()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`🚀 JuGus Do-It server running on port ${PORT}`);
-      if (pushModule) _scheduleDailyPush();
+      if (pushModule) _startPushScheduler();
     });
   })
   .catch((err) => {
@@ -67,18 +67,34 @@ initDB()
     process.exit(1);
   });
 
-// ── Daily push notification at 00:53 ────────────────────────
-function _scheduleDailyPush() {
-  const now    = new Date();
-  const next   = new Date();
-  next.setHours(0, 53, 0, 0);
-  if (now >= next) next.setDate(next.getDate() + 1); // already past 00h53 today → schedule tomorrow
+// ── Push reminder checker — every minute ────────────────────
+let _pushSchedulerStarted = false;
 
-  const msUntil = next - now;
-  console.log(`⏰ Next exercise reminder scheduled for ${next.toLocaleString('fr-FR')}`);
+function _startPushScheduler() {
+  if (_pushSchedulerStarted) return;
+  _pushSchedulerStarted = true;
 
-  setTimeout(async () => {
-    await pushModule.sendDailyReminder();
-    _scheduleDailyPush(); // reschedule for next day
-  }, msUntil);
+  const tick = async () => {
+    try {
+      await pushModule.sendDueReminders();
+    } catch (err) {
+      console.error('❌ Push scheduler error:', err.message);
+    }
+  };
+
+  const now = new Date();
+  const next = new Date(now);
+  next.setSeconds(0, 0);
+  next.setMinutes(next.getMinutes() + 1);
+
+  const msUntilNextMinute = next - now;
+  console.log(`⏰ Push reminder checker starts at ${next.toLocaleString('fr-FR')} then runs every minute`);
+
+  tick().catch(() => {});
+  setTimeout(() => {
+    tick().catch(() => {});
+    setInterval(() => {
+      tick().catch(() => {});
+    }, 60 * 1000);
+  }, msUntilNextMinute);
 }

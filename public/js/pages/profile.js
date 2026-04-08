@@ -765,6 +765,10 @@ const ProfilePage = (() => {
   // ── 8. Notifications push ───────────────────────────────────
   function _renderNotifSection() {
     if (typeof Notifications === 'undefined' || !Notifications.isSupported()) return '';
+    const reminderTime = typeof Notifications.getReminderTime === 'function'
+      ? Notifications.getReminderTime()
+      : '19:00';
+
     return `
       <div class="profile-section" id="notif-section" style="animation:fadeIn 0.3s ease 0.22s both">
         <div class="profile-section-title">🔔 Rappel quotidien</div>
@@ -772,52 +776,148 @@ const ProfilePage = (() => {
           <span class="notif-status-text" id="notif-status-text" style="flex:1;font-size:13px;color:var(--text2)">Vérification…</span>
           <button class="notif-toggle-btn" id="notif-toggle-btn" onclick="ProfilePage.toggleNotif()" style="display:none;padding:6px 14px;border-radius:20px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:var(--accent3);color:#fff">—</button>
         </div>
-        <p style="font-size:12px;color:var(--text3);margin-top:6px;line-height:1.4">Rappel à 00h53 : &laquo;&thinsp;Faites vos exercices du jour !&thinsp;&raquo;</p>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <label for="notif-time-input" style="font-size:13px;color:var(--text2);font-weight:600">Heure :</label>
+          <input type="time" id="notif-time-input" value="${reminderTime}" onchange="ProfilePage.saveNotifTime(this.value)" style="padding:7px 10px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:var(--text);font:inherit">
+          <button id="notif-test-btn" onclick="ProfilePage.testNotif()" style="padding:7px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:13px;font-weight:600;cursor:pointer">Tester</button>
+        </div>
+        <p id="notif-help-text" style="font-size:12px;color:var(--text3);margin-top:6px;line-height:1.4">Choisis l'heure souhaitée pour recevoir le rappel quotidien.</p>
       </div>`;
   }
 
   async function _updateNotifUI() {
     const statusEl = document.getElementById('notif-status-text');
     const btnEl    = document.getElementById('notif-toggle-btn');
+    const timeEl   = document.getElementById('notif-time-input');
+    const testBtn  = document.getElementById('notif-test-btn');
+    const helpEl   = document.getElementById('notif-help-text');
     if (!statusEl || !btnEl) return;
 
-    const status = await Notifications.currentStatus();
+    const info         = await Notifications.currentStatus();
+    const status       = typeof info === 'string' ? info : info.state;
+    const reminderTime = info?.reminderTime || (typeof Notifications.getReminderTime === 'function' ? Notifications.getReminderTime() : '19:00');
+
+    if (timeEl) timeEl.value = reminderTime;
+
     if (status === 'unsupported') {
       statusEl.textContent = 'Notifications non supportées sur cet appareil.';
+      btnEl.style.display = 'none';
+      if (testBtn) testBtn.disabled = true;
       return;
     }
     if (status === 'denied') {
       statusEl.textContent = 'Notifications bloquées — autorisez-les dans les réglages.';
+      btnEl.style.display = 'none';
+      if (testBtn) testBtn.disabled = true;
       return;
     }
+
+    if (status === 'server-unavailable') {
+      statusEl.textContent = 'Le service de rappel est indisponible pour le moment.';
+      btnEl.textContent    = 'Réessayer';
+      btnEl.style.background = 'var(--accent3)';
+      btnEl.style.color      = '#fff';
+      btnEl.style.display    = 'inline-block';
+      if (testBtn) testBtn.disabled = true;
+      if (helpEl) helpEl.textContent = 'Vérifie que le serveur push est bien configuré, puis réessaie.';
+      return;
+    }
+
+    if (status === 'sync-needed') {
+      statusEl.textContent = `Abonnement incomplet — relance l’activation pour ${reminderTime}.`;
+      btnEl.textContent    = 'Réactiver';
+      btnEl.style.background = 'var(--accent3)';
+      btnEl.style.color      = '#fff';
+      btnEl.style.display    = 'inline-block';
+      if (testBtn) testBtn.disabled = false;
+      if (helpEl) helpEl.textContent = `Rappel prévu à ${reminderTime}. Utilise “Tester” pour vérifier immédiatement.`;
+      return;
+    }
+
     if (status === 'subscribed') {
-      statusEl.textContent = 'Rappel activé ✅';
-      btnEl.textContent    = 'Désactiver';
+      statusEl.textContent   = `Rappel activé ✅ à ${reminderTime}`;
+      btnEl.textContent      = 'Désactiver';
       btnEl.style.background = 'var(--card2)';
       btnEl.style.color      = 'var(--text2)';
+      if (testBtn) testBtn.disabled = false;
+      if (helpEl) helpEl.textContent = 'Choisis l’heure souhaitée puis utilise “Tester” pour vérifier immédiatement.';
     } else {
       statusEl.textContent   = 'Rappel désactivé';
       btnEl.textContent      = 'Activer';
       btnEl.style.background = 'var(--accent3)';
       btnEl.style.color      = '#fff';
+      if (testBtn) testBtn.disabled = true;
+      if (helpEl) helpEl.textContent = `Le rappel sera envoyé chaque jour à ${reminderTime} une fois activé.`;
     }
+
     btnEl.style.display = 'inline-block';
   }
 
-  async function toggleNotif() {
-    const btnEl = document.getElementById('notif-toggle-btn');
-    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '…'; }
+  async function saveNotifTime(value) {
+    const inputEl = document.getElementById('notif-time-input');
+    if (inputEl) inputEl.disabled = true;
 
-    const status = await Notifications.currentStatus();
-    if (status === 'subscribed') {
-      await Notifications.unsubscribe();
-    } else {
-      await Notifications.subscribe();
+    try {
+      const result = await Notifications.updateReminderTime(value || '19:00');
+      if (result?.savedLocally) {
+        App.showToast(`Heure enregistrée : ${result.reminderTime}`);
+      } else {
+        App.showToast(`Rappel programmé à ${result.reminderTime}`);
+      }
+    } catch (err) {
+      App.showToast(err.message || 'Impossible de changer l\'heure du rappel');
+    } finally {
+      if (inputEl) inputEl.disabled = false;
+      await _updateNotifUI();
     }
-    await _updateNotifUI();
-    if (btnEl) btnEl.disabled = false;
   }
 
-  return { render, init, switchTab, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, calPage, setCalFilter, toggleNotif };
+  async function testNotif() {
+    const btnEl = document.getElementById('notif-test-btn');
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = 'Envoi…';
+    }
+
+    try {
+      await Notifications.sendTest();
+      App.showToast('Notification de test envoyée ✅');
+    } catch (err) {
+      App.showToast(err.message || 'Impossible d\'envoyer le test');
+    } finally {
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = 'Tester';
+      }
+    }
+  }
+
+  async function toggleNotif() {
+    const btnEl  = document.getElementById('notif-toggle-btn');
+    const timeEl = document.getElementById('notif-time-input');
+    const chosenTime = timeEl?.value || '19:00';
+
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = '…';
+    }
+
+    try {
+      const info = await Notifications.currentStatus();
+      const status = typeof info === 'string' ? info : info.state;
+      if (status === 'subscribed') {
+        await Notifications.unsubscribe();
+      } else {
+        await Notifications.subscribe(chosenTime);
+      }
+    } catch (err) {
+      App.showToast(err.message || 'Impossible de modifier le rappel');
+    } finally {
+      await _updateNotifUI();
+      if (btnEl) btnEl.disabled = false;
+    }
+  }
+
+  return { render, init, switchTab, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, calPage, setCalFilter, toggleNotif, saveNotifTime, testNotif };
 })();
 
