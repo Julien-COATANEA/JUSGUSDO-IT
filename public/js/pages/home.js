@@ -76,6 +76,8 @@ const HomePage = (() => {
           total: exercisesData.exercises.length,
         };
         renderActivity(users);
+        const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
+        _checkUnreadWizz(me);
       } catch (_) {}
     }, 60_000);
   }

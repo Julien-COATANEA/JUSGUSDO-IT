@@ -4,6 +4,15 @@ const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
+let pushModule = null;
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  try {
+    pushModule = require('./push');
+  } catch (err) {
+    console.warn('⚠️ Wizz push notifications unavailable:', err.message);
+  }
+}
+
 // GET /api/users — all users with avatar
 router.get('/', async (req, res) => {
   try {
@@ -360,6 +369,15 @@ router.post('/:id/minigame-result', requireAuth, async (req, res) => {
 // ── WIZZ ────────────────────────────────────────────────────
 
 const VALID_WIZZ_KEYS = ['lazy', 'weak', 'ghost', 'turtle', 'cake', 'skip', 'snail'];
+const WIZZ_PUSH_MSGS = {
+  lazy:   { text: "Toujours en échauffement ou tu comptes vraiment t'y mettre ?", emoji: '😴' },
+  weak:   { text: 'Même ta gourde porte plus lourd que toi !', emoji: '🏋️' },
+  ghost:  { text: "La salle t'a vu passer... puis plus rien.", emoji: '👻' },
+  turtle: { text: 'À ce rythme, entraîne-toi pas 😅', emoji: '🐢' },
+  cake:   { text: "T'as pris un PR sur le buffet, pas sur la barre.", emoji: '🍰' },
+  skip:   { text: 'Toujours la même perf, collector mais pas menaçante.', emoji: '😮‍💨' },
+  snail:  { text: "Le chrono s'est endormi avant la fin de ta série.", emoji: '🐌' },
+};
 
 // POST /api/users/:id/send-wizz  (send a wizz to user :id, costs 1 gem from sender)
 router.post('/:id/send-wizz', requireAuth, async (req, res) => {
@@ -370,14 +388,31 @@ router.post('/:id/send-wizz', requireAuth, async (req, res) => {
   const { message_key } = req.body;
   if (!VALID_WIZZ_KEYS.includes(message_key)) return res.status(400).json({ error: 'Message invalide' });
   try {
-    const senderRes = await db.query('SELECT tokens FROM users WHERE id = $1', [senderId]);
-    const tokens = senderRes.rows[0]?.tokens ?? 0;
+    const senderRes = await db.query('SELECT username, tokens FROM users WHERE id = $1', [senderId]);
+    const sender = senderRes.rows[0] || {};
+    const tokens = sender.tokens ?? 0;
     if (tokens < 1) return res.status(402).json({ error: 'Pas assez de gemmes (1 💎 requis)' });
+
     await db.query('UPDATE users SET tokens = tokens - 1 WHERE id = $1', [senderId]);
     await db.query(
       'INSERT INTO trolls (sender_id, receiver_id, message_key) VALUES ($1, $2, $3)',
       [senderId, receiverId, message_key]
     );
+
+    if (pushModule?.sendNotificationToUser) {
+      const msg = WIZZ_PUSH_MSGS[message_key] || { text: 'Tu as reçu un nouveau wizz ⚡', emoji: '⚡' };
+      await pushModule.sendNotificationToUser(receiverId, {
+        title: `⚡ Wizz de ${sender.username || 'quelqu’un'}`,
+        body: `${msg.emoji} ${msg.text}`,
+        url: '/',
+        tag: `wizz-${receiverId}`,
+        renotify: true,
+        vibrate: [250, 120, 250, 120, 250],
+      }).catch((pushErr) => {
+        console.warn('Wizz push send error:', pushErr.message);
+      });
+    }
+
     const upd = await db.query('SELECT tokens FROM users WHERE id = $1', [senderId]);
     res.json({ ok: true, tokens: upd.rows[0].tokens });
   } catch (err) {

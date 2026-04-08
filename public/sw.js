@@ -5,15 +5,15 @@ self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (_) {}
 
-  const title   = data.title  || 'JuGus Do-It 💪';
+  const title   = data.title || 'JuGus Do-It 💪';
   const options = {
-    body:      data.body  || 'Rappel : faites vos exercices du jour !',
-    icon:      '/logo-ju.png',
-    badge:     '/logo-ju.png',
-    tag:       'daily-reminder',
-    renotify:  true,
-    vibrate:   [200, 100, 200],
-    data:      { url: data.url || '/' },
+    body:     data.body || 'Rappel : faites vos exercices du jour !',
+    icon:     data.icon || '/logo-ju.png',
+    badge:    data.badge || '/logo-ju.png',
+    tag:      data.tag || 'jugus-notification',
+    renotify: typeof data.renotify === 'boolean' ? data.renotify : true,
+    vibrate:  Array.isArray(data.vibrate) ? data.vibrate : [200, 100, 200],
+    data:     { url: data.url || '/' },
   };
 
   event.waitUntil(self.registration.showNotification(title, options));

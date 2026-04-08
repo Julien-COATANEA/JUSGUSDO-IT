@@ -73,6 +73,20 @@ async function sendPushToRows(rows, payload, { markSent = false } = {}) {
   return { total: rows.length, sent: sentCount, dead: dead.length };
 }
 
+async function sendNotificationToUser(userId, payload) {
+  const result = await db.query(
+    'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1',
+    [userId],
+  );
+
+  if (!result.rows.length) {
+    return { total: 0, sent: 0, dead: 0 };
+  }
+
+  const rawPayload = typeof payload === 'string' ? payload : JSON.stringify(payload);
+  return sendPushToRows(result.rows, rawPayload);
+}
+
 // GET /api/push/vapid-public-key — public, no auth needed
 router.get('/vapid-public-key', (req, res) => {
   res.json({ key: process.env.VAPID_PUBLIC_KEY });
@@ -209,4 +223,4 @@ async function sendDueReminders() {
   console.log(`✅ Daily push sent to ${summary.sent}/${summary.total} subscribers for ${currentTime}`);
 }
 
-module.exports = { router, sendDueReminders };
+module.exports = { router, sendDueReminders, sendNotificationToUser };

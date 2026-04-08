@@ -771,7 +771,7 @@ const ProfilePage = (() => {
 
     return `
       <div class="profile-section" id="notif-section" style="animation:fadeIn 0.3s ease 0.22s both">
-        <div class="profile-section-title">🔔 Rappel quotidien</div>
+        <div class="profile-section-title">🔔 Notifications</div>
         <div class="notif-row" id="notif-row" style="display:flex;align-items:center;gap:12px;margin-top:8px">
           <span class="notif-status-text" id="notif-status-text" style="flex:1;font-size:13px;color:var(--text2)">Vérification…</span>
           <button class="notif-toggle-btn" id="notif-toggle-btn" onclick="ProfilePage.toggleNotif()" style="display:none;padding:6px 14px;border-radius:20px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:var(--accent3);color:#fff">—</button>
@@ -781,7 +781,7 @@ const ProfilePage = (() => {
           <input type="time" id="notif-time-input" value="${reminderTime}" onchange="ProfilePage.saveNotifTime(this.value)" style="padding:7px 10px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:var(--text);font:inherit">
           <button id="notif-test-btn" onclick="ProfilePage.testNotif()" style="padding:7px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:13px;font-weight:600;cursor:pointer">Tester</button>
         </div>
-        <p id="notif-help-text" style="font-size:12px;color:var(--text3);margin-top:6px;line-height:1.4">Choisis l'heure souhaitée pour recevoir le rappel quotidien.</p>
+        <p id="notif-help-text" style="font-size:12px;color:var(--text3);margin-top:6px;line-height:1.4">Active les notifications pour recevoir le rappel quotidien et les Wizz.</p>
       </div>`;
   }
 
@@ -840,7 +840,7 @@ const ProfilePage = (() => {
       btnEl.style.background = 'var(--card2)';
       btnEl.style.color      = 'var(--text2)';
       if (testBtn) testBtn.disabled = false;
-      if (helpEl) helpEl.textContent = 'Choisis l’heure souhaitée puis utilise “Tester” pour vérifier immédiatement.';
+      if (helpEl) helpEl.textContent = 'Choisis l’heure souhaitée. Les rappels et les Wizz arriveront aussi en notification.';
     } else {
       statusEl.textContent   = 'Rappel désactivé';
       btnEl.textContent      = 'Activer';
