@@ -184,19 +184,36 @@ router.get('/stats', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Total completed days (all exercises done)
-    const activeExCount = await db.query(
-      'SELECT COUNT(*) as cnt FROM exercises WHERE is_active = TRUE'
-    );
-    const totalEx = parseInt(activeExCount.rows[0].cnt);
-
+    // Total completed days: all exercises scheduled for that day's DOW were done
     const totalDays = await db.query(
-      `SELECT entry_date FROM checklist_entries
-       WHERE user_id = $1 AND completed = TRUE
-       GROUP BY entry_date
-       HAVING COUNT(*) >= $2
+      `WITH day_counts AS (
+         SELECT ce.entry_date,
+                COUNT(*) FILTER (WHERE ce.completed) AS done
+         FROM checklist_entries ce
+         WHERE ce.user_id = $1
+         GROUP BY ce.entry_date
+       ),
+       day_totals AS (
+         SELECT dc.entry_date,
+                dc.done,
+                (SELECT COUNT(*) FROM exercises e2
+                 WHERE e2.is_active = TRUE
+                   AND (
+                     COALESCE(array_length(e2.schedule, 1), 0) = 0
+                     OR EXTRACT(DOW FROM dc.entry_date)::int = ANY(e2.schedule)
+                   )
+                   AND (
+                     NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id)
+                     OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id AND user_id = $1)
+                   )
+                ) AS total_for_day
+         FROM day_counts dc
+       )
+       SELECT entry_date
+       FROM day_totals
+       WHERE total_for_day > 0 AND done >= total_for_day
        ORDER BY entry_date DESC`,
-      [userId, totalEx]
+      [userId]
     );
 
     const completedDates = new Set(totalDays.rows.map(r => r.entry_date.toISOString().split('T')[0]));

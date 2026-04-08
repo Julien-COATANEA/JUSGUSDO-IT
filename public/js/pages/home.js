@@ -50,9 +50,12 @@ const HomePage = (() => {
         API.getChecklist(today, today),
         API.getExercises(),
       ]);
+      const _todayDow = new Date().getDay();
       _todayStatus = {
         done:  checklistData.entries.filter(e => e.completed).length,
-        total: exercisesData.exercises.length,
+        total: exercisesData.exercises.filter(ex =>
+          !ex.schedule || ex.schedule.length === 0 || ex.schedule.includes(_todayDow)
+        ).length,
       };
       renderActivity(users);
       // Check for unread wizz
@@ -71,9 +74,12 @@ const HomePage = (() => {
           API.getChecklist(today, today),
           API.getExercises(),
         ]);
+        const _todayDow = new Date().getDay();
         _todayStatus = {
           done:  checklistData.entries.filter(e => e.completed).length,
-          total: exercisesData.exercises.length,
+          total: exercisesData.exercises.filter(ex =>
+            !ex.schedule || ex.schedule.length === 0 || ex.schedule.includes(_todayDow)
+          ).length,
         };
         renderActivity(users);
         const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
