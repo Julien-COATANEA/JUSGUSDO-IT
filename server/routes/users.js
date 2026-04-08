@@ -171,17 +171,53 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       [userId]
     );
 
-    // Daily XP for last 30 days
+    // Daily XP for last 30 days (capped to 30 XP/day and split across the day's exercises)
     const xpHistoryRes = await db.query(
-      `SELECT ce.entry_date,
-              SUM(e.xp_reward) AS xp_earned
-       FROM checklist_entries ce
-       JOIN exercises e ON e.id = ce.exercise_id
-       WHERE ce.user_id = $1
-         AND ce.completed = TRUE
-         AND ce.entry_date >= CURRENT_DATE - 29
-       GROUP BY ce.entry_date
-       ORDER BY ce.entry_date`,
+      `WITH days AS (
+         SELECT generate_series(CURRENT_DATE - 29, CURRENT_DATE, '1 day'::interval)::date AS entry_date
+       ),
+       totals AS (
+         SELECT d.entry_date,
+                COUNT(e.id) AS total_ex
+         FROM days d
+         LEFT JOIN exercises e
+           ON e.is_active = TRUE
+          AND (
+            COALESCE(array_length(e.schedule, 1), 0) = 0
+            OR EXTRACT(DOW FROM d.entry_date)::int = ANY(e.schedule)
+          )
+          AND (
+            NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
+            OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
+          )
+         GROUP BY d.entry_date
+       ),
+       done_days AS (
+         SELECT ce.entry_date,
+                COUNT(*) FILTER (WHERE ce.completed = TRUE) AS done_ex
+         FROM checklist_entries ce
+         JOIN exercises e ON e.id = ce.exercise_id
+         WHERE ce.user_id = $1
+           AND ce.completed = TRUE
+           AND ce.entry_date >= CURRENT_DATE - 29
+         GROUP BY ce.entry_date
+       )
+       SELECT t.entry_date,
+              CASE
+                WHEN t.total_ex = 0 THEN 0
+                ELSE (
+                  COALESCE(dd.done_ex, 0) * FLOOR(30.0 / t.total_ex)::int
+                  + CASE
+                      WHEN COALESCE(dd.done_ex, 0) >= t.total_ex
+                        THEN 30 - (FLOOR(30.0 / t.total_ex)::int * t.total_ex)
+                      ELSE 0
+                    END
+                )
+              END AS xp_earned
+       FROM totals t
+       LEFT JOIN done_days dd ON dd.entry_date = t.entry_date
+       WHERE COALESCE(dd.done_ex, 0) > 0
+       ORDER BY t.entry_date`,
       [userId]
     );
 

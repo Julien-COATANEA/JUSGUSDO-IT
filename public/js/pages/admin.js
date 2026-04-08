@@ -50,7 +50,7 @@ const AdminPage = (() => {
                 <input type="checkbox" id="ex-is-running" onchange="AdminPage.toggleRunningFields()" />
                 <span class="ex-running-pill">
                   🏃 Session running
-                  <span style="font-size:11px;opacity:0.7;font-weight:500;">&nbsp;· 20 XP</span>
+                  <span style="font-size:11px;opacity:0.7;font-weight:500;">&nbsp;· inclus dans les 30 XP/jour</span>
                 </span>
               </label>
 
@@ -163,7 +163,7 @@ const AdminPage = (() => {
               <div class="admin-ex-name">${escapeHtml(ex.name)}</div>
               <div class="admin-ex-detail">
                 ${ex.sets > 1 ? ex.sets + ' séries × ' : ''}${ex.reps} ${escapeHtml(ex.unit)}
-                &nbsp;·&nbsp; ${ex.xp_reward} XP${ex.is_running ? ' 🏃' : ''}
+                &nbsp;·&nbsp; XP partagé (max 30/jour)${ex.is_running ? ' 🏃' : ''}
                 &nbsp;·&nbsp; <span style="color:var(--accent3)">${formatSchedule(ex.schedule)}</span>
                 ${!ex.is_active ? ' · <span style="color:var(--text3)">désactivé</span>' : ''}
               </div>

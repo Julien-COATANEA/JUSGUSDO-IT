@@ -3,6 +3,45 @@ const db = require('../db/pool');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
+const DAILY_XP_TARGET = 30;
+
+async function getDayProgress(userId, entryDate) {
+  const result = await db.query(
+    `SELECT COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE ce.completed = TRUE) AS done
+     FROM exercises e
+     LEFT JOIN checklist_entries ce
+       ON ce.exercise_id = e.id
+      AND ce.user_id = $1
+      AND ce.entry_date = $2
+     WHERE e.is_active = TRUE
+       AND (
+         COALESCE(array_length(e.schedule, 1), 0) = 0
+         OR EXTRACT(DOW FROM $2::date)::int = ANY(e.schedule)
+       )
+       AND (
+         NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
+         OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
+       )`,
+    [userId, entryDate]
+  );
+
+  return {
+    totalEx: parseInt(result.rows[0].total, 10),
+    doneCnt: parseInt(result.rows[0].done, 10),
+  };
+}
+
+function getDailyXpSplit(totalEx) {
+  if (!totalEx || totalEx <= 0) {
+    return { baseXP: 0, completionBonus: 0 };
+  }
+
+  const baseXP = Math.floor(DAILY_XP_TARGET / totalEx);
+  const completionBonus = DAILY_XP_TARGET - (baseXP * totalEx);
+
+  return { baseXP, completionBonus };
+}
 
 // GET /api/exercises — list active exercises for the current user
 // Returns global exercises + exercises explicitly assigned to this user
@@ -79,13 +118,12 @@ router.post('/checklist/toggle', requireAuth, async (req, res) => {
   try {
     // Verify exercise exists and is active
     const exCheck = await db.query(
-      'SELECT id, xp_reward FROM exercises WHERE id = $1 AND is_active = TRUE',
+      'SELECT id FROM exercises WHERE id = $1 AND is_active = TRUE',
       [exercise_id]
     );
     if (!exCheck.rows[0]) {
       return res.status(404).json({ error: 'Exercice introuvable' });
     }
-    const xpReward = exCheck.rows[0].xp_reward;
 
     // Upsert entry
     const existing = await db.query(
@@ -108,33 +146,20 @@ router.post('/checklist/toggle', requireAuth, async (req, res) => {
       );
     }
 
-    // XP delta
-    const xpDelta = newCompleted ? xpReward : -xpReward;
-
-    // Check if day is now fully complete (for bonus XP)
-    const activeExCount = await db.query(
-      'SELECT COUNT(*) as cnt FROM exercises WHERE is_active = TRUE'
-    );
-    const totalEx = parseInt(activeExCount.rows[0].cnt);
-
-    const doneCount = await db.query(
-      `SELECT COUNT(*) as cnt FROM checklist_entries
-       WHERE user_id = $1 AND entry_date = $2 AND completed = TRUE`,
-      [req.user.id, entry_date]
-    );
-    const doneCnt = parseInt(doneCount.rows[0].cnt);
-
-    // Pre-toggle done count (before this update was applied)
+    const { totalEx, doneCnt } = await getDayProgress(req.user.id, entry_date);
     const prevDoneCnt = newCompleted ? doneCnt - 1 : doneCnt + 1;
-    const DAY_BONUS = 15;
+    const { baseXP, completionBonus } = getDailyXpSplit(totalEx);
+
+    // Split XP so a full day always equals 30 XP, regardless of exercise count
+    const xpDelta = newCompleted ? baseXP : -baseXP;
+
     let bonusXP = 0;
-    if (newCompleted && doneCnt === totalEx && prevDoneCnt < totalEx) {
-      bonusXP = DAY_BONUS; // just completed the day
-    } else if (!newCompleted && prevDoneCnt === totalEx && doneCnt < totalEx) {
-      bonusXP = -DAY_BONUS; // uncompleted the day
+    if (totalEx > 0 && newCompleted && doneCnt === totalEx && prevDoneCnt < totalEx) {
+      bonusXP = completionBonus;
+    } else if (totalEx > 0 && !newCompleted && prevDoneCnt === totalEx && doneCnt < totalEx) {
+      bonusXP = -completionBonus;
     }
 
-    // Update XP
     const totalXpDelta = xpDelta + bonusXP;
     const updatedUser = await db.query(
       'UPDATE users SET xp = GREATEST(0, xp + $1) WHERE id = $2 RETURNING xp',
@@ -145,7 +170,7 @@ router.post('/checklist/toggle', requireAuth, async (req, res) => {
       completed: newCompleted,
       xp: updatedUser.rows[0].xp,
       xpDelta: totalXpDelta,
-      dayComplete: doneCnt === totalEx,
+      dayComplete: totalEx > 0 && doneCnt === totalEx,
       bonusXP,
     });
   } catch (err) {
