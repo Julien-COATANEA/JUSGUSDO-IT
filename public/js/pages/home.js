@@ -51,11 +51,14 @@ const HomePage = (() => {
         API.getExercises(),
       ]);
       const _todayDow = new Date().getDay();
+      const _scheduledExIds = new Set(
+        exercisesData.exercises
+          .filter(ex => !ex.schedule || ex.schedule.length === 0 || ex.schedule.includes(_todayDow))
+          .map(ex => ex.id)
+      );
       _todayStatus = {
-        done:  checklistData.entries.filter(e => e.completed).length,
-        total: exercisesData.exercises.filter(ex =>
-          !ex.schedule || ex.schedule.length === 0 || ex.schedule.includes(_todayDow)
-        ).length,
+        done:  checklistData.entries.filter(e => e.completed && _scheduledExIds.has(e.exercise_id)).length,
+        total: _scheduledExIds.size,
       };
       renderActivity(users);
       // Check for unread wizz
@@ -75,11 +78,14 @@ const HomePage = (() => {
           API.getExercises(),
         ]);
         const _todayDow = new Date().getDay();
+        const _scheduledExIds = new Set(
+          exercisesData.exercises
+            .filter(ex => !ex.schedule || ex.schedule.length === 0 || ex.schedule.includes(_todayDow))
+            .map(ex => ex.id)
+        );
         _todayStatus = {
-          done:  checklistData.entries.filter(e => e.completed).length,
-          total: exercisesData.exercises.filter(ex =>
-            !ex.schedule || ex.schedule.length === 0 || ex.schedule.includes(_todayDow)
-          ).length,
+          done:  checklistData.entries.filter(e => e.completed && _scheduledExIds.has(e.exercise_id)).length,
+          total: _scheduledExIds.size,
         };
         renderActivity(users);
         const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');

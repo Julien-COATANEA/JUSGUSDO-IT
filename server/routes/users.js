@@ -62,14 +62,18 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
          SELECT dc.entry_date,
                 dc.done,
                 (SELECT COUNT(*) FROM exercises e2
+                 LEFT JOIN LATERAL (
+                   SELECT uea.schedule FROM user_exercise_assignments uea
+                   WHERE uea.exercise_id = e2.id AND uea.user_id = $1 LIMIT 1
+                 ) usch2 ON TRUE
                  WHERE e2.is_active = TRUE
                    AND (
-                     COALESCE(array_length(e2.schedule, 1), 0) = 0
-                     OR EXTRACT(DOW FROM dc.entry_date)::int = ANY(e2.schedule)
+                     COALESCE(array_length(COALESCE(usch2.schedule, e2.schedule), 1), 0) = 0
+                     OR EXTRACT(DOW FROM dc.entry_date)::int = ANY(COALESCE(usch2.schedule, e2.schedule))
                    )
                    AND (
                      NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id)
-                     OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id AND user_id = $1)
+                     OR usch2.schedule IS NOT NULL
                    )
                 ) AS total_for_day
          FROM day_counts dc
@@ -93,14 +97,18 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
          SELECT dc.entry_date,
                 dc.done,
                 (SELECT COUNT(*) FROM exercises e2
+                 LEFT JOIN LATERAL (
+                   SELECT uea.schedule FROM user_exercise_assignments uea
+                   WHERE uea.exercise_id = e2.id AND uea.user_id = $1 LIMIT 1
+                 ) usch2 ON TRUE
                  WHERE e2.is_active = TRUE
                    AND (
-                     COALESCE(array_length(e2.schedule, 1), 0) = 0
-                     OR EXTRACT(DOW FROM dc.entry_date)::int = ANY(e2.schedule)
+                     COALESCE(array_length(COALESCE(usch2.schedule, e2.schedule), 1), 0) = 0
+                     OR EXTRACT(DOW FROM dc.entry_date)::int = ANY(COALESCE(usch2.schedule, e2.schedule))
                    )
                    AND (
                      NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id)
-                     OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id AND user_id = $1)
+                     OR usch2.schedule IS NOT NULL
                    )
                 ) AS total_for_day
          FROM day_counts dc
@@ -127,20 +135,35 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
     // Today's status
     const [todayDoneRes, todayTotalRes] = await Promise.all([
       db.query(
-        `SELECT COUNT(*) AS done FROM checklist_entries
-         WHERE user_id = $1 AND entry_date = CURRENT_DATE AND completed = TRUE`,
-        [userId]
-      ),
-      db.query(
-        `SELECT COUNT(*) AS total FROM exercises e
-         WHERE e.is_active = TRUE
+        `SELECT COUNT(*) AS done
+         FROM checklist_entries ce
+         JOIN exercises e ON e.id = ce.exercise_id AND e.is_active = TRUE
+         LEFT JOIN user_exercise_assignments uea ON uea.exercise_id = e.id AND uea.user_id = $1
+         WHERE ce.user_id = $1
+           AND ce.entry_date = CURRENT_DATE
+           AND ce.completed = TRUE
            AND (
-             COALESCE(array_length(e.schedule, 1), 0) = 0
-             OR EXTRACT(DOW FROM CURRENT_DATE)::int = ANY(e.schedule)
+             COALESCE(array_length(COALESCE(uea.schedule, e.schedule), 1), 0) = 0
+             OR EXTRACT(DOW FROM CURRENT_DATE)::int = ANY(COALESCE(uea.schedule, e.schedule))
            )
            AND (
              NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
-             OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
+             OR uea.user_id IS NOT NULL
+           )`,
+        [userId]
+      ),
+      db.query(
+        `SELECT COUNT(*) AS total
+         FROM exercises e
+         LEFT JOIN user_exercise_assignments uea ON uea.exercise_id = e.id AND uea.user_id = $1
+         WHERE e.is_active = TRUE
+           AND (
+             COALESCE(array_length(COALESCE(uea.schedule, e.schedule), 1), 0) = 0
+             OR EXTRACT(DOW FROM CURRENT_DATE)::int = ANY(COALESCE(uea.schedule, e.schedule))
+           )
+           AND (
+             NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
+             OR uea.user_id IS NOT NULL
            )`,
         [userId]
       ),
@@ -175,14 +198,18 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
   SELECT d.entry_date,
          COALESCE(dd.done, 0) AS done,
          (SELECT COUNT(*) FROM exercises e2
+          LEFT JOIN LATERAL (
+            SELECT uea.schedule FROM user_exercise_assignments uea
+            WHERE uea.exercise_id = e2.id AND uea.user_id = $1 LIMIT 1
+          ) usch2 ON TRUE
           WHERE e2.is_active = TRUE
             AND (
-              COALESCE(array_length(e2.schedule, 1), 0) = 0
-              OR EXTRACT(DOW FROM d.entry_date)::int = ANY(e2.schedule)
+              COALESCE(array_length(COALESCE(usch2.schedule, e2.schedule), 1), 0) = 0
+              OR EXTRACT(DOW FROM d.entry_date)::int = ANY(COALESCE(usch2.schedule, e2.schedule))
             )
             AND (
               NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id)
-              OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id AND user_id = $1)
+              OR usch2.schedule IS NOT NULL
             )
          ) AS total
   FROM bounds b,
@@ -199,19 +226,22 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
        ),
        totals AS (
          SELECT d.entry_date,
-                COUNT(e.id) AS total_ex
+                (SELECT COUNT(*) FROM exercises e
+                 LEFT JOIN LATERAL (
+                   SELECT uea.schedule FROM user_exercise_assignments uea
+                   WHERE uea.exercise_id = e.id AND uea.user_id = $1 LIMIT 1
+                 ) usch ON TRUE
+                 WHERE e.is_active = TRUE
+                   AND (
+                     COALESCE(array_length(COALESCE(usch.schedule, e.schedule), 1), 0) = 0
+                     OR EXTRACT(DOW FROM d.entry_date)::int = ANY(COALESCE(usch.schedule, e.schedule))
+                   )
+                   AND (
+                     NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
+                     OR usch.schedule IS NOT NULL
+                   )
+                ) AS total_ex
          FROM days d
-         LEFT JOIN exercises e
-           ON e.is_active = TRUE
-          AND (
-            COALESCE(array_length(e.schedule, 1), 0) = 0
-            OR EXTRACT(DOW FROM d.entry_date)::int = ANY(e.schedule)
-          )
-          AND (
-            NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
-            OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
-          )
-         GROUP BY d.entry_date
        ),
        done_days AS (
          SELECT ce.entry_date,
