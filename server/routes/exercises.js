@@ -10,18 +10,20 @@ async function getDayProgress(userId, entryDate) {
     `SELECT COUNT(*) AS total,
             COUNT(*) FILTER (WHERE ce.completed = TRUE) AS done
      FROM exercises e
+     LEFT JOIN user_exercise_assignments uea
+       ON uea.exercise_id = e.id AND uea.user_id = $1
      LEFT JOIN checklist_entries ce
        ON ce.exercise_id = e.id
       AND ce.user_id = $1
       AND ce.entry_date = $2
      WHERE e.is_active = TRUE
        AND (
-         COALESCE(array_length(e.schedule, 1), 0) = 0
-         OR EXTRACT(DOW FROM $2::date)::int = ANY(e.schedule)
+         COALESCE(array_length(COALESCE(uea.schedule, e.schedule), 1), 0) = 0
+         OR EXTRACT(DOW FROM $2::date)::int = ANY(COALESCE(uea.schedule, e.schedule))
        )
        AND (
          NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
-         OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
+         OR uea.user_id IS NOT NULL
        )`,
     [userId, entryDate]
   );
@@ -45,18 +47,21 @@ function getDailyXpSplit(totalEx) {
 
 // GET /api/exercises — list active exercises for the current user
 // Returns global exercises + exercises explicitly assigned to this user
+// The schedule field reflects the user's personal schedule (uea.schedule) when assigned,
+// or the exercise's global schedule otherwise.
 router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT e.*
+      `SELECT e.id, e.name, e.emoji, e.sets, e.reps, e.unit, e.xp_reward,
+              e.order_index, e.is_active, e.is_running, e.created_at,
+              COALESCE(uea.schedule, e.schedule) AS schedule
        FROM exercises e
+       LEFT JOIN user_exercise_assignments uea
+         ON uea.exercise_id = e.id AND uea.user_id = $1
        WHERE e.is_active = TRUE
          AND (
-           -- Global: no assignments defined for this exercise
            NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
-           OR
-           -- Or explicitly assigned to this user
-           EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id AND user_id = $1)
+           OR uea.user_id IS NOT NULL
          )
        ORDER BY e.order_index ASC, e.id ASC`,
       [req.user.id]
@@ -197,14 +202,20 @@ router.get('/stats', requireAuth, async (req, res) => {
          SELECT dc.entry_date,
                 dc.done,
                 (SELECT COUNT(*) FROM exercises e2
+                 LEFT JOIN LATERAL (
+                   SELECT uea.schedule
+                   FROM user_exercise_assignments uea
+                   WHERE uea.exercise_id = e2.id AND uea.user_id = $1
+                   LIMIT 1
+                 ) usch ON TRUE
                  WHERE e2.is_active = TRUE
                    AND (
-                     COALESCE(array_length(e2.schedule, 1), 0) = 0
-                     OR EXTRACT(DOW FROM dc.entry_date)::int = ANY(e2.schedule)
+                     COALESCE(array_length(COALESCE(usch.schedule, e2.schedule), 1), 0) = 0
+                     OR EXTRACT(DOW FROM dc.entry_date)::int = ANY(COALESCE(usch.schedule, e2.schedule))
                    )
                    AND (
                      NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id)
-                     OR EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id AND user_id = $1)
+                     OR usch.schedule IS NOT NULL
                    )
                 ) AS total_for_day
          FROM day_counts dc

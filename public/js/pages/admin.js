@@ -72,32 +72,18 @@ const AdminPage = (() => {
                 </div>
               </div>
 
-              <!-- Ordre + Jours -->
-              <div style="display:grid;grid-template-columns:80px 1fr;gap:12px;align-items:start;">
-                <div class="form-group">
-                  <label>Ordre</label>
-                  <input type="number" id="ex-order" value="0" min="0" />
-                </div>
-                <div class="form-group">
-                  <label>Jours actifs</label>
-                  <div class="schedule-picker" id="ex-schedule">
-                    <button type="button" class="sday-btn" data-day="1" onclick="this.classList.toggle('active')">L</button>
-                    <button type="button" class="sday-btn" data-day="2" onclick="this.classList.toggle('active')">M</button>
-                    <button type="button" class="sday-btn" data-day="3" onclick="this.classList.toggle('active')">M</button>
-                    <button type="button" class="sday-btn" data-day="4" onclick="this.classList.toggle('active')">J</button>
-                    <button type="button" class="sday-btn" data-day="5" onclick="this.classList.toggle('active')">V</button>
-                    <button type="button" class="sday-btn" data-day="6" onclick="this.classList.toggle('active')">S</button>
-                    <button type="button" class="sday-btn" data-day="0" onclick="this.classList.toggle('active')">D</button>
-                  </div>
-                  <p style="font-size:11px;color:var(--text3);margin-top:4px;">Aucun = tous les jours</p>
-                </div>
+              <!-- Ordre -->
+              <div class="form-group" style="max-width:80px;">
+                <label>Ordre</label>
+                <input type="number" id="ex-order" value="0" min="0" />
               </div>
 
-              <!-- Assigné à -->
+              <!-- Assigné à (avec jours actifs par personne) -->
               <div class="form-group" id="ex-assign-group">
                 <label>Assigné à</label>
-                <div id="ex-assign-users" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
-                <p style="font-size:11px;color:var(--text3);margin-top:4px;">Aucun coché = visible par tous</p>
+                <div id="ex-assign-users" style="display:flex;flex-direction:column;gap:8px;margin-top:4px;"></div>
+                <p style="font-size:11px;color:var(--text3);margin-top:4px;">Aucun coché = visible par tous · Les jours actifs sont définis par personne</p>
+              </div>
               </div>
 
               <p class="form-error" id="ex-form-error"></p>
@@ -164,7 +150,7 @@ const AdminPage = (() => {
               <div class="admin-ex-detail">
                 ${ex.sets > 1 ? ex.sets + ' séries × ' : ''}${ex.reps} ${escapeHtml(ex.unit)}
                 &nbsp;·&nbsp; XP partagé (max 30/jour)${ex.is_running ? ' 🏃' : ''}
-                &nbsp;·&nbsp; <span style="color:var(--accent3)">${formatSchedule(ex.schedule)}</span>
+                &nbsp;·&nbsp; <span style="color:var(--accent3)">${ex.assigned_users && ex.assigned_users.length > 0 ? '📅 Jours par personne' : formatSchedule(ex.schedule)}</span>
                 ${!ex.is_active ? ' · <span style="color:var(--text3)">désactivé</span>' : ''}
               </div>
               <div class="admin-ex-assigned" style="font-size:11px;color:var(--text3);margin-top:3px;">${renderAssignedLabel(ex.assigned_users)}</div>
@@ -229,10 +215,6 @@ const AdminPage = (() => {
       document.getElementById('ex-order').value = ex.order_index;
       document.getElementById('ex-is-running').checked = !!ex.is_running;
       toggleRunningFields();
-      const schedule = ex.schedule || [];
-      document.querySelectorAll('#ex-schedule .sday-btn').forEach(btn => {
-        btn.classList.toggle('active', schedule.includes(parseInt(btn.dataset.day)));
-      });
     } else {
       document.getElementById('ex-modal-title').textContent = 'Nouvel exercice';
       document.getElementById('ex-form').reset();
@@ -240,10 +222,9 @@ const AdminPage = (() => {
       document.getElementById('ex-sets').value = '1';
       document.getElementById('ex-unit').value = 'répétitions';
       document.getElementById('ex-is-running').checked = false;
-      document.querySelectorAll('#ex-schedule .sday-btn').forEach(btn => btn.classList.remove('active'));
       toggleRunningFields();
     }
-    renderAssignmentCheckboxes(id ? (exercises.find(e => e.id === id)?.assigned_users || []) : []);
+    renderAssignmentCheckboxes(id ? (exercises.find(e => e.id === id)?.assignments || []) : []);
     modal.style.display = 'flex';
   }
 
@@ -271,7 +252,15 @@ const AdminPage = (() => {
     document.getElementById('ex-form-error').textContent = '';
 
     const isRunning = document.getElementById('ex-is-running').checked;
-    const assignedUserIds = [...document.querySelectorAll('#ex-assign-users input[type=checkbox]:checked')].map(cb => parseInt(cb.value));
+    // Collect per-user assignments with individual schedules
+    const assignmentsData = [...document.querySelectorAll('#ex-assign-users input[type=checkbox]:checked')].map(cb => {
+      const userId = parseInt(cb.value);
+      const picker = document.getElementById(`usp-${userId}`);
+      const schedule = picker
+        ? [...picker.querySelectorAll('.sday-btn.active')].map(b => parseInt(b.dataset.day))
+        : [];
+      return { user_id: userId, schedule };
+    });
     const data = {
       emoji: document.getElementById('ex-emoji').value,
       name: document.getElementById('ex-name').value.trim(),
@@ -279,7 +268,7 @@ const AdminPage = (() => {
       reps: isRunning ? 1 : parseInt(document.getElementById('ex-reps').value),
       unit: isRunning ? 'session' : document.getElementById('ex-unit').value.trim(),
       order_index: parseInt(document.getElementById('ex-order').value),
-      schedule: [...document.querySelectorAll('#ex-schedule .sday-btn.active')].map(b => parseInt(b.dataset.day)),
+      schedule: [],
       is_running: isRunning,
     };
 
@@ -295,7 +284,7 @@ const AdminPage = (() => {
         App.showToast('✅ Exercice créé');
       }
       if (savedEx?.id) {
-        await API.adminAssignExercise(savedEx.id, assignedUserIds);
+        await API.adminAssignExercise(savedEx.id, assignmentsData);
       }
       closeExModal();
       await loadExercises();
@@ -350,28 +339,48 @@ const AdminPage = (() => {
     );
   }
 
-  function renderAssignmentCheckboxes(currentAssignedIds) {
+  function renderAssignmentCheckboxes(assignments) {
+    // assignments: [{ user_id, schedule }]
     const container = document.getElementById('ex-assign-users');
     if (!container) return;
     if (users.length === 0) {
       container.innerHTML = '<span style="font-size:12px;color:var(--text3)">Chargement...</span>';
       API.adminGetUsers().then(data => {
         users = data.users || [];
-        renderAssignmentCheckboxes(currentAssignedIds);
+        renderAssignmentCheckboxes(assignments);
       });
       return;
     }
+    const DAY_LABELS = ['L','M','M','J','V','S','D'];
+    const DAY_NUMS   = [1,2,3,4,5,6,0];
     container.innerHTML = users.map(u => {
-      const rank = Gamification.getRank(u.xp);
-      const checked = currentAssignedIds.includes(u.id) ? 'checked' : '';
+      const rank       = Gamification.getRank(u.xp);
+      const assignment = assignments.find(a => a.user_id === u.id);
+      const checked    = assignment ? 'checked' : '';
+      const schedule   = assignment?.schedule || [];
+      const dayBtns    = DAY_NUMS.map((day, i) =>
+        `<button type="button" class="sday-btn${schedule.includes(day) ? ' active' : ''}" data-day="${day}" onclick="this.classList.toggle('active')">${DAY_LABELS[i]}</button>`
+      ).join('');
       return `
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0;">
-          <input type="checkbox" value="${u.id}" ${checked}
-            style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" />
-          <span>${rank.emoji} ${escapeHtml(u.username)}</span>
-        </label>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0;">
+            <input type="checkbox" value="${u.id}" ${checked}
+              onchange="AdminPage.toggleUserAssignRow(${u.id}, this.checked)"
+              style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;" />
+            <span>${rank.emoji} ${escapeHtml(u.username)}</span>
+          </label>
+          <div id="usp-${u.id}" style="${assignment ? '' : 'display:none;'}margin-left:24px;">
+            <div class="schedule-picker">${dayBtns}</div>
+            <p style="font-size:11px;color:var(--text3);margin:2px 0 0;">Aucun = tous les jours</p>
+          </div>
+        </div>
       `;
     }).join('');
+  }
+
+  function toggleUserAssignRow(userId, checked) {
+    const picker = document.getElementById(`usp-${userId}`);
+    if (picker) picker.style.display = checked ? '' : 'none';
   }
 
   function renderAssignedLabel(assignedUsers) {
@@ -394,5 +403,5 @@ const AdminPage = (() => {
     return sch.map(d => labels[d]).join(' · ');
   }
 
-  return { render, init, switchTab, openExModal, closeExModal, onOverlayClick, saveExercise, deleteExercise, restoreExercise, toggleAdmin, toggleRunningFields };
+  return { render, init, switchTab, openExModal, closeExModal, onOverlayClick, saveExercise, deleteExercise, restoreExercise, toggleAdmin, toggleRunningFields, toggleUserAssignRow };
 })();

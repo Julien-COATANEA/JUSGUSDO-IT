@@ -54,7 +54,7 @@ const API = (() => {
     adminDeleteExercise: (id) => request('DELETE', `/admin/exercises/${id}`),
     adminGetUsers: () => request('GET', '/admin/users'),
     adminPromoteUser: (id, is_admin) => request('PATCH', `/admin/users/${id}/promote`, { is_admin }),
-    adminAssignExercise: (id, userIds) => request('POST', `/admin/exercises/${id}/assign`, { user_ids: userIds }),
+    adminAssignExercise: (id, assignments) => request('POST', `/admin/exercises/${id}/assign`, { assignments }),
     adminUnassignExercise: (id, userId) => request('DELETE', `/admin/exercises/${id}/assign/${userId}`),
 
     // Muscle records

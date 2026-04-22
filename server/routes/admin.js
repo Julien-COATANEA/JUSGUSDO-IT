@@ -4,7 +4,7 @@ const { requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
-// GET /api/admin/exercises — all exercises with assigned user ids
+// GET /api/admin/exercises — all exercises with assigned user ids and per-user schedules
 router.get('/exercises', requireAdmin, async (req, res) => {
   try {
     const result = await db.query(
@@ -12,7 +12,13 @@ router.get('/exercises', requireAdmin, async (req, res) => {
               COALESCE(
                 ARRAY_AGG(uea.user_id) FILTER (WHERE uea.user_id IS NOT NULL),
                 '{}'::integer[]
-              ) AS assigned_users
+              ) AS assigned_users,
+              COALESCE(
+                JSON_AGG(
+                  JSON_BUILD_OBJECT('user_id', uea.user_id, 'schedule', COALESCE(uea.schedule, '{}'))
+                ) FILTER (WHERE uea.user_id IS NOT NULL),
+                '[]'::json
+              ) AS assignments
        FROM exercises e
        LEFT JOIN user_exercise_assignments uea ON uea.exercise_id = e.id
        GROUP BY e.id
@@ -129,19 +135,23 @@ router.patch('/users/:id/promote', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/admin/exercises/:id/assign — set user assignments (empty array = global)
+// POST /api/admin/exercises/:id/assign — set user assignments with per-user schedules
+// Body: { assignments: [{ user_id, schedule }] }  (empty array = global)
 router.post('/exercises/:id/assign', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { user_ids } = req.body; // array of integers
-  const ids = Array.isArray(user_ids) ? user_ids.map(Number).filter(Boolean) : [];
+  const { assignments } = req.body;
+  const assigns = Array.isArray(assignments)
+    ? assignments
+        .map(a => ({ user_id: Number(a.user_id), schedule: Array.isArray(a.schedule) ? a.schedule.map(Number) : [] }))
+        .filter(a => a.user_id > 0)
+    : [];
   try {
     await db.query('DELETE FROM user_exercise_assignments WHERE exercise_id = $1', [id]);
-    if (ids.length > 0) {
-      const placeholders = ids.map((_, i) => `($1, $${i + 2})`).join(', ');
+    for (const a of assigns) {
       await db.query(
-        `INSERT INTO user_exercise_assignments (exercise_id, user_id) VALUES ${placeholders}
-         ON CONFLICT DO NOTHING`,
-        [id, ...ids]
+        `INSERT INTO user_exercise_assignments (exercise_id, user_id, schedule)
+         VALUES ($1, $2, $3) ON CONFLICT (exercise_id, user_id) DO UPDATE SET schedule = EXCLUDED.schedule`,
+        [id, a.user_id, a.schedule]
       );
     }
     res.json({ ok: true });

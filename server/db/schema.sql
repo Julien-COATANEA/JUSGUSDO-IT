@@ -77,10 +77,14 @@ ALTER TABLE exercises ADD COLUMN IF NOT EXISTS is_running BOOLEAN DEFAULT FALSE;
 CREATE TABLE IF NOT EXISTS user_exercise_assignments (
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   exercise_id INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+  schedule    INTEGER[] DEFAULT '{}',
   PRIMARY KEY (user_id, exercise_id)
 );
 CREATE INDEX IF NOT EXISTS idx_uea_exercise ON user_exercise_assignments(exercise_id);
 CREATE INDEX IF NOT EXISTS idx_uea_user ON user_exercise_assignments(user_id);
+
+-- Migration: per-user schedule on assignments
+ALTER TABLE user_exercise_assignments ADD COLUMN IF NOT EXISTS schedule INTEGER[] DEFAULT '{}';
 
 -- Migration: muscle records (personal bests for weightlifting)
 CREATE TABLE IF NOT EXISTS muscle_records (
