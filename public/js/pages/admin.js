@@ -84,7 +84,6 @@ const AdminPage = (() => {
                 <div id="ex-assign-users" style="display:flex;flex-direction:column;gap:8px;margin-top:4px;"></div>
                 <p style="font-size:11px;color:var(--text3);margin-top:4px;">Aucun coché = visible par tous · Les jours actifs sont définis par personne</p>
               </div>
-              </div>
 
               <p class="form-error" id="ex-form-error"></p>
 
