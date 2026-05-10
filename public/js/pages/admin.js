@@ -75,7 +75,7 @@ const AdminPage = (() => {
 
     shell.innerHTML = `
       <header class="app-header">
-        <button class="icon-btn" onclick="Router.navigate('home')">←</button>
+        ${editor ? '' : `<button class="icon-btn" onclick="Router.navigate('home')">←</button>`}
         <div class="header-info" style="flex:1">
           <span class="header-username">${title}</span>
           <span class="header-rank" style="color:var(--accent3)">${subtitle}</span>
