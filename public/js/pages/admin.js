@@ -152,10 +152,10 @@ const AdminPage = (() => {
         </label>
 
         <div class="exercise-filter-stack">
-          ${renderFilterGroup('Portée', 'audience', [
-            { value: 'all', label: 'Tout' },
-            { value: 'global', label: 'Globaux' },
-            { value: 'targeted', label: 'Ciblés' },
+          ${renderFilterGroup('Assignation', 'audience', [
+            { value: 'all', label: 'Tous' },
+            { value: 'mine', label: 'Mes exercices' },
+            { value: 'unassigned', label: 'Non assignés' },
           ])}
           ${renderFilterGroup('État', 'status', [
             { value: 'active', label: 'Actifs' },
@@ -315,8 +315,8 @@ const AdminPage = (() => {
   function renderFilterSummary() {
     const summary = [];
     summary.push(filters.status === 'archived' ? 'Archivés' : (filters.status === 'all' ? 'Tous' : 'Actifs'));
-    if (filters.audience === 'global') summary.push('Globaux');
-    if (filters.audience === 'targeted') summary.push('Ciblés');
+    if (filters.audience === 'mine') summary.push('Mes exercices');
+    if (filters.audience === 'unassigned') summary.push('Non assignés');
     if (filters.type === 'running') summary.push('Running');
     if (filters.type === 'classic') summary.push('Classiques');
     if (filters.query.trim()) summary.push(`Recherche: ${escapeHtml(filters.query.trim())}`);
@@ -429,8 +429,12 @@ const AdminPage = (() => {
       .filter(exercise => {
         if (filters.status === 'active' && !exercise.is_active) return false;
         if (filters.status === 'archived' && exercise.is_active) return false;
-        if (filters.audience === 'global' && isTargetedExercise(exercise)) return false;
-        if (filters.audience === 'targeted' && !isTargetedExercise(exercise)) return false;
+        if (filters.audience === 'mine') {
+          const u = JSON.parse(localStorage.getItem('user') || '{}');
+          const assigned = exercise.assignments.some(a => a.user_id === u.id);
+          if (!assigned) return false;
+        }
+        if (filters.audience === 'unassigned' && exercise.assignments.length > 0) return false;
         if (filters.type === 'running' && !exercise.is_running) return false;
         if (filters.type === 'classic' && exercise.is_running) return false;
         if (!query) return true;

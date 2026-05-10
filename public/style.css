@@ -2819,7 +2819,7 @@ html, body {
   display: flex;
   align-items: flex-start;
   gap: 4px;
-  overflow: hidden;
+  overflow: visible;
   /* defaults = cal-sz-lg (4 sem, grandes cases) */
   --cal-sz:    24px;
   --cal-gap:   5px;
@@ -2883,9 +2883,11 @@ html, body {
 }
 .cal-scroll-inner {
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   flex: 1;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
+  padding-left: 2px;
+  margin-bottom: 2px;
   scrollbar-width: none;
 }
 .cal-scroll-inner::-webkit-scrollbar { display: none; }
@@ -2893,6 +2895,8 @@ html, body {
   display: flex;
   gap: var(--cal-gap);
   transition: gap 0.15s;
+  padding-bottom: 4px;
+  padding-left: 2px;
 }
 .cal-week-col {
   display: flex;
