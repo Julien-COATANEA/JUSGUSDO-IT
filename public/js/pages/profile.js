@@ -51,6 +51,7 @@ const ProfilePage = (() => {
       // Initialise notification status UI
       if (_isOwnProfile) _updateNotifUI().catch(() => {});
     } catch (err) {
+      console.error('[Profile] Erreur de chargement:', err);
       container.innerHTML = `<p style="color:var(--text3);text-align:center;padding:40px 0">Erreur de chargement</p>`;
     }
   }
