@@ -3,7 +3,8 @@ const ProfilePage = (() => {
   let _profileUserId  = null;
   let _isOwnProfile   = false;
   let _calendarWeeks  = [];
-  let _calPage        = 0; // 0 = most recent 4 weeks, higher = older
+  let _calPage        = 0; // 0 = most recent N weeks, higher = older
+  let _calPageSize     = 4; // computed dynamically from card width
 
   function render() {
     return `
@@ -44,6 +45,7 @@ const ProfilePage = (() => {
       const { records }     = results[1];
       const wizzData        = _isOwnProfile ? results[2] : null;
       container.innerHTML = _renderAll(user, stats, records, wizzData);
+      requestAnimationFrame(_autoSizeCalendar);
       // Mark as read silently
       if (_isOwnProfile && wizzData?.unread > 0) {
         API.markWizzRead(_profileUserId).catch(() => {});
@@ -160,8 +162,7 @@ const ProfilePage = (() => {
       </div>`;
   }
 
-  // ── 3. Calendrier paginé (4 semaines par page) ─────────────
-  const _CAL_PAGE_SIZE = 4;
+  // ── 3. Calendrier — autant de semaines que la carte peut afficher ─
 
   function _renderCalendar(calendar) {
     if (!calendar || !calendar.length) return '';
@@ -175,8 +176,8 @@ const ProfilePage = (() => {
     }
     _calPage = 0; // reset to most recent page
 
-    const maxPage = Math.max(0, Math.ceil(_calendarWeeks.length / _CAL_PAGE_SIZE) - 1);
-    const weeksSlice = _calWeeksForPage(0);
+    // Initial render with all weeks; _autoSizeCalendar() will trim to fit after paint
+    const weeksSlice = _calendarWeeks;
     const pagerLabel = _calPagerLabel(weeksSlice);
 
     const dayLabelsHtml = `<div class="cal-day-labels">
@@ -189,7 +190,7 @@ const ProfilePage = (() => {
         <div class="cal-section-header">
           <div class="profile-section-title" style="margin-bottom:0">Activité</div>
           <div class="cal-pager">
-            <button class="cal-pager-btn" id="cal-prev" onclick="ProfilePage.calPage(1)" title="Semaines précédentes" ${maxPage === 0 ? 'disabled' : ''}>‹</button>
+            <button class="cal-pager-btn" id="cal-prev" onclick="ProfilePage.calPage(1)" title="Semaines précédentes" disabled>‹</button>
             <span class="cal-pager-label" id="cal-pager-label">${pagerLabel}</span>
             <button class="cal-pager-btn" id="cal-next" onclick="ProfilePage.calPage(-1)" title="Semaines suivantes" disabled>›</button>
           </div>
@@ -210,9 +211,31 @@ const ProfilePage = (() => {
 
   function _calWeeksForPage(page) {
     const total = _calendarWeeks.length;
-    const end   = total - page * _CAL_PAGE_SIZE;
-    const start = Math.max(0, end - _CAL_PAGE_SIZE);
+    const end   = total - page * _calPageSize;
+    const start = Math.max(0, end - _calPageSize);
     return _calendarWeeks.slice(start, Math.max(0, end));
+  }
+
+  function _autoSizeCalendar() {
+    const wrap = document.getElementById('cal-heatmap-wrap');
+    if (!wrap || !_calendarWeeks.length) return;
+    const labels  = wrap.querySelector('.cal-day-labels');
+    const labelsW = labels ? labels.offsetWidth + 4 : 32;
+    const available = wrap.clientWidth - labelsW - 4;
+    const cellSz = 24 + 5; // --cal-sz + --cal-gap for cal-sz-lg
+    _calPageSize = Math.max(1, Math.floor(available / cellSz));
+    _calPage = 0;
+    const today      = new Date().toISOString().split('T')[0];
+    const weeksSlice = _calWeeksForPage(0);
+    const maxPage    = Math.max(0, Math.ceil(_calendarWeeks.length / _calPageSize) - 1);
+    const weeksRow   = document.getElementById('cal-weeks-row');
+    if (weeksRow) weeksRow.innerHTML = _renderWeeks(weeksSlice, today);
+    const labelEl  = document.getElementById('cal-pager-label');
+    if (labelEl)  labelEl.textContent = _calPagerLabel(weeksSlice);
+    const prevBtn  = document.getElementById('cal-prev');
+    const nextBtn  = document.getElementById('cal-next');
+    if (prevBtn) prevBtn.disabled = maxPage === 0;
+    if (nextBtn) nextBtn.disabled = true;
   }
 
   function _calPagerLabel(weeks) {
@@ -228,7 +251,7 @@ const ProfilePage = (() => {
 
   function calPage(delta) {
     // delta +1 = go to older weeks (page++), delta -1 = go to newer (page--)
-    const maxPage = Math.max(0, Math.ceil(_calendarWeeks.length / _CAL_PAGE_SIZE) - 1);
+    const maxPage = Math.max(0, Math.ceil(_calendarWeeks.length / _calPageSize) - 1);
     _calPage = Math.max(0, Math.min(maxPage, _calPage + delta));
 
     const today      = new Date().toISOString().split('T')[0];
