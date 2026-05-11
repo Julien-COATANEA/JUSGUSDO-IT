@@ -347,7 +347,7 @@ router.get('/:id/muscle-records', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/users/:id/muscle-records — upsert by exercise name
+// POST /api/users/:id/muscle-records — add a new record (multiple allowed per exercise)
 router.post('/:id/muscle-records', requireAuth, async (req, res) => {
   const userId = parseInt(req.params.id, 10);
   if (req.user.id !== userId && !req.user.is_admin)
@@ -363,12 +363,39 @@ router.post('/:id/muscle-records', requireAuth, async (req, res) => {
     const result = await db.query(
       `INSERT INTO muscle_records (user_id, exercise_name, sets, reps, weight_kg, notes, category)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (user_id, exercise_name)
-       DO UPDATE SET sets = EXCLUDED.sets, reps = EXCLUDED.reps, weight_kg = EXCLUDED.weight_kg,
-                     notes = EXCLUDED.notes, category = EXCLUDED.category, updated_at = NOW()
        RETURNING id, exercise_name, category, sets, reps, weight_kg::float AS weight_kg, notes, updated_at`,
       [userId, exercise_name.trim(), parseInt(sets, 10), safeReps, parseFloat(weight_kg), notes || null, safeCategory]
     );
+    res.json({ record: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// PUT /api/users/:id/muscle-records/:recordId — update an existing record
+router.put('/:id/muscle-records/:recordId', requireAuth, async (req, res) => {
+  const userId   = parseInt(req.params.id, 10);
+  const recordId = parseInt(req.params.recordId, 10);
+  if (req.user.id !== userId && !req.user.is_admin)
+    return res.status(403).json({ error: 'Interdit' });
+  const { sets, reps, weight_kg, notes, category } = req.body;
+  if (!sets || weight_kg == null)
+    return res.status(400).json({ error: 'Données manquantes' });
+  const VALID_CATEGORIES = ['Poitrine','Dos','Épaules','Biceps','Triceps','Jambes','Abdos','Autre',
+    'Pecs Triceps','Dos Biceps','Jambes','Full'];
+  const safeCategory = VALID_CATEGORIES.includes(category) ? category : null;
+  const safeReps = reps != null && !isNaN(parseInt(reps, 10)) ? parseInt(reps, 10) : null;
+  try {
+    const result = await db.query(
+      `UPDATE muscle_records
+       SET sets = $1, reps = $2, weight_kg = $3, notes = $4,
+           category = COALESCE($5, category), updated_at = NOW()
+       WHERE id = $6 AND user_id = $7
+       RETURNING id, exercise_name, category, sets, reps, weight_kg::float AS weight_kg, notes, updated_at`,
+      [parseInt(sets, 10), safeReps, parseFloat(weight_kg), notes || null, safeCategory, recordId, userId]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Record introuvable' });
     res.json({ record: result.rows[0] });
   } catch (err) {
     console.error(err);
@@ -455,7 +482,7 @@ router.post('/:id/minigame-result', requireAuth, async (req, res) => {
 
 // ── WIZZ ────────────────────────────────────────────────────
 
-const VALID_WIZZ_KEYS = ['lazy', 'weak', 'ghost', 'turtle', 'cake', 'skip', 'snail'];
+const VALID_WIZZ_KEYS = ['lazy', 'weak', 'ghost', 'turtle', 'cake', 'skip', 'snail', 'custom'];
 const WIZZ_PUSH_MSGS = {
   lazy:   { text: "Toujours en échauffement ou tu comptes vraiment t'y mettre ?", emoji: '😴' },
   weak:   { text: 'Même ta gourde porte plus lourd que toi !', emoji: '🏋️' },
@@ -472,8 +499,15 @@ router.post('/:id/send-wizz', requireAuth, async (req, res) => {
   const senderId   = req.user.id;
   if (!receiverId || isNaN(receiverId)) return res.status(400).json({ error: 'ID invalide' });
   if (senderId === receiverId) return res.status(400).json({ error: 'Impossible de t\'envoyer un wizz à toi-même' });
-  const { message_key } = req.body;
+  const { message_key, custom_text } = req.body;
   if (!VALID_WIZZ_KEYS.includes(message_key)) return res.status(400).json({ error: 'Message invalide' });
+  if (message_key === 'custom') {
+    if (!custom_text || typeof custom_text !== 'string' || !custom_text.trim())
+      return res.status(400).json({ error: 'Message personnalisé requis' });
+    if (custom_text.trim().length > 200)
+      return res.status(400).json({ error: 'Message trop long (200 car. max)' });
+  }
+  const safeCustomText = message_key === 'custom' ? custom_text.trim() : null;
   try {
     const senderRes = await db.query('SELECT username, tokens FROM users WHERE id = $1', [senderId]);
     const sender = senderRes.rows[0] || {};
@@ -482,12 +516,14 @@ router.post('/:id/send-wizz', requireAuth, async (req, res) => {
 
     await db.query('UPDATE users SET tokens = tokens - 1 WHERE id = $1', [senderId]);
     await db.query(
-      'INSERT INTO trolls (sender_id, receiver_id, message_key) VALUES ($1, $2, $3)',
-      [senderId, receiverId, message_key]
+      'INSERT INTO trolls (sender_id, receiver_id, message_key, custom_text) VALUES ($1, $2, $3, $4)',
+      [senderId, receiverId, message_key, safeCustomText]
     );
 
     if (pushModule?.sendNotificationToUser) {
-      const msg = WIZZ_PUSH_MSGS[message_key] || { text: 'Tu as reçu un nouveau wizz ⚡', emoji: '⚡' };
+      const msg = message_key === 'custom'
+        ? { text: safeCustomText, emoji: '✍️' }
+        : (WIZZ_PUSH_MSGS[message_key] || { text: 'Tu as reçu un nouveau wizz ⚡', emoji: '⚡' });
       await pushModule.sendNotificationToUser(receiverId, {
         title: `⚡ Wizz de ${sender.username || 'quelqu’un'}`,
         body: `${msg.emoji} ${msg.text}`,
@@ -514,7 +550,7 @@ router.get('/:id/wizz', requireAuth, async (req, res) => {
   if (req.user.id !== userId) return res.status(403).json({ error: 'Interdit' });
   try {
     const result = await db.query(
-      `SELECT t.id, t.message_key, t.created_at, t.read, u.username AS sender_name
+      `SELECT t.id, t.message_key, t.custom_text, t.created_at, t.read, u.username AS sender_name
        FROM trolls t JOIN users u ON u.id = t.sender_id
        WHERE t.receiver_id = $1 ORDER BY t.created_at DESC LIMIT 30`,
       [userId]

@@ -60,6 +60,7 @@ const API = (() => {
     // Muscle records
     getMuscleRecords: (userId) => request('GET', `/users/${userId}/muscle-records`),
     saveMuscleRecord: (userId, data) => request('POST', `/users/${userId}/muscle-records`, data),
+    updateMuscleRecord: (userId, recordId, data) => request('PUT', `/users/${userId}/muscle-records/${recordId}`, data),
     deleteMuscleRecord: (userId, recordId) => request('DELETE', `/users/${userId}/muscle-records/${recordId}`),
 
     // Mini-game
@@ -67,7 +68,7 @@ const API = (() => {
     postMinigameResult: (userId, won, level) => request('POST', `/users/${userId}/minigame-result`, { won, level }),
 
     // Wizz
-    sendWizz: (targetId, message_key) => request('POST', `/users/${targetId}/send-wizz`, { message_key }),
+    sendWizz: (targetId, message_key, custom_text) => request('POST', `/users/${targetId}/send-wizz`, { message_key, custom_text }),
     getWizz: (userId) => request('GET', `/users/${userId}/wizz`),
     markWizzRead: (userId) => request('PATCH', `/users/${userId}/wizz/read`, {}),
   };

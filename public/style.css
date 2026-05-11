@@ -1426,6 +1426,28 @@ html, body {
   gap: 12px;
 }
 
+/* Impact banner — shown in editor to remind that exercises are shared */
+.ex-impact-banner {
+  padding: 11px 14px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.ex-impact-banner--global {
+  background: rgba(78,205,196,0.10);
+  border: 1px solid rgba(78,205,196,0.25);
+  color: var(--accent3);
+}
+.ex-impact-banner--targeted {
+  background: rgba(124,92,191,0.12);
+  border: 1px solid rgba(124,92,191,0.28);
+  color: var(--ju-light);
+}
+.ex-impact-banner strong {
+  font-weight: 800;
+}
+
 .ex-editor-section {
   background: var(--card);
   border: 1px solid var(--border);
@@ -2677,6 +2699,54 @@ html, body {
   background: rgba(255,255,255,0.15);
 }
 
+/* Multiple records per exercise */
+.muscu-ex-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.muscu-ex-record-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.muscu-ex-record-row:last-child { border-bottom: none; }
+
+/* Custom exercises grouped */
+.mr2-exercise-group {
+  padding: 10px 0 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.mr2-exercise-group:last-child { border-bottom: none; }
+.mr2-exercise-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.mr2-exercise-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Action buttons */
+.mr-btn-add {
+  color: var(--accent3);
+  font-size: 18px;
+  font-weight: 700;
+  background: rgba(78,205,196,0.12);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+}
+.mr-btn-add:hover { background: rgba(78,205,196,0.22); }
+
 .muscu-session-recs {
   font-size: 12px;
   font-weight: 800;
@@ -3369,6 +3439,53 @@ html, body {
   font-weight: 600;
   line-height: 1.8;
 }
+/* Custom wizz message block */
+.wizz-custom-block {
+  margin-top: 6px;
+  background: rgba(255,255,255,0.03);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wizz-custom-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.wizz-custom-textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+  resize: none;
+  line-height: 1.5;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.wizz-custom-textarea:focus { outline: none; border-color: var(--accent3); }
+.wizz-custom-textarea.wizz-custom-error { border-color: var(--red); }
+.wizz-custom-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.wizz-custom-count {
+  font-size: 11px;
+  color: var(--text3);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.wizz-custom-send-btn { flex: 1; }
 .wizz-feedback {
   margin: 14px 0 6px;
   font-size: 14px;

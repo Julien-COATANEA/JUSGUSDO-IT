@@ -4,7 +4,7 @@ const Router = (() => {
     login:   { page: LoginPage,   requireAuth: false, requireAdmin: false },
     home:    { page: HomePage,    requireAuth: true,  requireAdmin: false },
     app:     { page: WorkoutPage, requireAuth: true,  requireAdmin: false },
-    admin:   { page: AdminPage,   requireAuth: true,  requireAdmin: true  },
+    admin:   { page: AdminPage,   requireAuth: true,  requireAdmin: false },
     profile: { page: ProfilePage, requireAuth: true,  requireAdmin: false },
   };
 
@@ -31,7 +31,7 @@ const Router = (() => {
     const items = [
       { route: 'home',  icon: SVG.home,  label: 'Équipe' },
       { route: 'app',   icon: SVG.app,   label: 'Programme' },
-      ...(u.is_admin ? [{ route: 'admin', icon: SVG.admin, label: 'Exercices' }] : []),
+      { route: 'admin', icon: SVG.admin, label: 'Exercices' },
     ];
 
     const nav = document.createElement('nav');

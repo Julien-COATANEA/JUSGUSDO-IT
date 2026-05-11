@@ -103,6 +103,9 @@ ALTER TABLE muscle_records ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT
 -- Migration: add reps to muscle_records
 ALTER TABLE muscle_records ADD COLUMN IF NOT EXISTS reps INTEGER;
 
+-- Migration: allow multiple records per exercise (drop unique user/exercise constraint)
+ALTER TABLE muscle_records DROP CONSTRAINT IF EXISTS muscle_records_user_id_exercise_name_key;
+
 -- Migration: push notification subscriptions
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id            SERIAL PRIMARY KEY,
@@ -143,6 +146,8 @@ CREATE TABLE IF NOT EXISTS trolls (
   read        BOOLEAN DEFAULT FALSE
 );
 CREATE INDEX IF NOT EXISTS idx_trolls_receiver ON trolls(receiver_id, read);
+-- Migration: allow custom wizz message
+ALTER TABLE trolls ADD COLUMN IF NOT EXISTS custom_text VARCHAR(200);
 
 -- Migration: add level to minigame_plays (easy/medium/hard, 1 play per level per day)
 ALTER TABLE minigame_plays ADD COLUMN IF NOT EXISTS level VARCHAR(10) DEFAULT 'easy';

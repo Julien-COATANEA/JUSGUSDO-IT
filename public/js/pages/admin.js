@@ -15,6 +15,11 @@ const AdminPage = (() => {
   let users = [];
   let editingId = null;
   let currentView = 'catalog';
+
+  function isCurrentUserAdmin() {
+    const u = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
+    return !!u.is_admin;
+  }
   let filters = {
     query: '',
     audience: 'all',
@@ -68,7 +73,7 @@ const AdminPage = (() => {
     if (!shell) return;
 
     const title = editor ? (editingId ? 'Modifier exercice' : 'Nouvel exercice') : 'Exercices';
-      const subtitle = editor ? 'Édition plein écran' : 'Catalogue admin';
+      const subtitle = editor ? 'Édition plein écran' : (isCurrentUserAdmin() ? 'Catalogue admin' : 'Lecture seule');
     const actionHtml = editor
       ? `<button type="button" class="admin-secondary-btn ex-top-action" onclick="AdminPage.closeExModal()">Retour au catalogue</button>`
       : ``;
@@ -132,9 +137,9 @@ const AdminPage = (() => {
           <div class="ex-admin-copy">
             <span class="ex-admin-eyebrow">Pilotage</span>
             <h1 class="ex-admin-title">Bibliothèque d'exercices</h1>
-            <p class="ex-admin-subtitle">Trie, active et édite tes exercices sans bruit. Le catalogue reste compact, l'édition vit sur une vraie page.</p>
+            <p class="ex-admin-subtitle">Ce catalogue d'exercices est <strong>partagé entre tous les utilisateurs</strong></p>
           </div>
-          <button type="button" class="submit-btn ex-admin-primary" onclick="AdminPage.openExModal(null)">+ Ajouter un exercice</button>
+          ${isCurrentUserAdmin() ? `<button type="button" class="submit-btn ex-admin-primary" onclick="AdminPage.openExModal(null)">+ Ajouter un exercice</button>` : ''}
         </div>
 
         <div class="ex-admin-kpis">
@@ -154,7 +159,7 @@ const AdminPage = (() => {
         <div class="exercise-filter-stack">
           ${renderFilterGroup('Assignation', 'audience', [
             { value: 'all', label: 'Tous' },
-            { value: 'mine', label: 'Mes exercices' },
+            { value: 'mine', label: 'Mes assignations' },
             { value: 'unassigned', label: 'Non assignés' },
           ])}
           ${renderFilterGroup('État', 'status', [
@@ -199,13 +204,20 @@ const AdminPage = (() => {
           <div class="ex-editor-top-info">
             <h1>${editingId ? `Modifier — ${escapeHtml(exercise.name)}` : 'Nouvel exercice'}</h1>
             <div class="ex-editor-top-chips">
-              <span class="ex-editor-top-chip">${exercise.xp_reward} XP</span>
               <span class="ex-editor-top-chip">${exercise.is_active ? 'Actif' : 'Archivé'}</span>
               <span class="ex-editor-top-chip">${isTargeted ? 'Ciblé' : 'Global'}</span>
               <span class="ex-editor-top-chip">${exercise.is_running ? 'Running' : 'Classique'} · ${load}</span>
             </div>
           </div>
         </div>
+
+        ${editingId ? `
+        <div class="ex-impact-banner${isTargeted ? ' ex-impact-banner--targeted' : ' ex-impact-banner--global'}">
+          ${isTargeted
+            ? `👥 Assigné à <strong>${exercise.assignments.length} utilisateur${exercise.assignments.length !== 1 ? 's' : ''}</strong>${exercise.assignments.length > 0 ? ' : ' + exercise.assignments.slice(0, 3).map(a => escapeHtml(getUserName(a.user_id))).join(', ') + (exercise.assignments.length > 3 ? ` +${exercise.assignments.length - 3}` : '') : ''}. Archiver préserve leur historique.`
+            : `👥 Ce catalogue est <strong>partagé entre tous les utilisateurs</strong>`
+          }
+        </div>` : ''}
 
         <form id="ex-form" class="ex-editor-form" onsubmit="AdminPage.saveExercise(event)">
 
@@ -236,9 +248,10 @@ const AdminPage = (() => {
               </label>
               <label class="ex-format-type-opt">
                 <input type="radio" name="ex-format-type" id="ex-is-running" value="running" ${exercise.is_running ? 'checked' : ''} onchange="AdminPage.toggleRunningFields()" />
-                <span><strong>🏃 Running</strong><small>20 XP fixes</small></span>
+                <span><strong>🏃 Cardio</strong><small>Session cardio</small></span>
               </label>
             </div>
+
             <div id="ex-muscu-fields" class="ex-muscu-fields" style="display:${exercise.is_running ? 'none' : 'flex'};">
               <div class="ex-metrics-row">
                 <div class="form-group">
@@ -260,6 +273,51 @@ const AdminPage = (() => {
                 <strong>${load}</strong>
               </div>
             </div>
+
+            <div id="ex-cardio-fields" style="display:${exercise.is_running ? 'flex' : 'none'};flex-direction:column;gap:14px;">
+              <div>
+                <p class="ex-editor-section-title" style="margin-bottom:8px;">Activité</p>
+                <div class="ex-format-type-row">
+                  <label class="ex-format-type-opt">
+                    <input type="radio" name="ex-cardio-activity" value="course"
+                      ${getCardioActivity(exercise) === 'course' ? 'checked' : ''}
+                      onchange="AdminPage.setCardioActivity('course')" />
+                    <span><strong>🏃 Course à pied</strong></span>
+                  </label>
+                  <label class="ex-format-type-opt">
+                    <input type="radio" name="ex-cardio-activity" value="velo"
+                      ${getCardioActivity(exercise) === 'velo' ? 'checked' : ''}
+                      onchange="AdminPage.setCardioActivity('velo')" />
+                    <span><strong>🚴 Vélo</strong></span>
+                  </label>
+                  <label class="ex-format-type-opt">
+                    <input type="radio" name="ex-cardio-activity" value="rameur"
+                      ${getCardioActivity(exercise) === 'rameur' ? 'checked' : ''}
+                      onchange="AdminPage.setCardioActivity('rameur')" />
+                    <span><strong>🚣 Rameur</strong></span>
+                  </label>
+                </div>
+              </div>
+              <div class="ex-metrics-row" style="align-items:flex-end;">
+                <div style="flex:1;">
+                  <p class="ex-editor-section-title" style="margin-bottom:8px;">Objectif</p>
+                  <div class="ex-format-type-row">
+                    <label class="ex-format-type-opt">
+                      <input type="radio" name="ex-cardio-metric" value="km" ${exercise.unit === 'km' ? 'checked' : ''} />
+                      <span><strong>📍 Distance</strong><small>km</small></span>
+                    </label>
+                    <label class="ex-format-type-opt">
+                      <input type="radio" name="ex-cardio-metric" value="min" ${exercise.unit !== 'km' ? 'checked' : ''} />
+                      <span><strong>⏱ Durée</strong><small>min</small></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group" style="width:96px;flex-shrink:0;">
+                  <label>Cible</label>
+                  <input type="number" id="ex-cardio-target" value="${exercise.is_running ? exercise.reps : 30}" min="1" max="999" />
+                </div>
+              </div>
+            </div>
           </section>
 
           <section class="ex-editor-section">
@@ -273,7 +331,7 @@ const AdminPage = (() => {
           <div class="ex-editor-footer">
             <p class="form-error" id="ex-form-error"></p>
             <div class="ex-editor-footer-actions">
-              ${editingId ? `<button type="button" class="danger-inline" id="ex-delete-btn" onclick="AdminPage.deleteCurrentExercise()">Supprimer</button>` : ''}
+              ${editingId ? `<button type="button" class="admin-secondary-btn" id="ex-archive-btn" onclick="AdminPage.toggleExerciseState(${exercise.id}, ${!exercise.is_active})">${exercise.is_active ? '🗂 Archiver' : '♻️ Réactiver'}</button>` : ''}
               <button type="button" class="admin-secondary-btn" onclick="AdminPage.closeExModal()">Annuler</button>
               <button type="submit" class="submit-btn" id="ex-submit-btn">${editingId ? 'Enregistrer' : "Créer l'exercice"}</button>
             </div>
@@ -338,16 +396,17 @@ const AdminPage = (() => {
                 <span class="exercise-order-chip">#${exercise.order_index}</span>
                 <span class="exercise-row-state${exercise.is_active ? '' : ' archived'}">${stateLabel}</span>
               </div>
-              <p class="exercise-card-meta-line">${exercise.is_running ? 'Running' : 'Classique'} · ${load} · ${exercise.xp_reward} XP</p>
+              <p class="exercise-card-meta-line">${exercise.is_running ? 'Running' : 'Classique'} · ${load}</p>
               <p class="exercise-card-subline">${renderExerciseAudienceSummary(exercise)}</p>
             </div>
           </div>
 
           <div class="exercise-card-actions exercise-card-actions-simple">
+            ${isCurrentUserAdmin() ? `
             <button type="button" class="exercise-card-btn primary" onclick="AdminPage.openExModal(${exercise.id})">Modifier</button>
             <button type="button" class="exercise-card-btn" onclick="AdminPage.toggleExerciseState(${exercise.id}, ${exercise.is_active ? 'false' : 'true'})">
                 ${exercise.is_active ? 'Archiver' : 'Réactiver'}
-            </button>
+            </button>` : ''}
           </div>
         </div>
       </article>
@@ -456,6 +515,7 @@ const AdminPage = (() => {
   }
 
   function openExModal(id) {
+    if (!isCurrentUserAdmin()) return;
     editingId = id;
     currentView = 'editor';
     renderCurrentView();
@@ -474,9 +534,29 @@ const AdminPage = (() => {
   function toggleRunningFields() {
     const isRunning = !!document.getElementById('ex-is-running')?.checked;
     const muscuFields = document.getElementById('ex-muscu-fields');
+    const cardioFields = document.getElementById('ex-cardio-fields');
     const repsInput = document.getElementById('ex-reps');
     if (muscuFields) muscuFields.style.display = isRunning ? 'none' : 'flex';
+    if (cardioFields) cardioFields.style.display = isRunning ? 'flex' : 'none';
     if (repsInput) repsInput.required = !isRunning;
+    if (isRunning) {
+      // Pre-select Course à pied if no activity is checked yet
+      const anyChecked = document.querySelector('input[name="ex-cardio-activity"]:checked');
+      if (!anyChecked) setCardioActivity('course');
+    }
+  }
+
+  function getCardioActivity(exercise) {
+    const emoji = exercise.emoji || '';
+    if (['🚴', '🚵', '🛵'].includes(emoji)) return 'velo';
+    if (['🚣', '🚣‍♂️', '🚣‍♀️'].includes(emoji)) return 'rameur';
+    return 'course';
+  }
+
+  function setCardioActivity(type) {
+    const emojis = { course: '🏃', velo: '🚴', rameur: '🚣' };
+    const emojiInput = document.getElementById('ex-emoji');
+    if (emojiInput) emojiInput.value = emojis[type] || '🏃';
   }
 
   function toggleAudienceMode() {
@@ -507,7 +587,9 @@ const AdminPage = (() => {
     const isRunning = !!document.getElementById('ex-is-running')?.checked;
     const isTargeted = !!document.getElementById('ex-audience-targeted')?.checked;
     const name = document.getElementById('ex-name')?.value.trim();
-    const reps = isRunning ? 1 : parseInt(document.getElementById('ex-reps')?.value, 10);
+    const reps = isRunning
+      ? (parseInt(document.getElementById('ex-cardio-target')?.value, 10) || 30)
+      : parseInt(document.getElementById('ex-reps')?.value, 10);
 
     if (!name) {
       errorEl.textContent = 'Le nom est obligatoire.';
@@ -539,7 +621,9 @@ const AdminPage = (() => {
       name,
       sets: isRunning ? 1 : parseInt(document.getElementById('ex-sets')?.value, 10) || 1,
       reps,
-      unit: isRunning ? 'session' : (document.getElementById('ex-unit')?.value.trim() || 'répétitions'),
+      unit: isRunning
+        ? (document.querySelector('input[name="ex-cardio-metric"]:checked')?.value || 'min')
+        : (document.getElementById('ex-unit')?.value.trim() || 'répétitions'),
       order_index: parseInt(document.getElementById('ex-order')?.value, 10) || 0,
       schedule: isTargeted ? [] : getActiveDaysFrom(document.getElementById('ex-global-schedule')),
       is_running: isRunning,
@@ -580,9 +664,15 @@ const AdminPage = (() => {
 
   function deleteExercise(id) {
     const exercise = exercises.find(item => item.id === id);
+    const isTargeted = exercise && isTargetedExercise(exercise);
+    const audienceText = !exercise
+      ? 'tous les utilisateurs'
+      : isTargeted
+        ? `${exercise.assignments.length} utilisateur${exercise.assignments.length !== 1 ? 's' : ''}`
+        : 'tous les utilisateurs';
     App.showConfirm(
       'Supprimer définitivement',
-      `Supprimer "${exercise ? escapeHtml(exercise.name) : 'cet exercice'}" ? Cette action est irréversible.`,
+      `Supprimer « ${exercise ? escapeHtml(exercise.name) : 'cet exercice'} » ? Cet exercice est partagé avec ${audienceText}. Si des complétions existent, la suppression sera bloquée — archivez-le plutot.`,
       async ok => {
         if (!ok) return;
         try {
@@ -592,7 +682,7 @@ const AdminPage = (() => {
           App.showToast('Exercice supprimé');
           await refreshData();
         } catch (err) {
-          App.showToast('Erreur: ' + err.message);
+          App.showToast(err.message || 'Erreur serveur');
         }
       }
     );
@@ -718,7 +808,7 @@ const AdminPage = (() => {
 
   function formatExerciseLoad(exercise) {
     return exercise.is_running
-      ? 'Session running'
+      ? `${exercise.reps} ${exercise.unit || 'min'}`
       : `${exercise.sets > 1 ? `${exercise.sets} séries × ` : ''}${exercise.reps} ${escapeHtml(exercise.unit)}`;
   }
 
@@ -753,5 +843,6 @@ const AdminPage = (() => {
     saveExercise,
     toggleExerciseState,
     deleteCurrentExercise,
+    setCardioActivity,
   };
 })();

@@ -162,7 +162,15 @@ function _applyDevMock() {
     return { exercise: cloneDevExercise(exercise) };
   };
   API.adminDeleteExercise  = async (id) => {
-    const index = DEV_FAKE_EXERCISES.findIndex(exercise => exercise.id === Number(id));
+    const exercise = DEV_FAKE_EXERCISES.find(e => e.id === Number(id));
+    if (!exercise) throw new Error('Exercice introuvable');
+    // In dev mode, any exercise with assignments is treated as having history
+    if (exercise.assignments && exercise.assignments.length > 0) {
+      const err = new Error('Cet exercice a un historique utilisateur. Archivez-le plutôt que de le supprimer pour conserver les données.');
+      err.status = 409;
+      throw err;
+    }
+    const index = DEV_FAKE_EXERCISES.findIndex(e => e.id === Number(id));
     if (index >= 0) DEV_FAKE_EXERCISES.splice(index, 1);
     return { ok: true };
   };
@@ -196,21 +204,33 @@ function _applyDevMock() {
   };
 
   // Muscle records
-  API.getMuscleRecords  = async () => ({
-    records: [
-      { id: 1, exercise_name: 'Développé Couché Haltères', category: 'Pecs Triceps', sets: 4, reps: 10, weight_kg: 30, updated_at: new Date().toISOString() },
-      { id: 2, exercise_name: 'Tirage Bucheron',            category: 'Dos Biceps',   sets: 3, reps: 12, weight_kg: 25, updated_at: new Date().toISOString() },
-    ],
-  });
-  API.saveMuscleRecord   = async (uid, data) => ({ record: { id: Date.now(), ...data } });
-  API.deleteMuscleRecord = async () => ({ ok: true });
+  let _devMuscleRecords = [
+    { id: 1, exercise_name: 'Développé Couché Haltères', category: 'Pecs Triceps', sets: 4, reps: 10, weight_kg: 30, updated_at: new Date().toISOString() },
+    { id: 2, exercise_name: 'Développé Couché Haltères', category: 'Pecs Triceps', sets: 5, reps: 5,  weight_kg: 40, updated_at: new Date().toISOString() },
+    { id: 3, exercise_name: 'Tirage Bucheron',            category: 'Dos Biceps',   sets: 3, reps: 12, weight_kg: 25, updated_at: new Date().toISOString() },
+  ];
+  API.getMuscleRecords  = async () => ({ records: _devMuscleRecords.map(r => ({ ...r })) });
+  API.saveMuscleRecord  = async (uid, data) => {
+    const rec = { id: Date.now(), ...data, updated_at: new Date().toISOString() };
+    _devMuscleRecords.push(rec);
+    return { record: rec };
+  };
+  API.updateMuscleRecord = async (uid, recordId, data) => {
+    const idx = _devMuscleRecords.findIndex(r => r.id === Number(recordId));
+    if (idx >= 0) _devMuscleRecords[idx] = { ..._devMuscleRecords[idx], ...data, updated_at: new Date().toISOString() };
+    return { record: _devMuscleRecords[idx] || {} };
+  };
+  API.deleteMuscleRecord = async (uid, recordId) => {
+    _devMuscleRecords = _devMuscleRecords.filter(r => r.id !== Number(recordId));
+    return { ok: true };
+  };
 
   // Mini-game
   API.getMinigameStatus  = async () => ({ eligible: true, last_played: null, level: 3 });
   API.postMinigameResult = async () => ({ xp_earned: 50, new_level: 9 });
 
   // Wizz
-  API.sendWizz    = async () => ({ ok: true });
+  API.sendWizz    = async (targetId, key, customText) => ({ ok: true, tokens: 4 });
   API.getWizz     = async () => ({ wizzes: [], unread: 0 });
   API.markWizzRead = async () => ({ ok: true });
 

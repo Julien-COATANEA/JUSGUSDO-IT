@@ -192,14 +192,14 @@ const WorkoutPage = (() => {
             : dayExercises.map(ex => {
             const checked = entries[`${key}_${ex.id}`] === true;
             const metaTags = ex.is_running
-              ? `<span class="exercise-tag running">🏃 Course</span>`
+              ? `<span class="exercise-tag running">${escapeHtml(ex.emoji)} ${ex.reps}\u00a0${escapeHtml(ex.unit || 'min')}</span>`
               : `<span class="exercise-tag"><span class="exercise-tag-val">${ex.sets}</span> série${ex.sets > 1 ? 's' : ''}</span>
                  <span class="exercise-tag"><span class="exercise-tag-val">${ex.reps}</span> rép.</span>`;
             return `
               <div class="exercise-item${checked ? ' checked' : ''}${isPast ? ' disabled' : ''}"
                    id="ex-${key}-${ex.id}"
                    onclick="WorkoutPage.toggleExercise('${key}', ${ex.id}, this)">
-                <div class="exercise-icon">${ex.is_running ? '🏃' : ex.emoji}</div>
+                <div class="exercise-icon">${escapeHtml(ex.emoji)}</div>
                 <div class="exercise-info">
                   <div class="exercise-name">${escapeHtml(ex.name)}</div>
                   <div class="exercise-meta">${metaTags}</div>

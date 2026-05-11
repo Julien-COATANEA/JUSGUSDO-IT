@@ -33,12 +33,10 @@ router.get('/exercises', requireAdmin, async (req, res) => {
 
 // POST /api/admin/exercises — create exercise
 router.post('/exercises', requireAdmin, async (req, res) => {
-  const { name, emoji, sets, reps, unit, xp_reward, order_index, schedule, is_running } = req.body;
+  const { name, emoji, sets, reps, unit, order_index, schedule, is_running } = req.body;
   if (!name || !reps) {
     return res.status(400).json({ error: 'name et reps requis' });
   }
-  // is_running sessions get 20 XP, others always 10
-  const xp = is_running ? 20 : 10;
   try {
     const result = await db.query(
       `INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index, schedule, is_running)
@@ -49,7 +47,7 @@ router.post('/exercises', requireAdmin, async (req, res) => {
         sets || 1,
         reps,
         unit || 'répétitions',
-        xp,
+        10,
         order_index || 0,
         Array.isArray(schedule) ? schedule : [],
         is_running || false,
@@ -66,8 +64,6 @@ router.post('/exercises', requireAdmin, async (req, res) => {
 router.put('/exercises/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, emoji, sets, reps, unit, order_index, is_active, schedule, is_running } = req.body;
-  // Recompute XP based on is_running if provided, otherwise keep existing
-  const xpExpr = typeof is_running === 'boolean' ? (is_running ? 20 : 10) : null;
   try {
     const result = await db.query(
       `UPDATE exercises
@@ -79,10 +75,9 @@ router.put('/exercises/:id', requireAdmin, async (req, res) => {
            order_index = COALESCE($6, order_index),
            is_active = COALESCE($7, is_active),
            schedule = COALESCE($8, schedule),
-           is_running = COALESCE($9, is_running),
-           xp_reward = COALESCE($10, xp_reward)
-       WHERE id = $11 RETURNING *`,
-      [name ?? null, emoji ?? null, sets ?? null, reps ?? null, unit ?? null, order_index ?? null, is_active ?? null, Array.isArray(schedule) ? schedule : null, is_running ?? null, xpExpr, id]
+           is_running = COALESCE($9, is_running)
+       WHERE id = $10 RETURNING *`,
+      [name ?? null, emoji ?? null, sets ?? null, reps ?? null, unit ?? null, order_index ?? null, is_active ?? null, Array.isArray(schedule) ? schedule : null, is_running ?? null, id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Exercice introuvable' });
     res.json({ exercise: result.rows[0] });
@@ -92,11 +87,20 @@ router.put('/exercises/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/admin/exercises/:id — hard delete
+// DELETE /api/admin/exercises/:id — hard delete only if no user history
+// If checklist entries exist, refuse with 409 so callers know to archive instead.
 router.delete('/exercises/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
-    await db.query('DELETE FROM checklist_entries WHERE exercise_id = $1', [id]);
+    const historyCheck = await db.query(
+      'SELECT COUNT(*) AS cnt FROM checklist_entries WHERE exercise_id = $1',
+      [id]
+    );
+    if (parseInt(historyCheck.rows[0].cnt, 10) > 0) {
+      return res.status(409).json({
+        error: 'Cet exercice a un historique utilisateur. Archivez-le plutôt que de le supprimer pour conserver les données.',
+      });
+    }
     await db.query('DELETE FROM exercises WHERE id = $1', [id]);
     res.json({ ok: true });
   } catch (err) {

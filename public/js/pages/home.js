@@ -184,6 +184,20 @@ const HomePage = (() => {
        </button>`
     ).join('');
 
+    const customHtml = `
+      <div class="wizz-custom-block">
+        <div class="wizz-custom-label">✍️ Message personnalisé</div>
+        <textarea id="wizz-custom-input" class="wizz-custom-textarea" maxlength="200" placeholder="Écris ton message ici…" rows="3"></textarea>
+        <div class="wizz-custom-footer">
+          <span id="wizz-custom-count" class="wizz-custom-count">0 / 200</span>
+          <button class="wizz-msg-btn wizz-custom-send-btn" onclick="HomePage.sendWizz(${targetId},'custom',this)">
+            <span class="wizz-msg-emoji">✍️</span>
+            <span class="wizz-msg-text">Envoyer ce message</span>
+            <span class="wizz-msg-cost">💎×1</span>
+          </button>
+        </div>
+      </div>`;
+
     const overlay = document.createElement('div');
     overlay.id = 'wizz-overlay';
     overlay.className = 'wizz-overlay';
@@ -196,21 +210,42 @@ const HomePage = (() => {
         </div>
         ${tokens < 1
           ? `<div class="wizz-no-gems">Pas assez de gemmes 😢<br><small>Gagne des 💎 au mini-jeu !</small></div>`
-          : `<div class="wizz-msgs-list">${msgsHtml}</div>`
+          : `<div class="wizz-msgs-list">${msgsHtml}${customHtml}</div>`
         }
         <div id="wizz-feedback" class="wizz-feedback" style="display:none"></div>
         <button class="wizz-close-btn" onclick="HomePage.closeWizzSheet()">Fermer</button>
       </div>`;
     overlay.addEventListener('click', closeWizzSheet);
     document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('wizz-visible'));
+    requestAnimationFrame(() => {
+      overlay.classList.add('wizz-visible');
+      const ta = overlay.querySelector('#wizz-custom-input');
+      const counter = overlay.querySelector('#wizz-custom-count');
+      if (ta && counter) {
+        ta.addEventListener('input', () => {
+          counter.textContent = `${ta.value.length} / 200`;
+          ta.classList.remove('wizz-custom-error');
+        });
+      }
+    });
   }
 
   async function sendWizz(targetId, key, btnEl) {
+    let customText = null;
+    if (key === 'custom') {
+      const ta = document.getElementById('wizz-custom-input');
+      customText = ta ? ta.value.trim() : '';
+      if (!customText) {
+        ta.classList.add('wizz-custom-error');
+        ta.focus();
+        return;
+      }
+      ta.classList.remove('wizz-custom-error');
+    }
     const allBtns = document.querySelectorAll('.wizz-msg-btn');
     allBtns.forEach(b => b.disabled = true);
     try {
-      const res = await API.sendWizz(targetId, key);
+      const res = await API.sendWizz(targetId, key, customText);
       // Update local token count
       const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
       me.tokens = res.tokens;

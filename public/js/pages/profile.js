@@ -480,13 +480,19 @@ const ProfilePage = (() => {
   }
 
   function _renderMuscuSessions(records = []) {
+    // Group records by exercise name — multiple records allowed per exercise
     const recMap = {};
-    records.forEach(r => { recMap[r.exercise_name.toLowerCase()] = r; });
+    records.forEach(r => {
+      const key = r.exercise_name.toLowerCase();
+      if (!recMap[key]) recMap[key] = [];
+      recMap[key].push(r);
+    });
+
     return `
       <div class="muscu-sessions-label">📋 Programme des séances</div>
       <div class="muscu-sessions">
         ${_MUSCU_SESSIONS.map((session, idx) => {
-          const recCount = session.exercises.filter(ex => recMap[ex.toLowerCase()]).length;
+          const recCount = session.exercises.filter(ex => (recMap[ex.toLowerCase()] || []).length > 0).length;
           return `
           <div class="muscu-session-card" id="mscard-${idx}" style="--session-color:${session.color}">
             <div class="muscu-session-header" onclick="this.closest('.muscu-session-card').classList.toggle('open')">
@@ -500,32 +506,41 @@ const ProfilePage = (() => {
             <div class="muscu-session-body">
               <div class="muscu-session-body-inner">
                 ${session.exercises.map(ex => {
-                  const rec = recMap[ex.toLowerCase()];
-                  const hasRec = !!rec;
-                  const weightFmt = hasRec ? (rec.weight_kg % 1 === 0 ? rec.weight_kg : rec.weight_kg.toFixed(1)) : null;
-                  const repsFmt = (hasRec && rec.reps != null) ? rec.reps : null;
-                  const recDateStr = (hasRec && rec.updated_at)
-                    ? new Date(rec.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-                    : null;
+                  const recs   = recMap[ex.toLowerCase()] || [];
                   const safeEx  = _escape(ex).replace(/'/g, "\\'");
                   const safeCat = _escape(session.name).replace(/'/g, "\\'");
-                  const clickAttr = _isOwnProfile
-                    ? (hasRec
-                        ? `onclick="ProfilePage.showEditRecordForm(${rec.id}, '${safeEx}', ${rec.sets}, ${rec.reps != null ? rec.reps : 'null'}, ${rec.weight_kg}, '${safeCat}')"`
-                        : `onclick="ProfilePage.openSessionRecord('${safeEx}', '${safeCat}')"`)
-                    : '';
-                  return `
-                  <div class="muscu-ex-row${_isOwnProfile ? ' muscu-ex-tappable' : ''}${hasRec ? ' has-record' : ''}" ${clickAttr}>
-                    <div class="muscu-ex-left">
-                      <span class="muscu-ex-name">${_escape(ex)}</span>
-                      ${hasRec ? `<div class="muscu-ex-tags">
+
+                  const recordsHtml = recs.map(rec => {
+                    const weightFmt  = rec.weight_kg % 1 === 0 ? rec.weight_kg : rec.weight_kg.toFixed(1);
+                    const repsFmt    = rec.reps != null ? rec.reps : null;
+                    const recDateStr = rec.updated_at
+                      ? new Date(rec.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+                      : null;
+                    return `
+                    <div class="muscu-ex-record-row">
+                      <div class="muscu-ex-tags">
                         <span class="muscu-ex-tag"><span class="muscu-ex-tag-val">${rec.sets}</span> série${rec.sets > 1 ? 's' : ''}</span>
                         ${repsFmt !== null ? `<span class="muscu-ex-tag"><span class="muscu-ex-tag-val">${repsFmt}</span> rép.</span>` : ''}
                         <span class="muscu-ex-tag weight"><span class="muscu-ex-tag-val">${weightFmt}</span> kg</span>
                         ${recDateStr ? `<span class="muscu-ex-tag date">${recDateStr}</span>` : ''}
-                      </div>` : `<span class="muscu-ex-empty">Aucun record</span>`}
+                      </div>
+                      ${_isOwnProfile ? `
+                      <div class="mr2-actions">
+                        <button class="mr-btn-icon" title="Modifier" onclick="event.stopPropagation();ProfilePage.showEditRecordForm(${rec.id},'${safeEx}',${rec.sets},${rec.reps != null ? rec.reps : 'null'},${rec.weight_kg},'${safeCat}')">✏️</button>
+                        <button class="mr-btn-icon mr-btn-del" title="Supprimer" onclick="event.stopPropagation();ProfilePage.deleteRecord(${rec.id})">🗑️</button>
+                      </div>` : ''}
+                    </div>`;
+                  }).join('');
+
+                  return `
+                  <div class="muscu-ex-row${recs.length > 0 ? ' has-record' : ''}">
+                    <div class="muscu-ex-left">
+                      <div class="muscu-ex-name-row">
+                        <span class="muscu-ex-name">${_escape(ex)}</span>
+                        ${_isOwnProfile ? `<button class="mr-btn-icon mr-btn-add" title="Ajouter un record" onclick="event.stopPropagation();ProfilePage.openSessionRecord('${safeEx}','${safeCat}')">＋</button>` : ''}
+                      </div>
+                      ${recs.length > 0 ? recordsHtml : `<span class="muscu-ex-empty">Aucun record</span>`}
                     </div>
-                    ${_isOwnProfile ? `<span class="muscu-ex-action${hasRec ? ' has-rec' : ''}">${hasRec ? '✏️' : '＋'}</span>` : ''}
                   </div>`;
                 }).join('')}
               </div>
@@ -557,7 +572,9 @@ const ProfilePage = (() => {
     }
 
     const items = wizzes.map(t => {
-      const msg  = MSGS[t.message_key] || { text: t.message_key, emoji: '⚡' };
+      const msg  = t.message_key === 'custom' && t.custom_text
+        ? { text: t.custom_text, emoji: '✍️' }
+        : (MSGS[t.message_key] || { text: t.message_key, emoji: '⚡' });
       const date = new Date(t.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
       return `<div class="wizz-received-item${t.read ? '' : ' wizz-unread'}">
         <span class="wizz-item-emoji">${msg.emoji}</span>
@@ -584,26 +601,43 @@ const ProfilePage = (() => {
       `<option value="${c.name}">${c.icon} ${c.name}</option>`
     ).join('');
 
+    // Group custom records by exercise name (multiple records per exercise allowed)
+    const extraByName = {};
+    extraRecords.forEach(r => {
+      const key = r.exercise_name.toLowerCase();
+      if (!extraByName[key]) extraByName[key] = { name: r.exercise_name, category: r.category, records: [] };
+      extraByName[key].records.push(r);
+    });
+    const extraGroups = Object.values(extraByName);
+
     let extraHtml = '';
-    if (extraRecords.length > 0) {
-      const items = extraRecords.map(r => {
-        const weightFmt    = r.weight_kg % 1 === 0 ? r.weight_kg : r.weight_kg.toFixed(1);
-        const safeCategory = _escape(r.category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name).replace(/'/g, "\\'");
-        const safeName     = _escape(r.exercise_name).replace(/'/g, "\\'");
-        return `
+    if (extraGroups.length > 0) {
+      const items = extraGroups.map(group => {
+        const safeCategory = _escape(group.category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name).replace(/'/g, "\\'");
+        const safeName     = _escape(group.name).replace(/'/g, "\\'");
+        const rowsHtml = group.records.map(r => {
+          const weightFmt = r.weight_kg % 1 === 0 ? r.weight_kg : r.weight_kg.toFixed(1);
+          const recCat    = _escape(r.category || group.category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name).replace(/'/g, "\\'");
+          return `
           <div class="mr2-card">
             <div class="mr2-card-left">
-              <div class="mr2-exercise-name">${_escape(r.exercise_name)}</div>
-            </div>
-            <div class="mr2-card-right">
               <span class="mr2-badge mr2-badge-sets">🔁 ${r.sets} série${r.sets > 1 ? 's' : ''}${r.reps != null ? ` · ${r.reps} rép` : ''}</span>
               <span class="mr2-badge mr2-badge-weight">${weightFmt} kg</span>
-              ${_isOwnProfile ? `
-              <div class="mr2-actions">
-                <button class="mr-btn-icon" title="Modifier" onclick="ProfilePage.showEditRecordForm(${r.id}, '${safeName}', ${r.sets}, ${r.reps != null ? r.reps : "''"},  ${r.weight_kg}, '${safeCategory}')">✏️</button>
-                <button class="mr-btn-icon mr-btn-del" title="Supprimer" onclick="ProfilePage.deleteRecord(${r.id})">🗑️</button>
-              </div>` : ''}
             </div>
+            ${_isOwnProfile ? `
+            <div class="mr2-actions">
+              <button class="mr-btn-icon" title="Modifier" onclick="ProfilePage.showEditRecordForm(${r.id}, '${safeName}', ${r.sets}, ${r.reps != null ? r.reps : "''"}, ${r.weight_kg}, '${recCat}')">✏️</button>
+              <button class="mr-btn-icon mr-btn-del" title="Supprimer" onclick="ProfilePage.deleteRecord(${r.id})">🗑️</button>
+            </div>` : ''}
+          </div>`;
+        }).join('');
+        return `
+          <div class="mr2-exercise-group">
+            <div class="mr2-exercise-name-row">
+              <span class="mr2-exercise-name">${_escape(group.name)}</span>
+              ${_isOwnProfile ? `<button class="mr-btn-icon mr-btn-add" title="Ajouter" onclick="ProfilePage.openSessionRecord('${safeName}', '${safeCategory}')">＋</button>` : ''}
+            </div>
+            ${rowsHtml}
           </div>`;
       }).join('');
       extraHtml = `
@@ -611,7 +645,7 @@ const ProfilePage = (() => {
           <div class="mr2-group-header" style="--cat-color:var(--text3)">
             <span class="mr2-group-icon">🎯</span>
             <span class="mr2-group-name">Personnalisés</span>
-            <span class="mr2-group-count">${extraRecords.length}</span>
+            <span class="mr2-group-count">${extraGroups.length}</span>
           </div>
           <div class="mr2-group-cards">${items}</div>
         </div>`;
@@ -747,6 +781,7 @@ const ProfilePage = (() => {
     const reps     = repsRaw !== '' ? parseInt(repsRaw, 10) : null;
     const weight   = parseFloat(document.getElementById('mr-weight').value);
     const errEl    = document.getElementById('mr-form-error');
+    const editingId = document.getElementById('mr-editing-id').value;
 
     if (!name) { errEl.textContent = 'Nom de l\'exercice requis'; return; }
     if (!sets || sets < 1) { errEl.textContent = 'Nombre de séries invalide'; return; }
@@ -757,7 +792,11 @@ const ProfilePage = (() => {
     if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
     errEl.textContent = '';
     try {
-      await API.saveMuscleRecord(_profileUserId, { exercise_name: name, sets, reps, weight_kg: weight, category });
+      if (editingId) {
+        await API.updateMuscleRecord(_profileUserId, editingId, { sets, reps, weight_kg: weight, notes: null, category });
+      } else {
+        await API.saveMuscleRecord(_profileUserId, { exercise_name: name, sets, reps, weight_kg: weight, category });
+      }
       cancelRecordForm();
       await _refreshMuscleRecords();
     } catch (err) {
