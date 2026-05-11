@@ -145,7 +145,7 @@ const AdminPage = (() => {
         <div class="ex-admin-kpis">
           ${renderKpiCard(stats.total, 'Total')}
           ${renderKpiCard(stats.active, 'Actifs')}
-          ${renderKpiCard(stats.targeted, 'Ciblés')}
+          ${renderKpiCard(stats.targeted, 'Assignés')}
           ${renderKpiCard(stats.running, 'Running')}
         </div>
       </section>
