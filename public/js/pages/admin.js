@@ -418,9 +418,14 @@ const AdminPage = (() => {
       return `Tous les utilisateurs · ${formatSchedule(exercise.schedule)}`;
     }
 
-    const people = exercise.assignments.slice(0, 2).map(assignment => (
-      `${escapeHtml(getUserName(assignment.user_id))}: ${formatSchedule(assignment.schedule)}`
-    ));
+    const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
+    const people = exercise.assignments.slice(0, 2).map(assignment => {
+      const name = escapeHtml(getUserName(assignment.user_id));
+      const label = assignment.user_id === me.id
+        ? `<strong class="me-highlight">${name}</strong>`
+        : name;
+      return `${label}: ${formatSchedule(assignment.schedule)}`;
+    });
     const extraCount = Math.max(0, exercise.assignments.length - 2);
     return `${people.join(' · ')}${extraCount ? ` · +${extraCount}` : ''}`;
   }

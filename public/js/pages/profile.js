@@ -496,12 +496,19 @@ const ProfilePage = (() => {
           return `
           <div class="muscu-session-card" id="mscard-${idx}" style="--session-color:${session.color}">
             <div class="muscu-session-header" onclick="this.closest('.muscu-session-card').classList.toggle('open')">
-              <span class="muscu-session-icon">${session.icon}</span>
-              <span class="muscu-session-name">${session.name}</span>
+              <div class="muscu-session-icon-wrap">
+                <span class="muscu-session-icon">${session.icon}</span>
+              </div>
+              <div class="muscu-session-title-block">
+                <span class="muscu-session-name">${session.name}</span>
+                <span class="muscu-session-sub">${session.exercises.length} exercices</span>
+              </div>
               ${recCount > 0
-                ? `<span class="muscu-session-recs" style="color:${session.color}">${recCount}/${session.exercises.length} PR</span>`
+                ? `<span class="muscu-session-recs" style="color:${session.color};background:color-mix(in srgb,${session.color} 15%,transparent)">${recCount}/${session.exercises.length} PR</span>`
                 : `<span class="muscu-session-count">${session.exercises.length}</span>`}
-              <span class="muscu-session-chevron">▾</span>
+              <span class="muscu-session-chevron">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </span>
             </div>
             <div class="muscu-session-body">
               <div class="muscu-session-body-inner">

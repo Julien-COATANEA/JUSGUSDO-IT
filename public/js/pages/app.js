@@ -181,10 +181,11 @@ const WorkoutPage = (() => {
             <div class="day-date">${date.getDate()} ${MONTHS_FR[date.getMonth()]}</div>
           </div>
           ${isToday ? '<span class="today-badge">Aujourd\'hui</span>' : ''}
+          ${isFuture ? '<span class="preview-badge">À venir</span>' : ''}
           <div class="day-ring" style="--ring-p:${ringPct};--ring-c:${ringColor}">
             <span class="day-ring-val">${doneCount}/${dayExercises.length}</span>
           </div>
-          ${!isFuture ? `<div class="day-toggle">▼</div>` : ''}
+          <div class="day-toggle">▼</div>
         </div>
         <div class="exercises-list">
           ${dayExercises.length === 0
@@ -196,7 +197,7 @@ const WorkoutPage = (() => {
               : `<span class="exercise-tag"><span class="exercise-tag-val">${ex.sets}</span> série${ex.sets > 1 ? 's' : ''}</span>
                  <span class="exercise-tag"><span class="exercise-tag-val">${ex.reps}</span> rép.</span>`;
             return `
-              <div class="exercise-item${checked ? ' checked' : ''}${isPast ? ' disabled' : ''}"
+              <div class="exercise-item${checked ? ' checked' : ''}${isPast ? ' disabled' : ''}${isFuture ? ' future-day' : ''}"
                    id="ex-${key}-${ex.id}"
                    onclick="WorkoutPage.toggleExercise('${key}', ${ex.id}, this)">
                 <div class="exercise-icon">${escapeHtml(ex.emoji)}</div>
@@ -255,15 +256,15 @@ const WorkoutPage = (() => {
 
   function toggleDay(headerEl) {
     const card = headerEl.closest('.day-card');
-    if (card.classList.contains('future')) return;
     card.classList.toggle('open');
   }
 
   async function toggleExercise(dateStr, exerciseId, el) {
-    // Block past days
+    // Block past and future days — only today is interactive
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const [y, m, d] = dateStr.split('-').map(Number);
-    if (new Date(y, m - 1, d) < today) return;
+    const target = new Date(y, m - 1, d);
+    if (target.getTime() !== today.getTime()) return;
 
     const key = `${dateStr}_${exerciseId}`;
     const wasChecked = entries[key] === true;
