@@ -145,7 +145,7 @@ const AdminPage = (() => {
         <div class="ex-admin-kpis">
           ${renderKpiCard(stats.total, 'Total')}
           ${renderKpiCard(stats.active, 'Actifs')}
-          ${renderKpiCard(stats.targeted, 'Assignés')}
+          ${renderKpiCard(stats.mine, 'Mes exercices')}
           ${renderKpiCard(stats.running, 'Running')}
         </div>
       </section>
@@ -478,10 +478,14 @@ const AdminPage = (() => {
   }
 
   function buildStats() {
+    const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
     return {
       total: exercises.length,
       active: exercises.filter(exercise => exercise.is_active).length,
-      targeted: exercises.filter(exercise => isTargetedExercise(exercise) && exercise.is_active).length,
+      mine: exercises.filter(exercise => exercise.is_active && (
+        !isTargetedExercise(exercise) ||
+        exercise.assignments.some(a => a.user_id === me.id)
+      )).length,
       running: exercises.filter(exercise => exercise.is_running && exercise.is_active).length,
     };
   }
