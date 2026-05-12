@@ -1,6 +1,7 @@
 // ── Muscu page (personal strength records) ──────────────────
 const MuscuPage = (() => {
   let _userId = null;
+  let _customSessionExercises = {}; // { [sessionName]: string[] } – stored in localStorage
 
   // ── Session definitions ──────────────────────────────────
   const _MUSCU_SESSIONS = [
@@ -39,6 +40,21 @@ const MuscuPage = (() => {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  function _loadCustomExercises() {
+    try {
+      const stored = localStorage.getItem('muscu_custom_exercises');
+      _customSessionExercises = stored ? JSON.parse(stored) : {};
+    } catch { _customSessionExercises = {}; }
+  }
+
+  function _saveCustomExercises() {
+    localStorage.setItem('muscu_custom_exercises', JSON.stringify(_customSessionExercises));
+  }
+
+  function _getSessionExercises(session) {
+    return [...session.exercises, ...(_customSessionExercises[session.name] || [])];
+  }
+
   // ── Render shell ─────────────────────────────────────────
   function render() {
     return `
@@ -48,9 +64,6 @@ const MuscuPage = (() => {
             <span class="header-username">Muscu</span>
             <span class="header-rank" id="muscu-header-sub">Chargement…</span>
           </div>
-          <button class="icon-btn muscu-add-top-btn" onclick="MuscuPage.showAddRecordForm()" title="Ajouter un record">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
         </header>
         <div id="muscu-content" style="padding:0 0 100px">
           <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
@@ -66,6 +79,7 @@ const MuscuPage = (() => {
 
   // ── Init ─────────────────────────────────────────────────
   async function init() {
+    _loadCustomExercises();
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     _userId = currentUser.id;
 
@@ -106,9 +120,9 @@ const MuscuPage = (() => {
 
     // Summary stats
     const totalPRs    = records.length;
-    const totalExs    = _MUSCU_SESSIONS.reduce((n, s) => n + s.exercises.length, 0);
+    const totalExs    = _MUSCU_SESSIONS.reduce((n, s) => n + _getSessionExercises(s).length, 0);
     const sessionExNames = new Set();
-    _MUSCU_SESSIONS.forEach(s => s.exercises.forEach(ex => sessionExNames.add(ex.toLowerCase())));
+    _MUSCU_SESSIONS.forEach(s => _getSessionExercises(s).forEach(ex => sessionExNames.add(ex.toLowerCase())));
     const customCount = records.filter(r => !sessionExNames.has(r.exercise_name.toLowerCase())).length;
 
     return `
@@ -131,7 +145,6 @@ const MuscuPage = (() => {
 
       <div style="padding:4px 16px 20px">
         ${_renderMuscuSessions(records, historyByName)}
-        ${_renderCustomSection(records)}
       </div>
 
       ${_renderFormModal()}
@@ -172,7 +185,9 @@ const MuscuPage = (() => {
       <div class="muscu-sessions-label">📋 Programme des séances</div>
       <div class="muscu-sessions">
         ${_MUSCU_SESSIONS.map((session, idx) => {
-          const recCount = session.exercises.filter(ex => (recMap[ex.toLowerCase()] || []).length > 0).length;
+          const allExercises = _getSessionExercises(session);
+          const customExSet  = new Set((_customSessionExercises[session.name] || []).map(e => e.toLowerCase()));
+          const recCount     = allExercises.filter(ex => (recMap[ex.toLowerCase()] || []).length > 0).length;
           return `
           <div class="muscu-session-card" id="mscard-${idx}" style="--session-color:${session.color}">
             <div class="muscu-session-header" onclick="this.closest('.muscu-session-card').classList.toggle('open')">
@@ -181,21 +196,22 @@ const MuscuPage = (() => {
               </div>
               <div class="muscu-session-title-block">
                 <span class="muscu-session-name">${session.name}</span>
-                <span class="muscu-session-sub">${session.exercises.length} exercices</span>
+                <span class="muscu-session-sub">${allExercises.length} exercice${allExercises.length > 1 ? 's' : ''}</span>
               </div>
               ${recCount > 0
-                ? `<span class="muscu-session-recs" style="color:${session.color};background:color-mix(in srgb,${session.color} 15%,transparent)">${recCount}/${session.exercises.length} PR</span>`
-                : `<span class="muscu-session-count">${session.exercises.length}</span>`}
+                ? `<span class="muscu-session-recs" style="color:${session.color};background:color-mix(in srgb,${session.color} 15%,transparent)">${recCount}/${allExercises.length} PR</span>`
+                : `<span class="muscu-session-count">${allExercises.length}</span>`}
               <span class="muscu-session-chevron">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
               </span>
             </div>
             <div class="muscu-session-body">
               <div class="muscu-session-body-inner">
-                ${session.exercises.map(ex => {
-                  const recs    = recMap[ex.toLowerCase()] || [];
-                  const safeEx  = _escape(ex).replace(/'/g, "\\'");
-                  const safeCat = _escape(session.name).replace(/'/g, "\\'");
+                ${allExercises.map(ex => {
+                  const recs      = recMap[ex.toLowerCase()] || [];
+                  const safeEx    = _escape(ex).replace(/'/g, "\\'");
+                  const safeCat   = _escape(session.name).replace(/'/g, "\\'");
+                  const isCustom  = customExSet.has(ex.toLowerCase());
 
                   const recordsHtml = recs.map(rec => {
                     const wFmt  = rec.weight_kg % 1 === 0 ? rec.weight_kg : rec.weight_kg.toFixed(1);
@@ -224,11 +240,26 @@ const MuscuPage = (() => {
                         <span class="muscu-ex-name">${_escape(ex)}</span>
                         ${historyByName[ex.toLowerCase()]?.length >= 2 ? _renderSparkline(historyByName[ex.toLowerCase()]) : ''}
                         <button class="mr-btn-icon mr-btn-add" title="Ajouter un record" onclick="event.stopPropagation();MuscuPage.openSessionRecord('${safeEx}','${safeCat}')">＋</button>
+                        ${isCustom ? `<button class="mr-btn-icon muscu-ex-delete-btn" title="Retirer cet exercice" onclick="event.stopPropagation();MuscuPage.removeExerciseFromSession(${idx},'${safeEx}')">✕</button>` : ''}
                       </div>
                       ${recs.length > 0 ? recordsHtml : `<span class="muscu-ex-empty">Aucun record</span>`}
                     </div>
                   </div>`;
                 }).join('')}
+              </div>
+              <div class="muscu-add-ex-row">
+                <button class="muscu-add-ex-btn" onclick="event.stopPropagation();MuscuPage.toggleAddExerciseInput(${idx})">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Ajouter un exercice
+                </button>
+                <div class="muscu-add-ex-form" id="muscu-add-ex-form-${idx}" style="display:none">
+                  <input id="muscu-add-ex-input-${idx}" class="muscu-add-ex-input" type="text" placeholder="Nom de l'exercice…" maxlength="100" autocomplete="off"
+                    onkeydown="if(event.key==='Enter')MuscuPage.confirmAddExercise(${idx});if(event.key==='Escape')MuscuPage.cancelAddExercise(${idx})" />
+                  <button class="muscu-add-ex-confirm" onclick="MuscuPage.confirmAddExercise(${idx})" title="Confirmer">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                  <button class="muscu-add-ex-cancel" onclick="MuscuPage.cancelAddExercise(${idx})" title="Annuler">✕</button>
+                </div>
               </div>
             </div>
           </div>`;
@@ -240,7 +271,7 @@ const MuscuPage = (() => {
   // ── Custom exercises section ──────────────────────────────
   function _renderCustomSection(records) {
     const sessionExNames = new Set();
-    _MUSCU_SESSIONS.forEach(s => s.exercises.forEach(ex => sessionExNames.add(ex.toLowerCase())));
+    _MUSCU_SESSIONS.forEach(s => _getSessionExercises(s).forEach(ex => sessionExNames.add(ex.toLowerCase())));
     const extraRecords = records.filter(r => !sessionExNames.has(r.exercise_name.toLowerCase()));
 
     const extraByName = {};
@@ -485,5 +516,54 @@ const MuscuPage = (() => {
     container.innerHTML = _renderPage(records, muscleHistory);
   }
 
-  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord };
+  // ── Add / remove exercises from sessions ─────────────────
+  function toggleAddExerciseInput(sessionIdx) {
+    const form = document.getElementById(`muscu-add-ex-form-${sessionIdx}`);
+    const btn  = form ? form.previousElementSibling : null;
+    if (!form) return;
+    const visible = form.style.display !== 'none';
+    form.style.display = visible ? 'none' : 'flex';
+    if (btn) btn.style.display = visible ? '' : 'none';
+    if (!visible) {
+      const input = document.getElementById(`muscu-add-ex-input-${sessionIdx}`);
+      if (input) { input.value = ''; setTimeout(() => input.focus(), 50); }
+    }
+  }
+
+  function cancelAddExercise(sessionIdx) {
+    const form = document.getElementById(`muscu-add-ex-form-${sessionIdx}`);
+    const btn  = form ? form.previousElementSibling : null;
+    if (form) form.style.display = 'none';
+    if (btn) btn.style.display = '';
+  }
+
+  function confirmAddExercise(sessionIdx) {
+    const input = document.getElementById(`muscu-add-ex-input-${sessionIdx}`);
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    const session = _MUSCU_SESSIONS[sessionIdx];
+    if (!session) return;
+    const existing = _getSessionExercises(session).map(e => e.toLowerCase());
+    if (existing.includes(name.toLowerCase())) {
+      if (typeof App !== 'undefined') App.showToast('Exercice déjà présent dans cette séance');
+      return;
+    }
+    if (!_customSessionExercises[session.name]) _customSessionExercises[session.name] = [];
+    _customSessionExercises[session.name].push(name);
+    _saveCustomExercises();
+    _refresh();
+  }
+
+  function removeExerciseFromSession(sessionIdx, exName) {
+    const session = _MUSCU_SESSIONS[sessionIdx];
+    if (!session) return;
+    const customs = _customSessionExercises[session.name];
+    if (!customs) return;
+    _customSessionExercises[session.name] = customs.filter(e => e.toLowerCase() !== exName.toLowerCase());
+    _saveCustomExercises();
+    _refresh();
+  }
+
+  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession };
 })();
