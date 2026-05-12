@@ -157,10 +157,9 @@ const AdminPage = (() => {
         </label>
 
         <div class="exercise-filter-stack">
-          ${renderFilterGroup('Assignation', 'audience', [
+          ${renderFilterGroup('Personne', 'audience', [
             { value: 'all', label: 'Tous' },
-            { value: 'mine', label: 'Mes assignations' },
-            { value: 'unassigned', label: 'Non assignés' },
+            ...users.map(u => ({ value: `user-${u.id}`, label: escapeHtml(u.username) })),
           ])}
           ${renderFilterGroup('État', 'status', [
             { value: 'active', label: 'Actifs' },
@@ -373,8 +372,11 @@ const AdminPage = (() => {
   function renderFilterSummary() {
     const summary = [];
     summary.push(filters.status === 'archived' ? 'Archivés' : (filters.status === 'all' ? 'Tous' : 'Actifs'));
-    if (filters.audience === 'mine') summary.push('Mes exercices');
-    if (filters.audience === 'unassigned') summary.push('Non assignés');
+    if (filters.audience !== 'all' && filters.audience.startsWith('user-')) {
+      const uid = parseInt(filters.audience.slice(5), 10);
+      const u = users.find(u => u.id === uid);
+      if (u) summary.push(escapeHtml(u.username));
+    }
     if (filters.type === 'running') summary.push('Running');
     if (filters.type === 'classic') summary.push('Classiques');
     if (filters.query.trim()) summary.push(`Recherche: ${escapeHtml(filters.query.trim())}`);
@@ -401,13 +403,14 @@ const AdminPage = (() => {
             </div>
           </div>
 
-          <div class="exercise-card-actions exercise-card-actions-simple">
-            ${isCurrentUserAdmin() ? `
-            <button type="button" class="exercise-card-btn primary" onclick="AdminPage.openExModal(${exercise.id})">Modifier</button>
-            <button type="button" class="exercise-card-btn" onclick="AdminPage.toggleExerciseState(${exercise.id}, ${exercise.is_active ? 'false' : 'true'})">
-                ${exercise.is_active ? 'Archiver' : 'Réactiver'}
-            </button>` : ''}
-          </div>
+          ${isCurrentUserAdmin() ? `
+          <div class="ex-card-menu-wrap">
+            <button type="button" class="ex-card-menu-btn" onclick="event.stopPropagation();this.closest('.ex-card-menu-wrap').classList.toggle('open')" aria-label="Actions">⋯</button>
+            <div class="ex-card-menu-dropdown">
+              <button type="button" onclick="AdminPage.openExModal(${exercise.id})">✏️ Modifier</button>
+              <button type="button" onclick="AdminPage.toggleExerciseState(${exercise.id}, ${exercise.is_active ? 'false' : 'true'})">${exercise.is_active ? '🗂 Archiver' : '♻️ Réactiver'}</button>
+            </div>
+          </div>` : ''}
         </div>
       </article>
     `;
@@ -497,12 +500,12 @@ const AdminPage = (() => {
       .filter(exercise => {
         if (filters.status === 'active' && !exercise.is_active) return false;
         if (filters.status === 'archived' && exercise.is_active) return false;
-        if (filters.audience === 'mine') {
-          const u = JSON.parse(localStorage.getItem('user') || '{}');
-          const assigned = exercise.assignments.some(a => a.user_id === u.id);
-          if (!assigned) return false;
+        if (filters.audience !== 'all' && filters.audience.startsWith('user-')) {
+          const uid = parseInt(filters.audience.slice(5), 10);
+          const isGlobal = !isTargetedExercise(exercise);
+          const isAssigned = exercise.assignments.some(a => a.user_id === uid);
+          if (!isGlobal && !isAssigned) return false;
         }
-        if (filters.audience === 'unassigned' && exercise.assignments.length > 0) return false;
         if (filters.type === 'running' && !exercise.is_running) return false;
         if (filters.type === 'classic' && exercise.is_running) return false;
         if (!query) return true;
@@ -855,3 +858,10 @@ const AdminPage = (() => {
     setCardioActivity,
   };
 })();
+
+// Close exercise card overflow menus when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.ex-card-menu-wrap')) {
+    document.querySelectorAll('.ex-card-menu-wrap.open').forEach(el => el.classList.remove('open'));
+  }
+});

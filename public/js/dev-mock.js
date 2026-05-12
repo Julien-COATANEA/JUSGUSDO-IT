@@ -9,6 +9,7 @@ const DEV_FAKE_USER = {
   avatar_emoji: '💪',
   xp: 1500,
   level: 8,
+  tokens: 3,
 };
 
 const DEV_FAKE_USERS = [

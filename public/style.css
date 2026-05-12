@@ -445,6 +445,15 @@ html, body {
 .day-ring-val { position: relative; z-index: 1; font-size: 11px; font-weight: 800; color: var(--text2); line-height: 1; }
 .day-card.completed .day-ring-val { color: var(--green); }
 
+@keyframes ring-bounce {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.3); }
+  55%  { transform: scale(0.9); }
+  75%  { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+.day-ring.ring-bounce { animation: ring-bounce 0.55s cubic-bezier(.36,.07,.19,.97) both; }
+
 .day-toggle { font-size: 14px; color: var(--text3); transition: transform 0.25s; width: 18px; text-align: center; flex-shrink: 0; }
 .day-card.open .day-toggle { transform: rotate(180deg); }
 .day-card.future .day-toggle { opacity: 0.5; }
@@ -1333,6 +1342,62 @@ html, body {
   color: #061111;
 }
 
+/* Exercise card ⋯ overflow menu */
+.ex-card-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+.ex-card-menu-btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--text2);
+  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  letter-spacing: -1px;
+}
+.ex-card-menu-btn:hover { background: var(--bg3); color: var(--text); }
+.ex-card-menu-dropdown {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  min-width: 160px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  z-index: 100;
+}
+.ex-card-menu-wrap.open .ex-card-menu-dropdown { display: block; }
+.ex-card-menu-dropdown button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 13px 16px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.ex-card-menu-dropdown button:hover { background: var(--bg3); }
+.ex-card-menu-dropdown button + button { border-top: 1px solid var(--border); }
+
 .exercise-card-btn:active,
 .admin-secondary-btn:active,
 .exercise-editor-close:active,
@@ -2150,6 +2215,7 @@ html, body {
 .profile-stat-icon  { font-size: 20px; }
 .profile-stat-value { font-size: 18px; font-weight: 900; color: var(--text); letter-spacing: -0.3px; }
 .profile-stat-label { font-size: 10px; font-weight: 600; color: var(--text3); text-align: center; text-transform: uppercase; letter-spacing: 0.3px; }
+.profile-stat-sublabel { font-size: 9px; color: var(--text3); text-align: center; margin-top: 2px; opacity: 0.75; line-height: 1.2; }
 
 .profile-section {
   background: var(--card);
@@ -3413,17 +3479,24 @@ html, body {
    HOME — WIZZ BUTTON ON CARD
 =========================== */
 .player-wizz-btn {
-  font-size: 18px;
-  background: none;
-  border: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  background: rgba(255,220,0,0.1);
+  border: 1px solid rgba(255,220,0,0.22);
+  color: #fde047;
   cursor: pointer;
-  padding: 4px;
-  border-radius: 8px;
+  padding: 5px 10px;
+  border-radius: 100px;
   line-height: 1;
   flex-shrink: 0;
-  transition: transform 0.15s;
+  transition: transform 0.15s, background 0.15s;
 }
-.player-wizz-btn:hover { transform: scale(1.25); }
+.player-wizz-btn:hover { transform: scale(1.07); background: rgba(255,220,0,0.18); }
+.player-wizz-icon { font-size: 14px; }
+.player-wizz-label { font-size: 12px; letter-spacing: 0.2px; }
 
 /* ===========================
    WIZZ SEND OVERLAY
@@ -3589,6 +3662,19 @@ html, body {
   flex-direction: column;
   gap: 10px;
 }
+.wizz-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: color-mix(in srgb, var(--bg3) 60%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+.wizz-intro-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.wizz-intro p { margin: 0; font-size: 12px; color: var(--text2); line-height: 1.5; }
+.wizz-intro p strong { color: var(--text); }
 .wizz-received-item {
   display: flex;
   align-items: flex-start;

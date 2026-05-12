@@ -122,7 +122,7 @@ const HomePage = (() => {
       }
 
       const wizzBtn = !isMe
-        ? `<button class="player-wizz-btn" onclick="event.stopPropagation();HomePage.openWizzSheet(${u.id},'${name}')" title="Envoyer un wizz ⚡">⚡</button>`
+        ? `<button class="player-wizz-btn" onclick="event.stopPropagation();HomePage.openWizzSheet(${u.id},'${name}')" title="Envoyer un wizz"><span class="player-wizz-icon">⚡</span><span class="player-wizz-label">Wizz</span></button>`
         : '';
       return `
         <div class="player-card${isMe ? ' is-me' : ''}" style="animation:fadeIn 0.3s ease both;animation-delay:${i * 0.06}s" onclick="Router.navigate('profile',{userId:${u.id}})" role="button" tabindex="0">

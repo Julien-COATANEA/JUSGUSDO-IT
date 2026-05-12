@@ -87,7 +87,7 @@ const ProfilePage = (() => {
       </div>
 
       <div id="profile-panel-records" style="display:none">
-        ${_renderMuscleRecords(records)}
+        ${_renderMuscleRecords(records, user.username)}
       </div>
 
       ${wizzData !== null ? `<div id="profile-panel-wizz" style="display:none">${_renderWizz(wizzData.wizzes)}</div>` : ''}
@@ -103,6 +103,8 @@ const ProfilePage = (() => {
       if (panel) panel.style.display = p === tab ? 'block' : 'none';
       if (btn)   btn.classList.toggle('active', p === tab);
     });
+    document.getElementById('admin-content')?.scrollTo(0, 0);
+    window.scrollTo(0, 0);
   }
 
   // ── 1. Hero card ────────────────────────────────────────────
@@ -115,10 +117,11 @@ const ProfilePage = (() => {
       { label: 'Jours actifs',   value: stats.active_days,                icon: '📅' },
     ];
     const tokenCard = tokens > 0
-      ? `<div class="profile-stat-card profile-stat-card--token">
+      ? `<div class="profile-stat-card profile-stat-card--token" title="Les gemmes servent à envoyer des Wizz à tes coéquipiers">
            <span class="profile-stat-icon ptb-icon" style="filter:drop-shadow(0 0 5px rgba(100,180,255,0.9))">💎</span>
            <span class="profile-stat-value" style="color:#7dd3fc;text-shadow:0 0 10px rgba(100,180,255,0.5)">${tokens}</span>
            <span class="profile-stat-label">Gemme${tokens > 1 ? 's' : ''}</span>
+           <span class="profile-stat-sublabel">Pour envoyer des Wizz ⚡</span>
          </div>`
       : '';
     return `
@@ -560,6 +563,10 @@ const ProfilePage = (() => {
 
   // ── Wizz received ─────────────────────────────────────────
   function _renderWizz(wizzes) {
+    const introHtml = `<div class="wizz-intro">
+      <span class="wizz-intro-icon">⚡</span>
+      <p>Les <strong>Wizz</strong> sont des petites piques envoyées par tes coéquipiers pour te motiver (ou taquiner 😏). Chaque envoi coûte <strong>💎 1 gemme</strong> à l'expéditeur.</p>
+    </div>`;
     // WIZZ_MSGS may be defined in home.js (same page context) or fallback inline
     const MSGS = (typeof HomePage !== 'undefined' && HomePage.WIZZ_MSGS) || {
       lazy:   { text: "Toujours en échauffement ou tu comptes vraiment t'y mettre ? 😏", emoji: '😴' },
@@ -573,6 +580,7 @@ const ProfilePage = (() => {
 
     if (!wizzes || wizzes.length === 0) {
       return `<div class="profile-section" style="animation:fadeIn 0.3s ease both">
+        ${introHtml}
         <div class="profile-section-title" style="margin-bottom:12px">😇 Aucun wizz reçu</div>
         <p style="color:var(--text2);font-size:14px">Aucun petit pique pour l'instant — profite-en 💪</p>
       </div>`;
@@ -593,12 +601,23 @@ const ProfilePage = (() => {
     }).join('');
 
     return `<div class="profile-section" style="animation:fadeIn 0.3s ease both">
+      ${introHtml}
       <div class="profile-section-title" style="margin-bottom:12px">⚡ Wizz reçus</div>
       <div class="wizz-received-list">${items}</div>
     </div>`;
   }
 
-  function _renderMuscleRecords(records) {
+  function _renderMuscleRecords(records, ownerUsername) {
+    // Friendly empty state for other users' profiles
+    if (!_isOwnProfile && (!records || records.length === 0)) {
+      const displayName = ownerUsername
+        ? ownerUsername.charAt(0).toUpperCase() + ownerUsername.slice(1)
+        : 'Cet utilisateur';
+      return `<div class="profile-section" style="animation:fadeIn 0.3s ease both;text-align:center;padding:32px 16px">
+        <div style="font-size:32px;margin-bottom:12px">🏋️</div>
+        <p style="color:var(--text2);font-size:14px;margin:0">${_escape(displayName)} n'a pas encore enregistré de records.</p>
+      </div>`;
+    }
     // Find records for exercises NOT in any standard session (custom)
     const sessionExNames = new Set();
     _MUSCU_SESSIONS.forEach(s => s.exercises.forEach(ex => sessionExNames.add(ex.toLowerCase())));

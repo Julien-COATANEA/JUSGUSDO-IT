@@ -310,6 +310,12 @@ const WorkoutPage = (() => {
       if (result.dayComplete && !wasAllDone) {
         App.showToast('🎉 Journée complète ! Bien joué !');
         Gamification.launchConfetti();
+        const ringEl = card.querySelector('.day-ring');
+        if (ringEl) {
+          ringEl.classList.remove('ring-bounce');
+          void ringEl.offsetWidth; // reflow to restart animation
+          ringEl.classList.add('ring-bounce');
+        }
       }
 
       if (newRank.index > prevRank.index) {
