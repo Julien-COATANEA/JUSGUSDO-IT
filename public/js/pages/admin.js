@@ -16,6 +16,7 @@ const AdminPage = (() => {
   let gymSessions = [];      // from API.adminGetGymSessions()
   let editingId = null;
   let editingSession = null; // session name string when editing session assignments
+  let pendingGymSession = null; // pre-fill gym_session when creating a new gym exercise
   let currentView = 'catalog';
   let currentExTab = 'home'; // 'home' | 'gym'
 
@@ -253,7 +254,10 @@ const AdminPage = (() => {
       : 'Aucune assignation';
 
     const exListItems = (session.exercises || []).map(ex =>
-      `<li>${escapeHtml(ex.emoji || '💪')} ${escapeHtml(ex.name)}</li>`
+      `<li class="gym-admin-session-ex-item">
+        <span>${escapeHtml(ex.emoji || '💪')} ${escapeHtml(ex.name)}</span>
+        ${isCurrentUserAdmin() ? `<button type="button" class="gym-admin-ex-edit-btn" onclick="AdminPage.openExModal(${ex.id})">✏️</button>` : ''}
+      </li>`
     ).join('');
 
     return `
@@ -267,13 +271,16 @@ const AdminPage = (() => {
           </div>
           ${isCurrentUserAdmin() ? `
           <button type="button" class="submit-btn gym-admin-session-assign-btn"
-            onclick="AdminPage.openSessionEditor(${JSON.stringify(session.name)})">
-            Assigner
-          </button>` : ''}
+            onclick="AdminPage.openSessionEditor('${escapeHtml(session.name)}')">Assigner</button>` : ''}
         </div>
         <details class="gym-admin-session-details">
-          <summary>Voir les exercices (${(session.exercises || []).length})</summary>
+          <summary>Exercices (${(session.exercises || []).length})</summary>
           <ul class="gym-admin-session-ex-list">${exListItems}</ul>
+          ${isCurrentUserAdmin() ? `
+          <div class="gym-admin-session-ex-footer">
+            <button type="button" class="gym-admin-ex-add-btn"
+              onclick="AdminPage.openNewGymExercise('${escapeHtml(session.name)}')">+ Ajouter un exercice</button>
+          </div>` : ''}
         </details>
       </article>
     `;
@@ -905,6 +912,13 @@ const AdminPage = (() => {
     renderCurrentView();
   }
 
+  function openNewGymExercise(sessionName) {
+    if (!isCurrentUserAdmin()) return;
+    pendingGymSession = sessionName;
+    currentExTab = 'gym';
+    openExModal(null);
+  }
+
   function closeSessionEditor() {
     editingSession = null;
     currentView = 'catalog';
@@ -965,6 +979,8 @@ const AdminPage = (() => {
   }
 
   function createBlankExercise() {
+    const gym = pendingGymSession;
+    pendingGymSession = null;
     return normalizeExercise({
       id: null,
       emoji: '💪',
@@ -978,8 +994,8 @@ const AdminPage = (() => {
       is_active: true,
       is_running: false,
       xp_reward: 10,
-      type: currentExTab,
-      gymSession: '',
+      type: gym ? 'gym' : currentExTab,
+      gymSession: gym || '',
     });
   }
 
@@ -1093,6 +1109,7 @@ const AdminPage = (() => {
     closeSessionEditor,
     toggleSessionUserRow,
     saveSessionAssignments,
+    openNewGymExercise,
   };
 })();
 
