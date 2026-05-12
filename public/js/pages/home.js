@@ -106,20 +106,12 @@ const HomePage = (() => {
       return;
     }
 
-    // Sort by XP descending for ranking (preserve display order)
-    const sortedByXp = [...users].sort((a, b) => b.xp - a.xp);
-    const rankMap = {};
-    sortedByXp.forEach((u, idx) => { rankMap[u.id] = idx + 1; });
-    const RANK_MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' };
-
     grid.innerHTML = users.map((u, i) => {
       const rank     = Gamification.getRank(u.xp);
       const progress = Gamification.getProgress(u.xp);
       const isMe     = u.id === me.id;
       const avatar   = u.avatar || rank.emoji;
       const name     = escapeHtml(u.username.charAt(0).toUpperCase() + u.username.slice(1));
-      const pos      = rankMap[u.id];
-      const medal    = RANK_MEDALS[pos] || null;
 
       let dayBadge = '';
       if (isMe && _todayStatus && _todayStatus.total > 0) {
@@ -136,7 +128,7 @@ const HomePage = (() => {
         : '';
       return `
         <div class="player-card${isMe ? ' is-me' : ''}" style="animation:fadeIn 0.3s ease both;animation-delay:${i * 0.06}s" onclick="Router.navigate('profile',{userId:${u.id}})" role="button" tabindex="0">
-          <div class="player-avatar">${avatar}${medal ? `<span class="player-pos-medal">${medal}</span>` : ''}</div>
+          <div class="player-avatar">${avatar}</div>
           <div class="player-card-body">
             <div class="player-name">${name}</div>
             <div class="player-rank-title">${rank.emoji} ${rank.title}</div>
