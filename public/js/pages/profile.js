@@ -232,6 +232,8 @@ const ProfilePage = (() => {
   function _autoSizeGymCalendar() {
     const wrap = document.getElementById('gym-cal-heatmap-wrap');
     if (!wrap || !_gymCalendarWeeks.length) return;
+    // If the panel is hidden (e.g. user is on Maison tab), defer sizing.
+    if (wrap.clientWidth === 0 || wrap.offsetParent === null) return;
     const labels  = wrap.querySelector('.cal-day-labels');
     const labelsW = labels ? labels.offsetWidth + 4 : 32;
     const available = wrap.clientWidth - labelsW - 4;
