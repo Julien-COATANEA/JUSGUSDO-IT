@@ -78,5 +78,7 @@ const API = (() => {
     toggleGymChecklist: (exercise_name, session_name, entry_date) =>
       request('POST', '/gym-checklist/toggle', { exercise_name, session_name, entry_date }),
     getGymStats: (userId) => request('GET', `/gym-checklist/stats/${userId}`),
+    // Gym assigned exercises (for Séance tab)
+    getGymExercises: (date) => request('GET', `/exercises/gym-assigned?date=${date}`),
   };
 })();

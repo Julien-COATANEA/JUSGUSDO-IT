@@ -17,6 +17,7 @@ async function getDayProgress(userId, entryDate) {
       AND ce.user_id = $1
       AND ce.entry_date = $2
      WHERE e.is_active = TRUE
+       AND (e.type IS NULL OR e.type = 'home')
        AND (
          COALESCE(array_length(COALESCE(uea.schedule, e.schedule), 1), 0) = 0
          OR EXTRACT(DOW FROM $2::date)::int = ANY(COALESCE(uea.schedule, e.schedule))
@@ -45,7 +46,7 @@ function getDailyXpSplit(totalEx) {
   return { baseXP, completionBonus };
 }
 
-// GET /api/exercises — list active exercises for the current user
+// GET /api/exercises — list active HOME exercises for the current user
 // Returns global exercises + exercises explicitly assigned to this user
 // The schedule field reflects the user's personal schedule (uea.schedule) when assigned,
 // or the exercise's global schedule otherwise.
@@ -59,6 +60,7 @@ router.get('/', requireAuth, async (req, res) => {
        LEFT JOIN user_exercise_assignments uea
          ON uea.exercise_id = e.id AND uea.user_id = $1
        WHERE e.is_active = TRUE
+         AND (e.type IS NULL OR e.type = 'home')
          AND (
            NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
            OR uea.user_id IS NOT NULL
@@ -67,6 +69,76 @@ router.get('/', requireAuth, async (req, res) => {
       [req.user.id]
     );
     res.json({ exercises: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Static session metadata for gym-assigned grouping
+const GYM_SESSION_META = {
+  'Pecs Triceps': { icon: '💪', color: '#e94560' },
+  'Dos Biceps':   { icon: '🍋️', color: '#7c5cbf' },
+  'Jambes':       { icon: '🦵', color: '#22d18b' },
+  'Full':         { icon: '⚡', color: '#fbbf24' },
+};
+const GYM_SESSION_ORDER = ['Pecs Triceps', 'Dos Biceps', 'Jambes', 'Full'];
+
+// GET /api/exercises/gym-assigned?date=YYYY-MM-DD
+// Returns gym exercises assigned to the current user for the given date's day-of-week,
+// grouped by gym_session. If no assignments exist, returns all active gym exercises.
+router.get('/gym-assigned', requireAuth, async (req, res) => {
+  const { date } = req.query;
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!date || !dateRegex.test(date)) {
+    return res.status(400).json({ error: 'Paramètre date requis (YYYY-MM-DD)' });
+  }
+
+  try {
+    const result = await db.query(
+      `SELECT e.id, e.name, e.emoji, e.sets, e.reps, e.unit,
+              e.gym_session, e.order_index,
+              COALESCE(uea.schedule, e.schedule) AS schedule
+       FROM exercises e
+       LEFT JOIN user_exercise_assignments uea
+         ON uea.exercise_id = e.id AND uea.user_id = $1
+       WHERE e.is_active = TRUE
+         AND e.type = 'gym'
+         AND (
+           NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
+           OR uea.user_id IS NOT NULL
+         )
+         AND (
+           COALESCE(array_length(COALESCE(uea.schedule, e.schedule), 1), 0) = 0
+           OR EXTRACT(DOW FROM $2::date)::int = ANY(COALESCE(uea.schedule, e.schedule))
+         )
+       ORDER BY e.gym_session, e.order_index ASC, e.id ASC`,
+      [req.user.id, date]
+    );
+
+    // Group by gym_session
+    const sessionMap = {};
+    result.rows.forEach(ex => {
+      const key = ex.gym_session || 'Autre';
+      if (!sessionMap[key]) sessionMap[key] = [];
+      sessionMap[key].push({ id: ex.id, name: ex.name, emoji: ex.emoji, sets: ex.sets, reps: ex.reps, unit: ex.unit });
+    });
+
+    const sessions = GYM_SESSION_ORDER
+      .filter(s => sessionMap[s])
+      .map(s => ({
+        name: s,
+        icon: (GYM_SESSION_META[s] || {}).icon || '🍋️',
+        color: (GYM_SESSION_META[s] || {}).color || '#888',
+        exercises: sessionMap[s],
+      }));
+
+    // Append sessions not in known order
+    Object.keys(sessionMap)
+      .filter(k => !GYM_SESSION_ORDER.includes(k))
+      .forEach(k => sessions.push({ name: k, icon: '🍋️', color: '#888', exercises: sessionMap[k] }));
+
+    res.json({ sessions });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });

@@ -6,6 +6,7 @@ const MuscuPage = (() => {
   let _gymDate = null;         // ISO string YYYY-MM-DD (today by default)
   let _gymSelectedSession = null; // session name selected for the day
   let _gymEntries = [];        // gym checklist entries for the day
+  let _gymAssignedSessions = []; // assigned sessions for current date [{name,icon,color,exercises:[{id,name,...}]}]
 
   // ── Session definitions ──────────────────────────────────
   const _MUSCU_SESSIONS = [
@@ -91,6 +92,7 @@ const MuscuPage = (() => {
     _gymDate = new Date().toISOString().split('T')[0]; // always reset to today on page load
     _gymEntries = [];
     _gymSelectedSession = null;
+    _gymAssignedSessions = [];
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     _userId = currentUser.id;
 
@@ -130,8 +132,20 @@ const MuscuPage = (() => {
       const sub = document.getElementById('muscu-header-sub');
       if (sub) sub.textContent = "Séance du jour";
 
-      const { entries } = await API.getGymChecklist(_gymDate, _gymDate);
-      _gymEntries = entries || [];
+      const [checklistRes, gymExRes] = await Promise.all([
+        API.getGymChecklist(_gymDate, _gymDate),
+        API.getGymExercises(_gymDate).catch(() => ({ sessions: [] })),
+      ]);
+      _gymEntries = (checklistRes.entries || []);
+      _gymAssignedSessions = (gymExRes.sessions || []);
+
+      // Fallback to static sessions if no assignments exist
+      if (_gymAssignedSessions.length === 0) {
+        _gymAssignedSessions = _MUSCU_SESSIONS.map(s => ({
+          name: s.name, icon: s.icon, color: s.color,
+          exercises: _getSessionExercises(s).map(name => ({ name })),
+        }));
+      }
 
       // Restore selected session from entries (if any)
       if (!_gymSelectedSession && _gymEntries.length > 0) {
@@ -329,10 +343,10 @@ const MuscuPage = (() => {
     const entryMap = {};
     _gymEntries.forEach(e => { entryMap[e.exercise_name.toLowerCase()] = e.completed; });
 
-    // Session cards
-    const sessionCardsHtml = _MUSCU_SESSIONS.map((session, idx) => {
+    // Session cards — use assigned sessions (or static fallback)
+    const sessionCardsHtml = _gymAssignedSessions.map((session) => {
       const isSelected = _gymSelectedSession === session.name;
-      const allExercises = _getSessionExercises(session);
+      const allExercises = session.exercises.map(ex => (typeof ex === 'string' ? ex : ex.name));
       const doneCount = allExercises.filter(ex => entryMap[ex.toLowerCase()]).length;
       const isFullDone = doneCount === allExercises.length && allExercises.length > 0;
 
@@ -395,6 +409,7 @@ const MuscuPage = (() => {
     _gymDate = newDate;
     _gymSelectedSession = null;
     _gymEntries = [];
+    _gymAssignedSessions = [];
     const container = document.getElementById('muscu-content');
     if (container) _initSeanceTab(container);
   }

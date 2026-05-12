@@ -19,11 +19,21 @@ const DEV_FAKE_USERS = [
 ];
 
 const DEV_FAKE_EXERCISES = [
-  { id: 1, emoji: '💪', name: 'Pompes',                    sets: 3, reps: 20, unit: 'répétitions', order_index: 1, schedule: [1, 3, 5], xp_reward: 10, is_active: true,  is_running: false, assignments: [], assigned_users: [] },
-  { id: 2, emoji: '🦵', name: 'Squats',                    sets: 4, reps: 15, unit: 'répétitions', order_index: 2, schedule: [],         xp_reward: 10, is_active: true,  is_running: false, assignments: [{ user_id: 2, schedule: [2, 4] }, { user_id: 3, schedule: [6] }], assigned_users: [2, 3] },
-  { id: 3, emoji: '🧱', name: 'Gainage',                   sets: 3, reps: 45, unit: 'secondes',    order_index: 3, schedule: [1, 2, 4], xp_reward: 10, is_active: true,  is_running: false, assignments: [], assigned_users: [] },
-  { id: 4, emoji: '🏃', name: 'Session cardio',            sets: 1, reps: 1,  unit: 'session',     order_index: 4, schedule: [],         xp_reward: 20, is_active: true,  is_running: true,  assignments: [], assigned_users: [] },
-  { id: 5, emoji: '🏋️', name: 'Tractions pronation',       sets: 4, reps: 8,  unit: 'répétitions', order_index: 5, schedule: [0, 6],    xp_reward: 10, is_active: false, is_running: false, assignments: [], assigned_users: [] },
+  { id: 1, emoji: '💪', name: 'Pompes',                    sets: 3, reps: 20, unit: 'répétitions', order_index: 1, schedule: [1, 3, 5], xp_reward: 10, is_active: true,  is_running: false, type: 'home', gym_session: null, assignments: [], assigned_users: [] },
+  { id: 2, emoji: '🦵', name: 'Squats',                    sets: 4, reps: 15, unit: 'répétitions', order_index: 2, schedule: [],         xp_reward: 10, is_active: true,  is_running: false, type: 'home', gym_session: null, assignments: [{ user_id: 2, schedule: [2, 4] }, { user_id: 3, schedule: [6] }], assigned_users: [2, 3] },
+  { id: 3, emoji: '🧱', name: 'Gainage',                   sets: 3, reps: 45, unit: 'secondes',    order_index: 3, schedule: [1, 2, 4], xp_reward: 10, is_active: true,  is_running: false, type: 'home', gym_session: null, assignments: [], assigned_users: [] },
+  { id: 4, emoji: '🏃', name: 'Session cardio',            sets: 1, reps: 1,  unit: 'session',     order_index: 4, schedule: [],         xp_reward: 20, is_active: true,  is_running: true,  type: 'home', gym_session: null, assignments: [], assigned_users: [] },
+  { id: 5, emoji: '🏋️', name: 'Tractions pronation',       sets: 4, reps: 8,  unit: 'répétitions', order_index: 5, schedule: [0, 6],    xp_reward: 10, is_active: false, is_running: false, type: 'home', gym_session: null, assignments: [], assigned_users: [] },
+  // Gym exercises
+  { id: 100, emoji: '💪', name: 'Développé Couché Haltères',             sets: 3, reps: 10, unit: 'répétitions', order_index: 100, schedule: [], xp_reward: 10, is_active: true, is_running: false, type: 'gym', gym_session: 'Pecs Triceps', assignments: [{ user_id: 1, schedule: [1, 4] }, { user_id: 2, schedule: [1, 4] }], assigned_users: [1, 2] },
+  { id: 101, emoji: '💪', name: 'Développé Couché Barres',               sets: 3, reps: 10, unit: 'répétitions', order_index: 101, schedule: [], xp_reward: 10, is_active: true, is_running: false, type: 'gym', gym_session: 'Pecs Triceps', assignments: [], assigned_users: [] },
+  { id: 102, emoji: '💪', name: 'Dips',                                  sets: 3, reps: 10, unit: 'répétitions', order_index: 102, schedule: [], xp_reward: 10, is_active: true, is_running: false, type: 'gym', gym_session: 'Pecs Triceps', assignments: [], assigned_users: [] },
+  { id: 110, emoji: '🏋️', name: 'Tirage Bucheron',                       sets: 3, reps: 12, unit: 'répétitions', order_index: 110, schedule: [], xp_reward: 10, is_active: true, is_running: false, type: 'gym', gym_session: 'Dos Biceps',   assignments: [{ user_id: 1, schedule: [2, 5] }, { user_id: 2, schedule: [2, 5] }], assigned_users: [1, 2] },
+  { id: 111, emoji: '🏋️', name: 'Tirage Verticale',                      sets: 3, reps: 12, unit: 'répétitions', order_index: 111, schedule: [], xp_reward: 10, is_active: true, is_running: false, type: 'gym', gym_session: 'Dos Biceps',   assignments: [], assigned_users: [] },
+  { id: 112, emoji: '💪', name: 'Curl Haltère',                          sets: 3, reps: 12, unit: 'répétitions', order_index: 112, schedule: [], xp_reward: 10, is_active: true, is_running: false, type: 'gym', gym_session: 'Dos Biceps',   assignments: [], assigned_users: [] },
+  { id: 120, emoji: '🦵', name: 'Leg Extension',                         sets: 3, reps: 12, unit: 'répétitions', order_index: 120, schedule: [], xp_reward: 10, is_active: true, is_running: false, type: 'gym', gym_session: 'Jambes',        assignments: [], assigned_users: [] },
+  { id: 121, emoji: '🦵', name: 'Squats Salle',                          sets: 4, reps: 10, unit: 'répétitions', order_index: 121, schedule: [], xp_reward: 10, is_active: true, is_running: false, type: 'gym', gym_session: 'Jambes',        assignments: [], assigned_users: [] },
+  { id: 130, emoji: '💪', name: 'Développé Couché Barre',                sets: 3, reps: 10, unit: 'répétitions', order_index: 130, schedule: [], xp_reward: 10, is_active: true, is_running: false, type: 'gym', gym_session: 'Full',          assignments: [], assigned_users: [] },
 ];
 
 function cloneDevExercise(exercise) {
@@ -37,6 +47,8 @@ function cloneDevExercise(exercise) {
         }))
       : [],
     assigned_users: Array.isArray(exercise.assigned_users) ? [...exercise.assigned_users] : [],
+    type: exercise.type || 'home',
+    gym_session: exercise.gym_session || null,
   };
 }
 
@@ -132,6 +144,8 @@ function _applyDevMock() {
       xp_reward: data.is_running ? 20 : 10,
       is_active: true,
       is_running: !!data.is_running,
+      type: data.type || 'home',
+      gym_session: data.gym_session || null,
       assignments: [],
       assigned_users: [],
     };
@@ -159,6 +173,8 @@ function _applyDevMock() {
         exercise.unit = 'session';
       }
     }
+    if (Object.prototype.hasOwnProperty.call(data, 'type')) exercise.type = data.type || 'home';
+    if (Object.prototype.hasOwnProperty.call(data, 'gym_session')) exercise.gym_session = data.gym_session || null;
 
     return { exercise: cloneDevExercise(exercise) };
   };
@@ -305,6 +321,49 @@ function _applyDevMock() {
       calendar.push({ date, done: dayEntries.filter(e => e.completed).length, total: dayEntries.length });
     }
     return { stats: { calendar, total_completed: _devGymEntries.filter(e => e.completed).length, active_days: 2, full_days: 1, best_streak: 2, current_streak: 1, today_done: _devGymEntries.filter(e => e.entry_date === new Date().toISOString().split('T')[0] && e.completed).length, today_total: _devGymEntries.filter(e => e.entry_date === new Date().toISOString().split('T')[0]).length } };
+  };
+
+  // Gym assigned exercises (for Séance tab)
+  const _DEV_GYM_SESSION_META = {
+    'Pecs Triceps': { icon: '💪', color: '#e94560' },
+    'Dos Biceps':   { icon: '🏋️', color: '#7c5cbf' },
+    'Jambes':       { icon: '🦵', color: '#22d18b' },
+    'Full':         { icon: '⚡', color: '#fbbf24' },
+  };
+  const _DEV_GYM_SESSION_ORDER = ['Pecs Triceps', 'Dos Biceps', 'Jambes', 'Full'];
+  API.getGymExercises = async (date) => {
+    const dow = new Date(date + 'T12:00:00').getDay();
+    const gymExs = DEV_FAKE_EXERCISES.filter(e => e.type === 'gym' && e.is_active);
+
+    // Filter by assignment/schedule (same logic as backend)
+    const assigned = gymExs.filter(ex => {
+      const hasAssignment = ex.assigned_users && ex.assigned_users.length > 0;
+      if (hasAssignment) {
+        const myAssignment = ex.assignments.find(a => a.user_id === DEV_FAKE_USER.id);
+        if (!myAssignment) return false;
+        const sched = myAssignment.schedule;
+        if (!sched || sched.length === 0) return true;
+        return sched.includes(dow);
+      }
+      // Global exercise
+      const sched = ex.schedule;
+      if (!sched || sched.length === 0) return true;
+      return sched.includes(dow);
+    });
+
+    // Group by gym_session
+    const sessionMap = {};
+    assigned.forEach(ex => {
+      const key = ex.gym_session || 'Autre';
+      if (!sessionMap[key]) sessionMap[key] = [];
+      sessionMap[key].push({ id: ex.id, name: ex.name, emoji: ex.emoji, sets: ex.sets, reps: ex.reps, unit: ex.unit });
+    });
+
+    const sessions = _DEV_GYM_SESSION_ORDER
+      .filter(s => sessionMap[s])
+      .map(s => ({ name: s, ...(_DEV_GYM_SESSION_META[s] || { icon: '🏋️', color: '#888' }), exercises: sessionMap[s] }));
+
+    return { sessions };
   };
 
   // Push

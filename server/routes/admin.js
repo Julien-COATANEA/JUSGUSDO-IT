@@ -33,14 +33,15 @@ router.get('/exercises', requireAdmin, async (req, res) => {
 
 // POST /api/admin/exercises — create exercise
 router.post('/exercises', requireAdmin, async (req, res) => {
-  const { name, emoji, sets, reps, unit, order_index, schedule, is_running } = req.body;
+  const { name, emoji, sets, reps, unit, order_index, schedule, is_running, type, gym_session } = req.body;
   if (!name || !reps) {
     return res.status(400).json({ error: 'name et reps requis' });
   }
+  const exerciseType = (type === 'gym') ? 'gym' : 'home';
   try {
     const result = await db.query(
-      `INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index, schedule, is_running)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      `INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index, schedule, is_running, type, gym_session)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
       [
         name.trim(),
         emoji || '💪',
@@ -51,6 +52,8 @@ router.post('/exercises', requireAdmin, async (req, res) => {
         order_index || 0,
         Array.isArray(schedule) ? schedule : [],
         is_running || false,
+        exerciseType,
+        exerciseType === 'gym' ? (gym_session || null) : null,
       ]
     );
     res.status(201).json({ exercise: result.rows[0] });
@@ -63,7 +66,8 @@ router.post('/exercises', requireAdmin, async (req, res) => {
 // PUT /api/admin/exercises/:id — update exercise
 router.put('/exercises/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, emoji, sets, reps, unit, order_index, is_active, schedule, is_running } = req.body;
+  const { name, emoji, sets, reps, unit, order_index, is_active, schedule, is_running, type, gym_session } = req.body;
+  const exerciseType = type === 'gym' ? 'gym' : type === 'home' ? 'home' : null;
   try {
     const result = await db.query(
       `UPDATE exercises
@@ -75,9 +79,11 @@ router.put('/exercises/:id', requireAdmin, async (req, res) => {
            order_index = COALESCE($6, order_index),
            is_active = COALESCE($7, is_active),
            schedule = COALESCE($8, schedule),
-           is_running = COALESCE($9, is_running)
-       WHERE id = $10 RETURNING *`,
-      [name ?? null, emoji ?? null, sets ?? null, reps ?? null, unit ?? null, order_index ?? null, is_active ?? null, Array.isArray(schedule) ? schedule : null, is_running ?? null, id]
+           is_running = COALESCE($9, is_running),
+           type = COALESCE($10, type),
+           gym_session = CASE WHEN $10 IS NOT NULL THEN $11 ELSE gym_session END
+       WHERE id = $12 RETURNING *`,
+      [name ?? null, emoji ?? null, sets ?? null, reps ?? null, unit ?? null, order_index ?? null, is_active ?? null, Array.isArray(schedule) ? schedule : null, is_running ?? null, exerciseType, gym_session ?? null, id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Exercice introuvable' });
     res.json({ exercise: result.rows[0] });

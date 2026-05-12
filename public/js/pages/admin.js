@@ -15,6 +15,7 @@ const AdminPage = (() => {
   let users = [];
   let editingId = null;
   let currentView = 'catalog';
+  let currentExTab = 'home'; // 'home' | 'gym'
 
   function isCurrentUserAdmin() {
     const u = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
@@ -132,6 +133,11 @@ const AdminPage = (() => {
     const visibleExercises = getFilteredExercises();
 
     return `
+      <div class="admin-ex-tab-bar">
+        <button class="admin-ex-tab${currentExTab === 'home' ? ' active' : ''}" onclick="AdminPage.switchExTab('home')">🏠 Maison</button>
+        <button class="admin-ex-tab${currentExTab === 'gym' ? ' active' : ''}" onclick="AdminPage.switchExTab('gym')">🏋️ Salle</button>
+      </div>
+
       <section class="ex-admin-hero">
         <div class="ex-admin-hero-top">
           <div class="ex-admin-copy">
@@ -236,6 +242,16 @@ const AdminPage = (() => {
                 <input type="number" id="ex-order" value="${exercise.order_index}" min="0" />
               </div>
             </div>
+            ${currentExTab === 'gym' ? `
+            <div class="form-group" style="margin-top:12px">
+              <label>Séance</label>
+              <select id="ex-gym-session" class="mr-input mr-select">
+                <option value="Pecs Triceps"${(exercise.gymSession || '') === 'Pecs Triceps' ? ' selected' : ''}>💪 Pecs Triceps</option>
+                <option value="Dos Biceps"${(exercise.gymSession || '') === 'Dos Biceps' ? ' selected' : ''}>🍋️ Dos Biceps</option>
+                <option value="Jambes"${(exercise.gymSession || '') === 'Jambes' ? ' selected' : ''}>🦵 Jambes</option>
+                <option value="Full"${(exercise.gymSession || '') === 'Full' ? ' selected' : ''}>⚡ Full</option>
+              </select>
+            </div>` : ''}
           </section>
 
           <section class="ex-editor-section">
@@ -482,14 +498,15 @@ const AdminPage = (() => {
 
   function buildStats() {
     const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
+    const tab = exercises.filter(exercise => exercise.type === currentExTab);
     return {
-      total: exercises.length,
-      active: exercises.filter(exercise => exercise.is_active).length,
-      mine: exercises.filter(exercise => exercise.is_active && (
+      total: tab.length,
+      active: tab.filter(exercise => exercise.is_active).length,
+      mine: tab.filter(exercise => exercise.is_active && (
         !isTargetedExercise(exercise) ||
         exercise.assignments.some(a => a.user_id === me.id)
       )).length,
-      running: exercises.filter(exercise => exercise.is_running && exercise.is_active).length,
+      running: tab.filter(exercise => exercise.is_running && exercise.is_active).length,
     };
   }
 
@@ -498,6 +515,7 @@ const AdminPage = (() => {
 
     return exercises
       .filter(exercise => {
+        if (exercise.type !== currentExTab) return false;
         if (filters.status === 'active' && !exercise.is_active) return false;
         if (filters.status === 'archived' && exercise.is_active) return false;
         if (filters.audience !== 'all' && filters.audience.startsWith('user-')) {
@@ -529,6 +547,11 @@ const AdminPage = (() => {
   function openExModal(id) {
     if (!isCurrentUserAdmin()) return;
     editingId = id;
+    // When opening editor from a card, set currentExTab to match that exercise's type
+    if (id) {
+      const ex = exercises.find(e => e.id === id);
+      if (ex) currentExTab = ex.type || 'home';
+    }
     currentView = 'editor';
     renderCurrentView();
   }
@@ -639,6 +662,8 @@ const AdminPage = (() => {
       order_index: parseInt(document.getElementById('ex-order')?.value, 10) || 0,
       schedule: isTargeted ? [] : getActiveDaysFrom(document.getElementById('ex-global-schedule')),
       is_running: isRunning,
+      type: currentExTab,
+      gym_session: currentExTab === 'gym' ? (document.getElementById('ex-gym-session')?.value || null) : null,
     };
 
     errorEl.textContent = '';
@@ -711,6 +736,13 @@ const AdminPage = (() => {
     }
   }
 
+  function switchExTab(tab) {
+    currentExTab = tab;
+    editingId = null;
+    currentView = 'catalog';
+    renderCurrentView();
+  }
+
   function setQuery(query) {
     filters.query = query;
     renderCurrentView();
@@ -750,6 +782,8 @@ const AdminPage = (() => {
       is_active: true,
       is_running: false,
       xp_reward: 10,
+      type: currentExTab,
+      gymSession: '',
     });
   }
 
@@ -777,6 +811,8 @@ const AdminPage = (() => {
       is_active: exercise.is_active !== false,
       is_running: !!exercise.is_running,
       xp_reward: Number(exercise.xp_reward) || (exercise.is_running ? 20 : 10),
+      type: exercise.type || 'home',
+      gymSession: exercise.gym_session || '',
     };
   }
 
@@ -843,6 +879,7 @@ const AdminPage = (() => {
     render,
     init,
     refresh: refreshData,
+    switchExTab,
     setQuery,
     setFilter,
     resetFilters,

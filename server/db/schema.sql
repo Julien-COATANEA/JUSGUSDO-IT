@@ -174,3 +174,39 @@ BEGIN
     ALTER TABLE minigame_plays ADD CONSTRAINT minigame_plays_user_id_play_date_level_key UNIQUE (user_id, play_date, level);
   END IF;
 END$$;
+
+-- Migration: exercise type (home / gym) and gym session grouping
+ALTER TABLE exercises ADD COLUMN IF NOT EXISTS type VARCHAR(10) DEFAULT 'home';
+ALTER TABLE exercises ADD COLUMN IF NOT EXISTS gym_session VARCHAR(50);
+
+-- Seed gym exercises (from _MUSCU_SESSIONS definition in frontend)
+INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index, schedule, is_active, type, gym_session) VALUES
+  -- Pecs Triceps
+  ('Développé Couché Haltères',             '💪', 3, 10, 'répétitions', 10, 100, '{}', TRUE, 'gym', 'Pecs Triceps'),
+  ('Développé Couché Barres',               '💪', 3, 10, 'répétitions', 10, 101, '{}', TRUE, 'gym', 'Pecs Triceps'),
+  ('Développé Couché Incliné',              '💪', 3, 10, 'répétitions', 10, 102, '{}', TRUE, 'gym', 'Pecs Triceps'),
+  ('Écarté Poulie',                         '💪', 3, 12, 'répétitions', 10, 103, '{}', TRUE, 'gym', 'Pecs Triceps'),
+  ('Triceps Corde (extension poulie basse)','💪', 3, 12, 'répétitions', 10, 104, '{}', TRUE, 'gym', 'Pecs Triceps'),
+  ('Triceps Corde (extension poulie haute)','💪', 3, 12, 'répétitions', 10, 105, '{}', TRUE, 'gym', 'Pecs Triceps'),
+  ('Dips',                                  '💪', 3, 10, 'répétitions', 10, 106, '{}', TRUE, 'gym', 'Pecs Triceps'),
+  -- Dos Biceps
+  ('Tirage Bucheron',                       '🏋️', 3, 12, 'répétitions', 10, 110, '{}', TRUE, 'gym', 'Dos Biceps'),
+  ('Tirage Verticale',                      '🏋️', 3, 12, 'répétitions', 10, 111, '{}', TRUE, 'gym', 'Dos Biceps'),
+  ('Tirage Horizontale',                    '🏋️', 3, 12, 'répétitions', 10, 112, '{}', TRUE, 'gym', 'Dos Biceps'),
+  ('Traction',                              '🏋️', 3, 8,  'répétitions', 10, 113, '{}', TRUE, 'gym', 'Dos Biceps'),
+  ('Curl Haltère',                          '💪', 3, 12, 'répétitions', 10, 114, '{}', TRUE, 'gym', 'Dos Biceps'),
+  ('Curl Barre',                            '💪', 3, 12, 'répétitions', 10, 115, '{}', TRUE, 'gym', 'Dos Biceps'),
+  ('Curl Marteau',                          '💪', 3, 12, 'répétitions', 10, 116, '{}', TRUE, 'gym', 'Dos Biceps'),
+  -- Jambes
+  ('Ischios Assis',                         '🦵', 3, 12, 'répétitions', 10, 120, '{}', TRUE, 'gym', 'Jambes'),
+  ('Leg Extension',                         '🦵', 3, 12, 'répétitions', 10, 121, '{}', TRUE, 'gym', 'Jambes'),
+  ('Presses',                               '🦵', 3, 10, 'répétitions', 10, 122, '{}', TRUE, 'gym', 'Jambes'),
+  ('Adducteurs',                            '🦵', 3, 15, 'répétitions', 10, 123, '{}', TRUE, 'gym', 'Jambes'),
+  ('Fentes',                                '🦵', 3, 12, 'répétitions', 10, 124, '{}', TRUE, 'gym', 'Jambes'),
+  ('Squats Salle',                          '🦵', 4, 10, 'répétitions', 10, 125, '{}', TRUE, 'gym', 'Jambes'),
+  ('Mollets',                               '🦵', 4, 20, 'répétitions', 10, 126, '{}', TRUE, 'gym', 'Jambes'),
+  -- Full
+  ('Développé Couché Barre',                '💪', 3, 10, 'répétitions', 10, 130, '{}', TRUE, 'gym', 'Full'),
+  ('Triceps Corde / Élévation Latérale',    '💪', 3, 12, 'répétitions', 10, 131, '{}', TRUE, 'gym', 'Full'),
+  ('Épaules',                               '💪', 3, 12, 'répétitions', 10, 132, '{}', TRUE, 'gym', 'Full')
+ON CONFLICT (name) DO NOTHING;
