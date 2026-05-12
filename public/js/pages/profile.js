@@ -72,7 +72,7 @@ const ProfilePage = (() => {
     const hasUnread = wizzData?.unread > 0;
 
     return `
-      ${_renderHero(avatar, name, rank, progress, stats, user.tokens)}
+      ${_renderHero(avatar, name, rank, progress, user.tokens)}
 
       <div class="profile-tabs">
         <button class="profile-tab active" id="ptab-stats" onclick="ProfilePage.switchTab('stats')">📊 Stats</button>
@@ -87,6 +87,7 @@ const ProfilePage = (() => {
           <button class="profile-stats-tab${_activeStatsTab === 'salle' ? ' active' : ''}" onclick="ProfilePage.switchStatsTab('salle')">🏋️ Salle</button>
         </div>
         <div id="profile-stats-maison" ${_activeStatsTab !== 'maison' ? 'style="display:none"' : ''}>
+          ${_renderHomeStatsGrid(stats)}
           ${_renderTodayBadge(stats)}
           ${_renderCalendar(stats.calendar)}
           ${_renderXpChart(stats.xp_history)}
@@ -133,14 +134,14 @@ const ProfilePage = (() => {
   // ── Gym (salle) stats renderer ─────────────────────────────
   function _renderGymStats(gymStats) {
     const simpleCards = [
-      { label: 'Exercices cochés', value: gymStats.total_completed, icon: '✅' },
-      { label: 'Jours complets',   value: gymStats.full_days,       icon: '🔥' },
-      { label: 'Meilleure série',  value: gymStats.best_streak + '\u202fj', icon: '🏆' },
+      { label: 'Exercices cochés', value: gymStats.total_completed,            icon: '✅' },
+      { label: 'Jours complets',   value: gymStats.full_days,                  icon: '🔥' },
+      { label: 'Meilleure série',  value: gymStats.best_streak + '\u202fj',    icon: '🏆' },
       { label: 'Série actuelle',   value: gymStats.current_streak + '\u202fj', icon: '⚡' },
-      { label: 'Jours actifs',     value: gymStats.active_days,     icon: '📅' },
+      { label: 'Jours actifs',     value: gymStats.active_days,                icon: '📅' },
     ];
 
-    const statsGridHtml = `<div class="profile-stats-grid" style="animation:fadeIn 0.3s ease 0.04s both">
+    const statsGridHtml = `<div class="profile-stats-grid" style="animation:fadeIn 0.3s ease 0.02s both">
       ${simpleCards.map(c => `
         <div class="profile-stat-card">
           <span class="profile-stat-icon">${c.icon}</span>
@@ -149,8 +150,23 @@ const ProfilePage = (() => {
         </div>`).join('')}
     </div>`;
 
+    // Today badge for gym
+    const { today_done: done, today_total: total } = gymStats;
+    let todayBadge = '';
+    if (total > 0) {
+      let cls, icon, msg;
+      if (done >= total)  { cls = 'done';    icon = '✅'; msg = `Séance complète ! (${done}/${total})`; }
+      else if (done > 0)  { cls = 'partial'; icon = '💪'; msg = `${done}\u202f/\u202f${total} exercices salle aujourd'hui`; }
+      else                { cls = 'empty';   icon = '😴'; msg = `Pas de séance salle aujourd'hui`; }
+      todayBadge = `<div class="profile-today-badge ${cls}" style="animation:fadeIn 0.3s ease 0.05s both">
+        <span class="profile-today-icon">${icon}</span>
+        <span class="profile-today-msg">${msg}</span>
+      </div>`;
+    }
+
     return `
       ${statsGridHtml}
+      ${todayBadge}
       ${_renderGymCalendar(gymStats.calendar)}
     `;
   }
@@ -275,14 +291,7 @@ const ProfilePage = (() => {
   }
 
   // ── 1. Hero card ────────────────────────────────────────────
-  function _renderHero(avatar, name, rank, progress, stats, tokens) {
-    const simpleCards = [
-      { label: 'Exercices',      value: stats.total_completed,            icon: '✅' },
-      { label: 'Jours complets', value: stats.full_days,                  icon: '🔥' },
-      { label: 'Meilleure série',value: stats.best_streak + '\u202fj',    icon: '🏆' },
-      { label: 'Série actuelle', value: stats.current_streak + '\u202fj', icon: '⚡' },
-      { label: 'Jours actifs',   value: stats.active_days,                icon: '📅' },
-    ];
+  function _renderHero(avatar, name, rank, progress, tokens) {
     const tokenCard = tokens > 0
       ? `<div class="profile-stat-card profile-stat-card--token" title="Les gemmes servent à envoyer des Wizz à tes coéquipiers">
            <span class="profile-stat-icon ptb-icon" style="filter:drop-shadow(0 0 5px rgba(100,180,255,0.9))">💎</span>
@@ -306,15 +315,26 @@ const ProfilePage = (() => {
           </div>
         </div>
       </div>
-      <div class="profile-stats-grid" style="animation:fadeIn 0.3s ease 0.04s both">
-        ${simpleCards.map(c => `
-          <div class="profile-stat-card">
-            <span class="profile-stat-icon">${c.icon}</span>
-            <span class="profile-stat-value">${c.value}</span>
-            <span class="profile-stat-label">${c.label}</span>
-          </div>`).join('')}
-        ${tokenCard}
-      </div>`;
+      ${tokenCard ? `<div class="profile-stats-grid" style="animation:fadeIn 0.3s ease 0.04s both;justify-content:center">${tokenCard}</div>` : ''}`;
+  }
+
+  // ── 1b. Stats grid (Maison) ───────────────────────────────
+  function _renderHomeStatsGrid(stats) {
+    const cards = [
+      { label: 'Exercices',       value: stats.total_completed,            icon: '✅' },
+      { label: 'Jours complets',  value: stats.full_days,                  icon: '🔥' },
+      { label: 'Meilleure série', value: stats.best_streak + '\u202fj',    icon: '🏆' },
+      { label: 'Série actuelle',  value: stats.current_streak + '\u202fj', icon: '⚡' },
+      { label: 'Jours actifs',    value: stats.active_days,                icon: '📅' },
+    ];
+    return `<div class="profile-stats-grid" style="animation:fadeIn 0.3s ease 0.02s both">
+      ${cards.map(c => `
+        <div class="profile-stat-card">
+          <span class="profile-stat-icon">${c.icon}</span>
+          <span class="profile-stat-value">${c.value}</span>
+          <span class="profile-stat-label">${c.label}</span>
+        </div>`).join('')}
+    </div>`;
   }
 
   // ── 2. Statut du jour ───────────────────────────────────────
