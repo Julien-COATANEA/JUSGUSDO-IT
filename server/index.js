@@ -18,6 +18,7 @@ const authRoutes = require('./routes/auth');
 const exercisesRoutes = require('./routes/exercises');
 const usersRoutes = require('./routes/users');
 const adminRoutes = require('./routes/admin');
+const gymRoutes = require('./routes/gym');
 
 // Push notifications (optional — only enabled when VAPID keys are set)
 let pushModule = null;
@@ -40,6 +41,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/exercises', exercisesRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/gym-checklist', gymRoutes);
 if (pushModule) app.use('/api/push', pushModule.router);
 
 // SPA fallback — serve index.html for all non-API routes

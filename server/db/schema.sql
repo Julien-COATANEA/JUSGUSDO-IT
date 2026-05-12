@@ -151,6 +151,19 @@ ALTER TABLE trolls ADD COLUMN IF NOT EXISTS custom_text VARCHAR(200);
 
 -- Migration: add level to minigame_plays (easy/medium/hard, 1 play per level per day)
 ALTER TABLE minigame_plays ADD COLUMN IF NOT EXISTS level VARCHAR(10) DEFAULT 'easy';
+
+-- Gym daily checklist (salle de sport)
+CREATE TABLE IF NOT EXISTS gym_checklist_entries (
+  id            SERIAL PRIMARY KEY,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  entry_date    DATE NOT NULL,
+  exercise_name VARCHAR(100) NOT NULL,
+  session_name  VARCHAR(50) NOT NULL,
+  completed     BOOLEAN DEFAULT FALSE,
+  completed_at  TIMESTAMPTZ,
+  UNIQUE(user_id, entry_date, exercise_name)
+);
+CREATE INDEX IF NOT EXISTS idx_gym_checklist_user_date ON gym_checklist_entries(user_id, entry_date);
 DO $$
 BEGIN
   -- Replace old (user_id, play_date) unique with (user_id, play_date, level)

@@ -264,6 +264,49 @@ function _applyDevMock() {
   API.getWizz     = async () => ({ wizzes: [], unread: 0 });
   API.markWizzRead = async () => ({ ok: true });
 
+  // Gym checklist (salle de sport)
+  let _devGymEntries = [
+    { id: 1, entry_date: new Date().toISOString().split('T')[0], exercise_name: 'Tirage Bucheron', session_name: 'Dos Biceps', completed: true, completed_at: new Date().toISOString() },
+    { id: 2, entry_date: new Date().toISOString().split('T')[0], exercise_name: 'Tirage Verticale', session_name: 'Dos Biceps', completed: false, completed_at: null },
+  ];
+  API.getGymChecklist = async (start, end) => ({
+    entries: _devGymEntries.filter(e => e.entry_date >= start && e.entry_date <= end),
+  });
+  API.toggleGymChecklist = async (exercise_name, session_name, entry_date) => {
+    const today = new Date().toISOString().split('T')[0];
+    if (entry_date > today) throw new Error('Impossible de cocher une date future');
+    const idx = _devGymEntries.findIndex(e => e.entry_date === entry_date && e.exercise_name === exercise_name);
+    let newCompleted;
+    if (idx >= 0) {
+      newCompleted = !_devGymEntries[idx].completed;
+      _devGymEntries[idx].completed = newCompleted;
+      _devGymEntries[idx].completed_at = newCompleted ? new Date().toISOString() : null;
+    } else {
+      newCompleted = true;
+      _devGymEntries.push({ id: Date.now(), entry_date, exercise_name, session_name, completed: true, completed_at: new Date().toISOString() });
+    }
+    const sessionEntries = _devGymEntries.filter(e => e.entry_date === entry_date && e.session_name === session_name);
+    const doneNow = sessionEntries.filter(e => e.completed).length;
+    const xpDelta = newCompleted ? 4 : -4;
+    DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
+    return { completed: newCompleted, xp: DEV_FAKE_USER.xp, xpDelta, sessionDone: doneNow, sessionTotal: sessionEntries.length };
+  };
+  API.getGymStats = async (userId) => {
+    const calendar = [];
+    const startD = new Date();
+    startD.setDate(startD.getDate() - 27);
+    const dow = startD.getDay();
+    startD.setDate(startD.getDate() + (dow === 0 ? -6 : 1 - dow));
+    for (let i = 0; i < 28; i++) {
+      const d = new Date(startD);
+      d.setDate(startD.getDate() + i);
+      const date = d.toISOString().split('T')[0];
+      const dayEntries = _devGymEntries.filter(e => e.entry_date === date);
+      calendar.push({ date, done: dayEntries.filter(e => e.completed).length, total: dayEntries.length });
+    }
+    return { stats: { calendar, total_completed: _devGymEntries.filter(e => e.completed).length, active_days: 2, full_days: 1, best_streak: 2, current_streak: 1, today_done: _devGymEntries.filter(e => e.entry_date === new Date().toISOString().split('T')[0] && e.completed).length, today_total: _devGymEntries.filter(e => e.entry_date === new Date().toISOString().split('T')[0]).length } };
+  };
+
   // Push
   API.post = async (path, body) => {
     if (path.includes('push')) return { ok: true };

@@ -3962,3 +3962,162 @@ html, body {
 .wizz-item-text { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .wizz-item-meta { font-size: 11px; color: var(--text2); font-weight: 500; }
 
+/* ═══ Muscu tab bar (Records / Séance) ══════════════════════════ */
+.muscu-tab-bar {
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.muscu-tab {
+  flex: 1;
+  padding: 8px 0;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.muscu-tab.active {
+  color: var(--accent3);
+  border-bottom-color: var(--accent3);
+}
+
+/* ═══ Séance tab ══════════════════════════════════════════════ */
+.gym-date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 16px 0 12px;
+}
+.gym-date-nav-btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, opacity 0.15s;
+}
+.gym-date-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.gym-date-nav-btn:not(:disabled):active { background: var(--card); }
+.gym-date-nav-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  flex: 1;
+  text-transform: capitalize;
+}
+
+.gym-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gym-session-card {
+  border-radius: 14px;
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  overflow: hidden;
+  transition: border-color 0.15s;
+  cursor: pointer;
+}
+.gym-session-card.selected {
+  border-color: var(--session-color, var(--accent3));
+}
+.gym-session-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+}
+.gym-session-card-icon { font-size: 20px; flex-shrink: 0; }
+.gym-session-card-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.gym-session-card-progress {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text3);
+  background: var(--card2);
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+.gym-session-card-progress.done {
+  color: #22d18b;
+  background: rgba(34,209,139,0.15);
+}
+.gym-session-card-chevron {
+  font-size: 11px;
+  color: var(--text3);
+  width: 20px;
+  text-align: center;
+}
+
+.gym-session-exercises {
+  border-top: 1px solid var(--border);
+  padding: 6px 0;
+}
+.gym-ex-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.12s;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  user-select: none;
+}
+.gym-ex-row:last-child { border-bottom: none; }
+.gym-ex-row:active:not(.gym-ex-row--disabled) { background: rgba(255,255,255,0.05); }
+.gym-ex-row--disabled { opacity: 0.4; cursor: default; }
+.gym-ex-row.checked .gym-ex-name { color: var(--text2); text-decoration: line-through; opacity: 0.7; }
+.gym-ex-checkbox { font-size: 18px; flex-shrink: 0; }
+.gym-ex-name { font-size: 14px; font-weight: 600; color: var(--text); }
+
+.gym-future-note {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text3);
+  margin-top: 16px;
+  padding: 0 8px;
+}
+
+/* ═══ Profile: Maison / Salle tab switcher ══════════════════ */
+.profile-stats-tab-bar {
+  display: flex;
+  gap: 6px;
+  margin: 12px 0 16px;
+  background: var(--card2);
+  border-radius: 12px;
+  padding: 4px;
+}
+.profile-stats-tab {
+  flex: 1;
+  padding: 8px 0;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+  border-radius: 9px;
+  transition: background 0.15s, color 0.15s;
+}
+.profile-stats-tab.active {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+

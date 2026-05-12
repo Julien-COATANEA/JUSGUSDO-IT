@@ -2,6 +2,10 @@
 const MuscuPage = (() => {
   let _userId = null;
   let _customSessionExercises = {}; // { [sessionName]: string[] } – stored in localStorage
+  let _activeTab = 'records';  // 'records' | 'seance'
+  let _gymDate = null;         // ISO string YYYY-MM-DD (today by default)
+  let _gymSelectedSession = null; // session name selected for the day
+  let _gymEntries = [];        // gym checklist entries for the day
 
   // ── Session definitions ──────────────────────────────────
   const _MUSCU_SESSIONS = [
@@ -65,6 +69,10 @@ const MuscuPage = (() => {
             <span class="header-rank" id="muscu-header-sub">Chargement…</span>
           </div>
         </header>
+        <div class="muscu-tab-bar">
+          <button class="muscu-tab${_activeTab === 'records' ? ' active' : ''}" onclick="MuscuPage.switchMuscuTab('records')">📊 Records</button>
+          <button class="muscu-tab${_activeTab === 'seance' ? ' active' : ''}" onclick="MuscuPage.switchMuscuTab('seance')">🏋️ Séance</button>
+        </div>
         <div id="muscu-content" style="padding:0 0 100px">
           <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
             <div class="skeleton-card" style="height:60px"></div>
@@ -80,12 +88,21 @@ const MuscuPage = (() => {
   // ── Init ─────────────────────────────────────────────────
   async function init() {
     _loadCustomExercises();
+    if (!_gymDate) _gymDate = new Date().toISOString().split('T')[0];
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     _userId = currentUser.id;
 
     const container = document.getElementById('muscu-content');
     if (!container) return;
 
+    if (_activeTab === 'seance') {
+      await _initSeanceTab(container);
+    } else {
+      await _initRecordsTab(container);
+    }
+  }
+
+  async function _initRecordsTab(container) {
     try {
       const [{ records }, histRes] = await Promise.all([
         API.getMuscleRecords(_userId),
@@ -102,6 +119,26 @@ const MuscuPage = (() => {
       _initLongPress();
     } catch (err) {
       console.error('[Muscu]', err);
+      container.innerHTML = `<p style="color:var(--text3);text-align:center;padding:40px 16px">Erreur de chargement</p>`;
+    }
+  }
+
+  async function _initSeanceTab(container) {
+    try {
+      const sub = document.getElementById('muscu-header-sub');
+      if (sub) sub.textContent = 'Séance du jour';
+
+      const { entries } = await API.getGymChecklist(_gymDate, _gymDate);
+      _gymEntries = entries || [];
+
+      // Restore selected session from entries (if any)
+      if (!_gymSelectedSession && _gymEntries.length > 0) {
+        _gymSelectedSession = _gymEntries[0].session_name;
+      }
+
+      container.innerHTML = _renderSeancePage();
+    } catch (err) {
+      console.error('[Muscu Séance]', err);
       container.innerHTML = `<p style="color:var(--text3);text-align:center;padding:40px 16px">Erreur de chargement</p>`;
     }
   }
@@ -266,6 +303,129 @@ const MuscuPage = (() => {
         }).join('')}
       </div>
     `;
+  }
+
+  // ── Séance tab renderer ───────────────────────────────────
+  function _renderSeancePage() {
+    const today = new Date().toISOString().split('T')[0];
+    const dateObj = new Date(_gymDate + 'T12:00:00');
+    const isFuture = _gymDate > today;
+    const isToday  = _gymDate === today;
+    const dateLabel = isToday
+      ? "Aujourd'hui"
+      : dateObj.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    // Date nav
+    const navHtml = `
+      <div class="gym-date-nav">
+        <button class="gym-date-nav-btn" onclick="MuscuPage.gymNavDate(-1)">‹</button>
+        <span class="gym-date-nav-label">${dateLabel}</span>
+        <button class="gym-date-nav-btn" onclick="MuscuPage.gymNavDate(1)" ${isToday ? 'disabled' : ''}>›</button>
+      </div>`;
+
+    // Build entry map for easy lookup: exercise_name → completed
+    const entryMap = {};
+    _gymEntries.forEach(e => { entryMap[e.exercise_name.toLowerCase()] = e.completed; });
+
+    // Session cards
+    const sessionCardsHtml = _MUSCU_SESSIONS.map((session, idx) => {
+      const isSelected = _gymSelectedSession === session.name;
+      const allExercises = _getSessionExercises(session);
+      const doneCount = allExercises.filter(ex => entryMap[ex.toLowerCase()]).length;
+      const isFullDone = doneCount === allExercises.length && allExercises.length > 0;
+
+      let exercisesHtml = '';
+      if (isSelected) {
+        exercisesHtml = `<div class="gym-session-exercises">
+          ${allExercises.map(ex => {
+            const done = !!entryMap[ex.toLowerCase()];
+            const safeEx  = _escape(ex).replace(/'/g, "\\'");
+            const safeSes = _escape(session.name).replace(/'/g, "\\'");
+            const date    = _escape(_gymDate).replace(/'/g, "\\'");
+            return `<div class="gym-ex-row${done ? ' checked' : ''}${isFuture ? ' gym-ex-row--disabled' : ''}"
+              onclick="${isFuture ? '' : `MuscuPage.toggleGymExercise('${safeEx}','${safeSes}','${date}');`}">
+              <span class="gym-ex-checkbox">${done ? '✅' : '⬜'}</span>
+              <span class="gym-ex-name">${_escape(ex)}</span>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }
+
+      return `
+        <div class="gym-session-card${isSelected ? ' selected' : ''}" style="--session-color:${session.color}"
+          onclick="MuscuPage.selectGymSession('${_escape(session.name).replace(/'/g, "\\'")}')">
+          <div class="gym-session-card-header">
+            <span class="gym-session-card-icon">${session.icon}</span>
+            <span class="gym-session-card-name">${_escape(session.name)}</span>
+            <span class="gym-session-card-progress${isFullDone ? ' done' : ''}">${doneCount}/${allExercises.length}</span>
+            <span class="gym-session-card-chevron">${isSelected ? '▲' : '▼'}</span>
+          </div>
+          ${exercisesHtml}
+        </div>`;
+    }).join('');
+
+    return `
+      <div style="padding:0 16px 20px">
+        ${navHtml}
+        <div class="gym-session-list">${sessionCardsHtml}</div>
+        ${isFuture ? '<p class="gym-future-note">Les séances futures ne peuvent pas être cochées.</p>' : ''}
+      </div>`;
+  }
+
+  // ── Séance tab public actions ─────────────────────────────
+  function switchMuscuTab(tab) {
+    _activeTab = tab;
+    // Update tab buttons
+    document.querySelectorAll('.muscu-tab').forEach(btn => {
+      const isActive = (btn.textContent.includes('Records') && tab === 'records') ||
+                       (btn.textContent.includes('Séance')  && tab === 'seance');
+      btn.classList.toggle('active', isActive);
+    });
+    init();
+  }
+
+  function gymNavDate(delta) {
+    const d = new Date(_gymDate + 'T12:00:00');
+    d.setDate(d.getDate() + delta);
+    const today = new Date().toISOString().split('T')[0];
+    const newDate = d.toISOString().split('T')[0];
+    if (newDate > today) return;
+    _gymDate = newDate;
+    _gymSelectedSession = null;
+    _gymEntries = [];
+    const container = document.getElementById('muscu-content');
+    if (container) _initSeanceTab(container);
+  }
+
+  function selectGymSession(sessionName) {
+    _gymSelectedSession = _gymSelectedSession === sessionName ? null : sessionName;
+    const container = document.getElementById('muscu-content');
+    if (container) container.innerHTML = _renderSeancePage();
+  }
+
+  async function toggleGymExercise(exerciseName, sessionName, date) {
+    try {
+      const result = await API.toggleGymChecklist(exerciseName, sessionName, date);
+      // Update local state
+      const lower = exerciseName.toLowerCase();
+      const existing = _gymEntries.find(e => e.exercise_name.toLowerCase() === lower && e.entry_date === date);
+      if (existing) {
+        existing.completed = result.completed;
+      } else {
+        _gymEntries.push({ entry_date: date, exercise_name: exerciseName, session_name: sessionName, completed: result.completed });
+      }
+      // Update XP display
+      if (result.xp !== undefined) {
+        const stored = JSON.parse(localStorage.getItem('user') || '{}');
+        stored.xp = result.xp;
+        localStorage.setItem('user', JSON.stringify(stored));
+      }
+      const container = document.getElementById('muscu-content');
+      if (container) container.innerHTML = _renderSeancePage();
+    } catch (err) {
+      console.error('[GymToggle]', err);
+      if (typeof App !== 'undefined') App.showToast('Erreur de mise à jour');
+    }
   }
 
   // ── Custom exercises section ──────────────────────────────
@@ -501,14 +661,17 @@ const MuscuPage = (() => {
   }
 
   async function _refresh() {
+    const container = document.getElementById('muscu-content');
+    if (!container) return;
+    if (_activeTab === 'seance') {
+      await _initSeanceTab(container);
+      return;
+    }
     const [{ records }, histRes] = await Promise.all([
       API.getMuscleRecords(_userId),
       API.getMuscleHistory(_userId, '').catch(() => ({ history: [] })),
     ]);
     const muscleHistory = histRes.history || [];
-    const container = document.getElementById('muscu-content');
-    if (!container) return;
-
     const totalPRs = records.length;
     const sub = document.getElementById('muscu-header-sub');
     if (sub) sub.textContent = `${totalPRs} record${totalPRs !== 1 ? 's' : ''} enregistré${totalPRs !== 1 ? 's' : ''}`;
@@ -623,5 +786,5 @@ const MuscuPage = (() => {
     _refresh();
   }
 
-  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession };
+  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymNavDate, selectGymSession, toggleGymExercise };
 })();

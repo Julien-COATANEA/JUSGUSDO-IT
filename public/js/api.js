@@ -72,5 +72,11 @@ const API = (() => {
     sendWizz: (targetId, message_key, custom_text) => request('POST', `/users/${targetId}/send-wizz`, { message_key, custom_text }),
     getWizz: (userId) => request('GET', `/users/${userId}/wizz`),
     markWizzRead: (userId) => request('PATCH', `/users/${userId}/wizz/read`, {}),
+
+    // Gym checklist (salle de sport)
+    getGymChecklist: (start, end) => request('GET', `/gym-checklist?start=${start}&end=${end}`),
+    toggleGymChecklist: (exercise_name, session_name, entry_date) =>
+      request('POST', '/gym-checklist/toggle', { exercise_name, session_name, entry_date }),
+    getGymStats: (userId) => request('GET', `/gym-checklist/stats/${userId}`),
   };
 })();

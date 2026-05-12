@@ -5,6 +5,9 @@ const ProfilePage = (() => {
   let _calendarWeeks  = [];
   let _calPage        = 0; // 0 = most recent N weeks, higher = older
   let _calPageSize     = 4; // computed dynamically from card width
+  let _activeStatsTab = 'maison'; // 'maison' | 'salle'
+  let _gymCalendarWeeks = [];
+  let _gymCalPage       = 0;
 
   function render() {
     return `
@@ -37,14 +40,17 @@ const ProfilePage = (() => {
     try {
       const fetches = [
         API.getUserStats(_profileUserId),
+        API.getGymStats(_profileUserId),
       ];
       if (_isOwnProfile) fetches.push(API.getWizz(_profileUserId));
       const results = await Promise.all(fetches);
       const { user, stats } = results[0];
-      const wizzData        = _isOwnProfile ? results[1] : null;
+      const gymStats  = results[1]?.stats || null;
+      const wizzData  = _isOwnProfile ? results[2] : null;
 
-      container.innerHTML = _renderAll(user, stats, wizzData);
+      container.innerHTML = _renderAll(user, stats, gymStats, wizzData);
       requestAnimationFrame(_autoSizeCalendar);
+      requestAnimationFrame(_autoSizeGymCalendar);
       // Mark as read silently
       if (_isOwnProfile && wizzData?.unread > 0) {
         API.markWizzRead(_profileUserId).catch(() => {});
@@ -58,7 +64,7 @@ const ProfilePage = (() => {
   }
 
   // ── Main renderer ───────────────────────────────────────────
-  function _renderAll(user, stats, wizzData = null) {
+  function _renderAll(user, stats, gymStats, wizzData = null) {
     const rank     = Gamification.getRank(user.xp);
     const progress = Gamification.getProgress(user.xp);
     const avatar   = user.avatar || rank.emoji;
@@ -76,12 +82,21 @@ const ProfilePage = (() => {
       </div>
 
       <div id="profile-panel-stats">
-        ${_renderTodayBadge(stats)}
-        ${_renderCalendar(stats.calendar)}
-        ${_renderXpChart(stats.xp_history)}
-        ${_renderChallenges(stats)}
-        ${_renderTopEx(stats.top_exercises)}
-        ${_isOwnProfile ? _renderNotifSection() : ''}
+        <div class="profile-stats-tab-bar">
+          <button class="profile-stats-tab${_activeStatsTab === 'maison' ? ' active' : ''}" onclick="ProfilePage.switchStatsTab('maison')">🏠 Maison</button>
+          <button class="profile-stats-tab${_activeStatsTab === 'salle' ? ' active' : ''}" onclick="ProfilePage.switchStatsTab('salle')">🏋️ Salle</button>
+        </div>
+        <div id="profile-stats-maison" ${_activeStatsTab !== 'maison' ? 'style="display:none"' : ''}>
+          ${_renderTodayBadge(stats)}
+          ${_renderCalendar(stats.calendar)}
+          ${_renderXpChart(stats.xp_history)}
+          ${_renderChallenges(stats)}
+          ${_renderTopEx(stats.top_exercises)}
+          ${_isOwnProfile ? _renderNotifSection() : ''}
+        </div>
+        <div id="profile-stats-salle" ${_activeStatsTab !== 'salle' ? 'style="display:none"' : ''}>
+          ${gymStats ? _renderGymStats(gymStats) : '<p style="color:var(--text3);text-align:center;padding:32px 0">Aucune donnée salle pour le moment.<br>Commence une séance dans l\'onglet Muscu !</p>'}
+        </div>
       </div>
 
       ${wizzData !== null ? `<div id="profile-panel-wizz" style="display:none">${_renderWizz(wizzData.wizzes)}</div>` : ''}
@@ -99,6 +114,164 @@ const ProfilePage = (() => {
     });
     document.getElementById('admin-content')?.scrollTo(0, 0);
     window.scrollTo(0, 0);
+  }
+
+  function switchStatsTab(tab) {
+    _activeStatsTab = tab;
+    const maisonPanel = document.getElementById('profile-stats-maison');
+    const sallePanel  = document.getElementById('profile-stats-salle');
+    if (maisonPanel) maisonPanel.style.display = tab === 'maison' ? 'block' : 'none';
+    if (sallePanel)  sallePanel.style.display  = tab === 'salle'  ? 'block' : 'none';
+    document.querySelectorAll('.profile-stats-tab').forEach(btn => {
+      btn.classList.toggle('active',
+        (btn.textContent.includes('Maison') && tab === 'maison') ||
+        (btn.textContent.includes('Salle')  && tab === 'salle'));
+    });
+    if (tab === 'salle') requestAnimationFrame(_autoSizeGymCalendar);
+  }
+
+  // ── Gym (salle) stats renderer ─────────────────────────────
+  function _renderGymStats(gymStats) {
+    const simpleCards = [
+      { label: 'Exercices cochés', value: gymStats.total_completed, icon: '✅' },
+      { label: 'Jours complets',   value: gymStats.full_days,       icon: '🔥' },
+      { label: 'Meilleure série',  value: gymStats.best_streak + '\u202fj', icon: '🏆' },
+      { label: 'Série actuelle',   value: gymStats.current_streak + '\u202fj', icon: '⚡' },
+      { label: 'Jours actifs',     value: gymStats.active_days,     icon: '📅' },
+    ];
+
+    const statsGridHtml = `<div class="profile-stats-grid" style="animation:fadeIn 0.3s ease 0.04s both">
+      ${simpleCards.map(c => `
+        <div class="profile-stat-card">
+          <span class="profile-stat-icon">${c.icon}</span>
+          <span class="profile-stat-value">${c.value}</span>
+          <span class="profile-stat-label">${c.label}</span>
+        </div>`).join('')}
+    </div>`;
+
+    return `
+      ${statsGridHtml}
+      ${_renderGymCalendar(gymStats.calendar)}
+    `;
+  }
+
+  function _renderGymCalendar(calendar) {
+    if (!calendar || !calendar.length) return '';
+    const today = new Date().toISOString().split('T')[0];
+    const DAY_LABELS = ['L','M','M','J','V','S','D'];
+
+    _gymCalendarWeeks = [];
+    for (let i = 0; i < calendar.length; i += 7) {
+      _gymCalendarWeeks.push(calendar.slice(i, i + 7));
+    }
+    _gymCalPage = 0;
+
+    const weeksSlice = _gymCalendarWeeks;
+    const pagerLabel = _gymCalPagerLabel(weeksSlice);
+
+    const dayLabelsHtml = `<div class="cal-day-labels">
+      <div class="cal-month-spacer"></div>
+      ${DAY_LABELS.map(l => `<div class="cal-day-lbl">${l}</div>`).join('')}
+    </div>`;
+
+    return `
+      <div class="profile-section" style="animation:fadeIn 0.3s ease 0.1s both" id="gym-cal-section">
+        <div class="cal-section-header">
+          <div class="profile-section-title" style="margin-bottom:0">Activité salle</div>
+          <div class="cal-pager">
+            <button class="cal-pager-btn" id="gym-cal-prev" onclick="ProfilePage.gymCalPage(1)" title="Semaines précédentes" disabled>‹</button>
+            <span class="cal-pager-label" id="gym-cal-pager-label">${pagerLabel}</span>
+            <button class="cal-pager-btn" id="gym-cal-next" onclick="ProfilePage.gymCalPage(-1)" title="Semaines suivantes" disabled>›</button>
+          </div>
+        </div>
+        <div class="cal-heatmap-wrap cal-sz-lg" id="gym-cal-heatmap-wrap">
+          ${dayLabelsHtml}
+          <div class="cal-weeks-row" id="gym-cal-weeks-row">
+            ${_renderGymWeeks(weeksSlice, today)}
+          </div>
+        </div>
+        <div class="cal-legend">
+          <div class="cal-cell full"  style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Séance complète</span>
+          <div class="cal-cell partial" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>En cours</span>
+          <div class="cal-cell empty" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Aucun</span>
+        </div>
+      </div>`;
+  }
+
+  function _renderGymWeeks(weeks, today) {
+    let lastMonth = null;
+    return weeks.map(week => {
+      const d = new Date(week[0].date + 'T12:00:00');
+      const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
+      let monthLabel = '';
+      if (monthKey !== lastMonth) {
+        lastMonth = monthKey;
+        monthLabel = d.toLocaleDateString('fr-FR', { month: 'short' });
+      }
+      const cells = week.map(day => {
+        const pct = day.total > 0 ? day.done / day.total : 0;
+        const cls = day.date > today ? 'future'
+                  : pct >= 1        ? 'full'
+                  : pct > 0         ? 'partial'
+                  :                   'empty';
+        return `<div class="cal-cell ${cls}${day.date === today ? ' cal-today' : ''}" title="${day.date} · ${day.done}/${day.total}"></div>`;
+      }).join('');
+      return `<div class="cal-week-col"><div class="cal-month-label">${monthLabel}</div>${cells}</div>`;
+    }).join('');
+  }
+
+  function _gymCalPagerLabel(weeks) {
+    if (!weeks.length) return '';
+    const firstDay = weeks[0][0].date;
+    const lastWeek = weeks[weeks.length - 1];
+    const lastDay  = lastWeek[lastWeek.length - 1].date;
+    const opts     = { day: 'numeric', month: 'short' };
+    const first    = new Date(firstDay + 'T12:00:00').toLocaleDateString('fr-FR', opts);
+    const last     = new Date(lastDay  + 'T12:00:00').toLocaleDateString('fr-FR', opts);
+    return `${first} – ${last}`;
+  }
+
+  function _autoSizeGymCalendar() {
+    const wrap = document.getElementById('gym-cal-heatmap-wrap');
+    if (!wrap || !_gymCalendarWeeks.length) return;
+    const labels  = wrap.querySelector('.cal-day-labels');
+    const labelsW = labels ? labels.offsetWidth + 4 : 32;
+    const available = wrap.clientWidth - labelsW - 4;
+    const cellSz = 24 + 5;
+    const pageSize = Math.max(1, Math.floor(available / cellSz));
+    _gymCalPage = 0;
+    const today      = new Date().toISOString().split('T')[0];
+    const total = _gymCalendarWeeks.length;
+    const end   = total;
+    const start = Math.max(0, end - pageSize);
+    const weeksSlice = _gymCalendarWeeks.slice(start, end);
+    const maxPage = Math.max(0, Math.ceil(_gymCalendarWeeks.length / pageSize) - 1);
+    const weeksRow = document.getElementById('gym-cal-weeks-row');
+    if (weeksRow) weeksRow.innerHTML = _renderGymWeeks(weeksSlice, today);
+    const labelEl  = document.getElementById('gym-cal-pager-label');
+    if (labelEl)  labelEl.textContent = _gymCalPagerLabel(weeksSlice);
+    const prevBtn  = document.getElementById('gym-cal-prev');
+    const nextBtn  = document.getElementById('gym-cal-next');
+    if (prevBtn) prevBtn.disabled = maxPage === 0;
+    if (nextBtn) nextBtn.disabled = true;
+  }
+
+  function gymCalPage(delta) {
+    const maxPage = Math.max(0, Math.ceil(_gymCalendarWeeks.length / _calPageSize) - 1);
+    _gymCalPage = Math.max(0, Math.min(maxPage, _gymCalPage + delta));
+    const total = _gymCalendarWeeks.length;
+    const end   = total - _gymCalPage * _calPageSize;
+    const start = Math.max(0, end - _calPageSize);
+    const weeksSlice = _gymCalendarWeeks.slice(start, Math.max(0, end));
+    const today      = new Date().toISOString().split('T')[0];
+    const weeksRow = document.getElementById('gym-cal-weeks-row');
+    if (weeksRow) weeksRow.innerHTML = _renderGymWeeks(weeksSlice, today);
+    const labelEl = document.getElementById('gym-cal-pager-label');
+    if (labelEl)  labelEl.textContent = _gymCalPagerLabel(weeksSlice);
+    const prevBtn = document.getElementById('gym-cal-prev');
+    const nextBtn = document.getElementById('gym-cal-next');
+    if (prevBtn) prevBtn.disabled = _gymCalPage >= maxPage;
+    if (nextBtn) nextBtn.disabled = _gymCalPage <= 0;
   }
 
   // ── 1. Hero card ────────────────────────────────────────────
@@ -670,6 +843,6 @@ const ProfilePage = (() => {
     }
   }
 
-  return { render, init, switchTab, calPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar };
+  return { render, init, switchTab, switchStatsTab, calPage, gymCalPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar };
 })();
 
