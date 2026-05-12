@@ -37,22 +37,13 @@ const ProfilePage = (() => {
     try {
       const fetches = [
         API.getUserStats(_profileUserId),
-        API.getMuscleRecords(_profileUserId),
       ];
       if (_isOwnProfile) fetches.push(API.getWizz(_profileUserId));
       const results = await Promise.all(fetches);
       const { user, stats } = results[0];
-      const { records }     = results[1];
-      const wizzData        = _isOwnProfile ? results[2] : null;
+      const wizzData        = _isOwnProfile ? results[1] : null;
 
-      // Fetch muscle history for sparklines (best-effort, non-blocking)
-      let muscleHistory = [];
-      try {
-        const { history } = await API.getMuscleHistory(_profileUserId, '');
-        muscleHistory = history || [];
-      } catch (_) {}
-
-      container.innerHTML = _renderAll(user, stats, records, wizzData, muscleHistory);
+      container.innerHTML = _renderAll(user, stats, wizzData);
       requestAnimationFrame(_autoSizeCalendar);
       // Mark as read silently
       if (_isOwnProfile && wizzData?.unread > 0) {
@@ -67,7 +58,7 @@ const ProfilePage = (() => {
   }
 
   // ── Main renderer ───────────────────────────────────────────
-  function _renderAll(user, stats, records = [], wizzData = null, muscleHistory = []) {
+  function _renderAll(user, stats, wizzData = null) {
     const rank     = Gamification.getRank(user.xp);
     const progress = Gamification.getProgress(user.xp);
     const avatar   = user.avatar || rank.emoji;
@@ -78,8 +69,7 @@ const ProfilePage = (() => {
       ${_renderHero(avatar, name, rank, progress, stats, user.tokens)}
 
       <div class="profile-tabs">
-        <button class="profile-tab active" id="ptab-stats"   onclick="ProfilePage.switchTab('stats')">📊 Stats</button>
-        <button class="profile-tab"        id="ptab-records" onclick="ProfilePage.switchTab('records')">🏋️ Muscu</button>
+        <button class="profile-tab active" id="ptab-stats" onclick="ProfilePage.switchTab('stats')">📊 Stats</button>
         ${wizzData !== null
           ? `<button class="profile-tab" id="ptab-wizz" onclick="ProfilePage.switchTab('wizz')">⚡ Wizz${hasUnread ? ` <span class="wizz-tab-badge">${wizzData.unread}</span>` : ''}</button>`
           : ''}
@@ -94,17 +84,13 @@ const ProfilePage = (() => {
         ${_isOwnProfile ? _renderNotifSection() : ''}
       </div>
 
-      <div id="profile-panel-records" style="display:none">
-        ${_renderMuscleRecords(records, user.username, muscleHistory)}
-      </div>
-
       ${wizzData !== null ? `<div id="profile-panel-wizz" style="display:none">${_renderWizz(wizzData.wizzes)}</div>` : ''}
     `;
   }
 
   // ── Tab switch ──────────────────────────────────────────────
   function switchTab(tab) {
-    const panels = ['stats', 'records', 'wizz'];
+    const panels = ['stats', 'wizz'];
     panels.forEach(p => {
       const panel = document.getElementById(`profile-panel-${p}`);
       const btn   = document.getElementById(`ptab-${p}`);
@@ -434,165 +420,7 @@ const ProfilePage = (() => {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  // ── 7. Muscu — Séances & Records ────────────────────────────
-  const _MUSCU_SESSIONS = [
-    {
-      name: 'Pecs Triceps', icon: '💪', color: '#e94560',
-      exercises: [
-        'Développé Couché Haltères',
-        'Développé Couché Barres',
-        'Développé Couché Incliné',
-        'Écarté Poulie',
-        'Triceps Corde (extension poulie basse)',
-        'Triceps Corde (extension poulie haute)',
-        'Dips',
-      ],
-    },
-    {
-      name: 'Dos Biceps', icon: '🏋️', color: '#7c5cbf',
-      exercises: [
-        'Tirage Bucheron',
-        'Tirage Verticale',
-        'Tirage Horizontale',
-        'Traction',
-        'Curl Haltère',
-        'Curl Barre',
-        'Curl Marteau',
-      ],
-    },
-    {
-      name: 'Jambes', icon: '🦵', color: '#22d18b',
-      exercises: [
-        'Ischios Assis',
-        'Leg Extension',
-        'Presses',
-        'Adducteurs',
-        'Fentes',
-        'Squats',
-        'Mollets',
-      ],
-    },
-    {
-      name: 'Full', icon: '⚡', color: '#fbbf24',
-      exercises: [
-        'Développé Couché Barre',
-        'Traction',
-        'Triceps Corde / Élévation Latérale',
-        'Épaules',
-        'Curl Haltère',
-      ],
-    },
-  ];
-
-  const _MR_CATEGORIES = _MUSCU_SESSIONS.map(s => ({ name: s.name, icon: s.icon, color: s.color }));
-
-  function _catMeta(name) {
-    return _MR_CATEGORIES.find(c => c.name === name) || _MR_CATEGORIES[_MR_CATEGORIES.length - 1];
-  }
-
-  // ── Sparkline SVG (progression poids) ──────────────────────
-  function _renderSparkline(historyPoints) {
-    if (!historyPoints || historyPoints.length < 2) return '';
-    const vals = historyPoints.map(h => h.weight_kg);
-    const minV = Math.min(...vals);
-    const maxV = Math.max(...vals);
-    const W = 60, H = 18;
-    const range = maxV - minV || 1;
-    const pts = vals.map((v, i) => {
-      const x = Math.round((i / (vals.length - 1)) * W);
-      const y = Math.round(H - ((v - minV) / range) * H);
-      return `${x},${y}`;
-    }).join(' ');
-    const lastVal = vals[vals.length - 1];
-    const delta = lastVal - vals[0];
-    const color = delta > 0 ? '#22d18b' : delta < 0 ? '#ef4444' : 'var(--text3)';
-    return `<span class="muscu-sparkline" title="Progression : +${delta > 0 ? '+' : ''}${delta} kg">
-      <svg width="${W}" height="${H + 2}" viewBox="0 0 ${W} ${H + 2}" style="display:block">
-        <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
-      </svg>
-      <span class="muscu-sparkline-delta" style="color:${color}">${delta > 0 ? '+' : ''}${delta}\u202fkg</span>
-    </span>`;
-  }
-
-  function _renderMuscuSessions(records = [], historyByName = {}) {
-    // Group records by exercise name — multiple records allowed per exercise
-    const recMap = {};
-    records.forEach(r => {
-      const key = r.exercise_name.toLowerCase();
-      if (!recMap[key]) recMap[key] = [];
-      recMap[key].push(r);
-    });
-
-    return `
-      <div class="muscu-sessions-label">📋 Programme des séances</div>
-      <div class="muscu-sessions">
-        ${_MUSCU_SESSIONS.map((session, idx) => {
-          const recCount = session.exercises.filter(ex => (recMap[ex.toLowerCase()] || []).length > 0).length;
-          return `
-          <div class="muscu-session-card" id="mscard-${idx}" style="--session-color:${session.color}">
-            <div class="muscu-session-header" onclick="this.closest('.muscu-session-card').classList.toggle('open')">
-              <div class="muscu-session-icon-wrap">
-                <span class="muscu-session-icon">${session.icon}</span>
-              </div>
-              <div class="muscu-session-title-block">
-                <span class="muscu-session-name">${session.name}</span>
-                <span class="muscu-session-sub">${session.exercises.length} exercices</span>
-              </div>
-              ${recCount > 0
-                ? `<span class="muscu-session-recs" style="color:${session.color};background:color-mix(in srgb,${session.color} 15%,transparent)">${recCount}/${session.exercises.length} PR</span>`
-                : `<span class="muscu-session-count">${session.exercises.length}</span>`}
-              <span class="muscu-session-chevron">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-              </span>
-            </div>
-            <div class="muscu-session-body">
-              <div class="muscu-session-body-inner">
-                ${session.exercises.map(ex => {
-                  const recs   = recMap[ex.toLowerCase()] || [];
-                  const safeEx  = _escape(ex).replace(/'/g, "\\'");
-                  const safeCat = _escape(session.name).replace(/'/g, "\\'");
-
-                  const recordsHtml = recs.map(rec => {
-                    const weightFmt  = rec.weight_kg % 1 === 0 ? rec.weight_kg : rec.weight_kg.toFixed(1);
-                    const repsFmt    = rec.reps != null ? rec.reps : null;
-                    const recDateStr = rec.updated_at
-                      ? new Date(rec.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-                      : null;
-                    return `
-                    <div class="muscu-ex-record-row">
-                      <div class="muscu-ex-tags">
-                        <span class="muscu-ex-tag"><span class="muscu-ex-tag-val">${rec.sets}</span> série${rec.sets > 1 ? 's' : ''}</span>
-                        ${repsFmt !== null ? `<span class="muscu-ex-tag"><span class="muscu-ex-tag-val">${repsFmt}</span> rép.</span>` : ''}
-                        <span class="muscu-ex-tag weight"><span class="muscu-ex-tag-val">${weightFmt}</span> kg</span>
-                        ${recDateStr ? `<span class="muscu-ex-tag date">${recDateStr}</span>` : ''}
-                      </div>
-                      ${_isOwnProfile ? `
-                      <div class="mr2-actions">
-                        <button class="mr-btn-icon" title="Modifier" onclick="event.stopPropagation();ProfilePage.showEditRecordForm(${rec.id},'${safeEx}',${rec.sets},${rec.reps != null ? rec.reps : 'null'},${rec.weight_kg},'${safeCat}')">✏️</button>
-                        <button class="mr-btn-icon mr-btn-del" title="Supprimer" onclick="event.stopPropagation();ProfilePage.deleteRecord(${rec.id})">🗑️</button>
-                      </div>` : ''}
-                    </div>`;
-                  }).join('');
-
-                  return `
-                  <div class="muscu-ex-row${recs.length > 0 ? ' has-record' : ''}">
-                    <div class="muscu-ex-left">
-                      <div class="muscu-ex-name-row">
-                        <span class="muscu-ex-name">${_escape(ex)}</span>
-                        ${historyByName[ex.toLowerCase()]?.length >= 2 ? _renderSparkline(historyByName[ex.toLowerCase()]) : ''}
-                        ${_isOwnProfile ? `<button class="mr-btn-icon mr-btn-add" title="Ajouter un record" onclick="event.stopPropagation();ProfilePage.openSessionRecord('${safeEx}','${safeCat}')">＋</button>` : ''}
-                      </div>
-                      ${recs.length > 0 ? recordsHtml : `<span class="muscu-ex-empty">Aucun record</span>`}
-                    </div>
-                  </div>`;
-                }).join('')}
-              </div>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    `;
-  }
+  // ── 7 (was Muscu) → moved to muscu.js ──────────────────────
 
   // ── Wizz received ─────────────────────────────────────────
   function _renderWizz(wizzes) {
@@ -638,260 +466,6 @@ const ProfilePage = (() => {
       <div class="profile-section-title" style="margin-bottom:12px">⚡ Wizz reçus</div>
       <div class="wizz-received-list">${items}</div>
     </div>`;
-  }
-
-  function _renderMuscleRecords(records, ownerUsername, muscleHistory = []) {
-    // Build history lookup by exercise name (sorted by date asc)
-    const historyByName = {};
-    muscleHistory
-      .slice()
-      .sort((a, b) => new Date(a.recorded_at) - new Date(b.recorded_at))
-      .forEach(h => {
-        const key = h.exercise_name.toLowerCase();
-        if (!historyByName[key]) historyByName[key] = [];
-        historyByName[key].push(h);
-      });
-    // Friendly empty state for other users' profiles
-    if (!_isOwnProfile && (!records || records.length === 0)) {
-      const displayName = ownerUsername
-        ? ownerUsername.charAt(0).toUpperCase() + ownerUsername.slice(1)
-        : 'Cet utilisateur';
-      return `<div class="profile-section" style="animation:fadeIn 0.3s ease both;text-align:center;padding:32px 16px">
-        <div style="font-size:32px;margin-bottom:12px">🏋️</div>
-        <p style="color:var(--text2);font-size:14px;margin:0">${_escape(displayName)} n'a pas encore enregistré de records.</p>
-      </div>`;
-    }
-    // Find records for exercises NOT in any standard session (custom)
-    const sessionExNames = new Set();
-    _MUSCU_SESSIONS.forEach(s => s.exercises.forEach(ex => sessionExNames.add(ex.toLowerCase())));
-    const extraRecords = records.filter(r => !sessionExNames.has(r.exercise_name.toLowerCase()));
-
-    const catOptions = _MR_CATEGORIES.map(c =>
-      `<option value="${c.name}">${c.icon} ${c.name}</option>`
-    ).join('');
-
-    // Group custom records by exercise name (multiple records per exercise allowed)
-    const extraByName = {};
-    extraRecords.forEach(r => {
-      const key = r.exercise_name.toLowerCase();
-      if (!extraByName[key]) extraByName[key] = { name: r.exercise_name, category: r.category, records: [] };
-      extraByName[key].records.push(r);
-    });
-    const extraGroups = Object.values(extraByName);
-
-    let extraHtml = '';
-    if (extraGroups.length > 0) {
-      const items = extraGroups.map(group => {
-        const safeCategory = _escape(group.category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name).replace(/'/g, "\\'");
-        const safeName     = _escape(group.name).replace(/'/g, "\\'");
-        const rowsHtml = group.records.map(r => {
-          const weightFmt = r.weight_kg % 1 === 0 ? r.weight_kg : r.weight_kg.toFixed(1);
-          const recCat    = _escape(r.category || group.category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name).replace(/'/g, "\\'");
-          return `
-          <div class="mr2-card">
-            <div class="mr2-card-left">
-              <span class="mr2-badge mr2-badge-sets">🔁 ${r.sets} série${r.sets > 1 ? 's' : ''}${r.reps != null ? ` · ${r.reps} rép` : ''}</span>
-              <span class="mr2-badge mr2-badge-weight">${weightFmt} kg</span>
-            </div>
-            ${_isOwnProfile ? `
-            <div class="mr2-actions">
-              <button class="mr-btn-icon" title="Modifier" onclick="ProfilePage.showEditRecordForm(${r.id}, '${safeName}', ${r.sets}, ${r.reps != null ? r.reps : "''"}, ${r.weight_kg}, '${recCat}')">✏️</button>
-              <button class="mr-btn-icon mr-btn-del" title="Supprimer" onclick="ProfilePage.deleteRecord(${r.id})">🗑️</button>
-            </div>` : ''}
-          </div>`;
-        }).join('');
-        return `
-          <div class="mr2-exercise-group">
-            <div class="mr2-exercise-name-row">
-              <span class="mr2-exercise-name">${_escape(group.name)}</span>
-              ${_isOwnProfile ? `<button class="mr-btn-icon mr-btn-add" title="Ajouter" onclick="ProfilePage.openSessionRecord('${safeName}', '${safeCategory}')">＋</button>` : ''}
-            </div>
-            ${rowsHtml}
-          </div>`;
-      }).join('');
-      extraHtml = `
-        <div class="mr2-group" style="margin-top:16px">
-          <div class="mr2-group-header" style="--cat-color:var(--text3)">
-            <span class="mr2-group-icon">🎯</span>
-            <span class="mr2-group-name">Personnalisés</span>
-            <span class="mr2-group-count">${extraGroups.length}</span>
-          </div>
-          <div class="mr2-group-cards">${items}</div>
-        </div>`;
-    }
-
-    return `
-      <div class="profile-section" id="muscle-records-section" style="animation:fadeIn 0.3s ease 0.22s both">
-        ${_renderMuscuSessions(records, historyByName)}
-        ${_isOwnProfile ? `
-        <div class="muscle-records-title-row" style="margin-top:20px">
-          <div class="profile-section-title" style="margin-bottom:0;font-size:11px">Exercice personnalisé</div>
-          <button class="icon-btn mr-plus-btn" onclick="ProfilePage.showAddRecordForm()" title="Ajouter un record">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
-        </div>` : ''}
-
-        ${extraHtml}
-      </div>
-
-      <div id="mr-modal-overlay" class="mr-modal-overlay" style="display:none" onclick="ProfilePage.cancelRecordForm()">
-        <div class="mr-sheet" onclick="event.stopPropagation()">
-          <div class="mr-sheet-handle"></div>
-          <div class="mr-sheet-header">
-            <div class="mr-sheet-exercise" id="mr-form-context">Record</div>
-            <div class="mr-sheet-date" id="mr-form-date"></div>
-          </div>
-          <input id="mr-name" type="text" class="mr-input mr-name-input" placeholder="Nom de l'exercice" autocomplete="off" maxlength="100" />
-          <select id="mr-category" class="mr-input mr-select">${catOptions}</select>
-          <div class="mr-big-row">
-            <div class="mr-big-group">
-              <div class="mr-big-label">Séries</div>
-              <input id="mr-sets" class="mr-big-input" type="number" min="1" max="100" placeholder="4" inputmode="numeric" />
-            </div>
-            <div class="mr-big-divider"></div>
-            <div class="mr-big-group">
-              <div class="mr-big-label">Répétitions</div>
-              <input id="mr-reps" class="mr-big-input" type="number" min="1" max="9999" placeholder="10" inputmode="numeric" />
-            </div>
-            <div class="mr-big-divider"></div>
-            <div class="mr-big-group">
-              <div class="mr-big-label">Poids</div>
-              <div class="mr-big-input-wrap">
-                <input id="mr-weight" class="mr-big-input" type="number" min="0" step="0.5" placeholder="80" inputmode="decimal" />
-                <span class="mr-big-unit">kg</span>
-              </div>
-            </div>
-          </div>
-          <div id="mr-form-error" class="mr-form-error"></div>
-          <button class="mr-sheet-save-btn" onclick="ProfilePage.saveRecord()">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            Enregistrer le record
-          </button>
-          <button class="mr-sheet-cancel-btn" onclick="ProfilePage.cancelRecordForm()">Annuler</button>
-          <input type="hidden" id="mr-editing-id" value="" />
-        </div>
-      </div>`;
-  }
-
-  function _todayLabel() {
-    return new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  }
-
-  function _openSheet() {
-    const overlay = document.getElementById('mr-modal-overlay');
-    if (!overlay) return;
-    document.getElementById('mr-form-date').textContent = _todayLabel();
-    document.getElementById('mr-form-error').textContent = '';
-    const btn = overlay.querySelector('.mr-sheet-save-btn');
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Enregistrer le record';
-    }
-    overlay.style.display = 'flex';
-    document.body.style.overflow = 'hidden';
-  }
-
-  function showAddRecordForm() {
-    const ctxEl = document.getElementById('mr-form-context');
-    if (ctxEl) ctxEl.textContent = '+ Exercice personnalisé';
-    const nameEl = document.getElementById('mr-name');
-    if (nameEl) { nameEl.value = ''; nameEl.style.display = 'block'; }
-    const catEl = document.getElementById('mr-category');
-    if (catEl) { catEl.value = _MR_CATEGORIES[0].name; catEl.style.display = 'block'; }
-    document.getElementById('mr-sets').value   = '';
-    document.getElementById('mr-reps').value   = '';
-    document.getElementById('mr-weight').value = '';
-    document.getElementById('mr-editing-id').value = '';
-    _openSheet();
-    setTimeout(() => document.getElementById('mr-name').focus(), 300);
-  }
-
-  function showEditRecordForm(id, name, sets, reps, weight, category) {
-    const ctxEl = document.getElementById('mr-form-context');
-    if (ctxEl) ctxEl.textContent = name;
-    const nameEl = document.getElementById('mr-name');
-    if (nameEl) { nameEl.value = name; nameEl.style.display = 'none'; }
-    const catEl = document.getElementById('mr-category');
-    if (catEl) { catEl.value = category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name; catEl.style.display = 'none'; }
-    document.getElementById('mr-sets').value   = sets;
-    document.getElementById('mr-reps').value   = reps != null ? reps : '';
-    document.getElementById('mr-weight').value = weight;
-    document.getElementById('mr-editing-id').value = id;
-    _openSheet();
-    setTimeout(() => document.getElementById('mr-sets').focus(), 300);
-  }
-
-  function cancelRecordForm() {
-    const overlay = document.getElementById('mr-modal-overlay');
-    if (overlay) overlay.style.display = 'none';
-    document.body.style.overflow = '';
-  }
-
-  function openSessionRecord(exerciseName, category) {
-    const ctxEl = document.getElementById('mr-form-context');
-    if (ctxEl) ctxEl.textContent = exerciseName;
-    const nameEl = document.getElementById('mr-name');
-    if (nameEl) { nameEl.value = exerciseName; nameEl.style.display = 'none'; }
-    const catEl = document.getElementById('mr-category');
-    if (catEl) { catEl.value = category || _MR_CATEGORIES[0].name; catEl.style.display = 'none'; }
-    document.getElementById('mr-sets').value   = '';
-    document.getElementById('mr-reps').value   = '';
-    document.getElementById('mr-weight').value = '';
-    document.getElementById('mr-editing-id').value = '';
-    _openSheet();
-    setTimeout(() => document.getElementById('mr-sets').focus(), 300);
-  }
-
-  async function saveRecord() {
-    const name     = (document.getElementById('mr-name').value || '').trim();
-    const category = document.getElementById('mr-category').value;
-    const sets     = parseInt(document.getElementById('mr-sets').value, 10);
-    const repsRaw  = document.getElementById('mr-reps').value.trim();
-    const reps     = repsRaw !== '' ? parseInt(repsRaw, 10) : null;
-    const weight   = parseFloat(document.getElementById('mr-weight').value);
-    const errEl    = document.getElementById('mr-form-error');
-    const editingId = document.getElementById('mr-editing-id').value;
-
-    if (!name) { errEl.textContent = 'Nom de l\'exercice requis'; return; }
-    if (!sets || sets < 1) { errEl.textContent = 'Nombre de séries invalide'; return; }
-    if (reps !== null && (isNaN(reps) || reps < 1)) { errEl.textContent = 'Nombre de répétitions invalide'; return; }
-    if (isNaN(weight) || weight < 0) { errEl.textContent = 'Poids invalide'; return; }
-
-    const btn = document.querySelector('.mr-sheet-save-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
-    errEl.textContent = '';
-    try {
-      if (editingId) {
-        await API.updateMuscleRecord(_profileUserId, editingId, { sets, reps, weight_kg: weight, notes: null, category });
-      } else {
-        await API.saveMuscleRecord(_profileUserId, { exercise_name: name, sets, reps, weight_kg: weight, category });
-      }
-      cancelRecordForm();
-      await _refreshMuscleRecords();
-    } catch (err) {
-      errEl.textContent = err.message || 'Erreur lors de la sauvegarde';
-      if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Enregistrer le record'; }
-    }
-  }
-
-  async function deleteRecord(id) {
-    try {
-      await API.deleteMuscleRecord(_profileUserId, id);
-      await _refreshMuscleRecords();
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function _refreshMuscleRecords() {
-    const { records } = await API.getMuscleRecords(_profileUserId);
-    const section = document.getElementById('muscle-records-section');
-    if (!section) return;
-    const tmp = document.createElement('div');
-    tmp.innerHTML = _renderMuscleRecords(records);
-    section.replaceWith(tmp.firstElementChild);
-    // Stay on the records tab after refresh
-    switchTab('records');
   }
 
   // ── 8. Notifications push ───────────────────────────────────
@@ -1096,6 +670,6 @@ const ProfilePage = (() => {
     }
   }
 
-  return { render, init, switchTab, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, calPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar };
+  return { render, init, switchTab, calPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar };
 })();
 

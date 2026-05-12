@@ -4,6 +4,7 @@ const Router = (() => {
     login:   { page: LoginPage,   requireAuth: false, requireAdmin: false },
     home:    { page: HomePage,    requireAuth: true,  requireAdmin: false },
     app:     { page: WorkoutPage, requireAuth: true,  requireAdmin: false },
+    muscu:   { page: MuscuPage,   requireAuth: true,  requireAdmin: false },
     admin:   { page: AdminPage,   requireAuth: true,  requireAdmin: false },
     profile: { page: ProfilePage, requireAuth: true,  requireAdmin: false },
   };
@@ -27,10 +28,12 @@ const Router = (() => {
       home:  `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
       app:   `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`,
       admin: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+      muscu: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5h11"/><path d="M6.5 17.5h11"/><path d="M3 9.5v5"/><path d="M21 9.5v5"/><rect x="1.5" y="8" width="3" height="8" rx="1.5"/><rect x="19.5" y="8" width="3" height="8" rx="1.5"/></svg>`,
     };
     const items = [
       { route: 'home',  icon: SVG.home,  label: 'Équipe' },
-      { route: 'app',   icon: SVG.app,   label: 'Programme' },
+      { route: 'app',   icon: SVG.app,   label: 'Suivi' },
+      { route: 'muscu', icon: SVG.muscu, label: 'Muscu' },
       { route: 'admin', icon: SVG.admin, label: 'Exercices' },
     ];
 
