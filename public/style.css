@@ -2260,6 +2260,16 @@ html, body {
 .avatar-opt:hover { background: var(--bg3); transform: scale(1.15); }
 .profile-hero-name   { font-size: 22px; font-weight: 900; color: var(--text); letter-spacing: -0.4px; }
 .profile-hero-rank   { font-size: 13px; font-weight: 600; color: var(--text2); }
+.profile-hero-gems {
+  display: inline-flex; align-items: center; gap: 3px;
+  margin-left: 10px; padding: 2px 8px;
+  background: rgba(125, 211, 252, 0.12);
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  border-radius: 999px;
+  font-size: 12px; font-weight: 700;
+  color: #7dd3fc;
+  vertical-align: middle;
+}
 .profile-hero .player-xp-bar { width: 100%; max-width: 280px; }
 
 .profile-stats-grid {

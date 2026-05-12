@@ -39,27 +39,21 @@ const ProfilePage = (() => {
 
     try {
       let gymStatsError = null;
-      const fetches = [
+      const [userStatsRes, gymStatsRes] = await Promise.all([
         API.getUserStats(_profileUserId),
         API.getGymStats(_profileUserId).catch(err => {
           console.warn('[Profile] getGymStats failed:', err);
           gymStatsError = err;
           return null;
         }),
-      ];
-      if (_isOwnProfile) fetches.push(API.getWizz(_profileUserId));
-      const results = await Promise.all(fetches);
-      const { user, stats } = results[0];
-      const gymStats  = results[1]?.stats || null;
-      const wizzData  = _isOwnProfile ? results[2] : null;
+      ]);
+      const { user, stats } = userStatsRes;
+      const gymStats  = gymStatsRes?.stats || null;
 
-      container.innerHTML = _renderAll(user, stats, gymStats, wizzData, gymStatsError);
+      container.innerHTML = _renderAll(user, stats, gymStats, gymStatsError);
       requestAnimationFrame(_autoSizeCalendar);
       requestAnimationFrame(_autoSizeGymCalendar);
-      // Mark as read silently
-      if (_isOwnProfile && wizzData?.unread > 0) {
-        API.markWizzRead(_profileUserId).catch(() => {});
-      }
+
       // Initialise notification status UI
       if (_isOwnProfile) _updateNotifUI().catch(() => {});
     } catch (err) {
@@ -69,22 +63,14 @@ const ProfilePage = (() => {
   }
 
   // ── Main renderer ───────────────────────────────────────────
-  function _renderAll(user, stats, gymStats, wizzData = null, gymStatsError = null) {
+  function _renderAll(user, stats, gymStats, gymStatsError = null) {
     const rank     = Gamification.getRank(user.xp);
     const progress = Gamification.getProgress(user.xp);
     const avatar   = user.avatar || rank.emoji;
     const name     = _escape(user.username.charAt(0).toUpperCase() + user.username.slice(1));
-    const hasUnread = wizzData?.unread > 0;
 
     return `
       ${_renderHero(avatar, name, rank, progress, user.tokens)}
-
-      <div class="profile-tabs">
-        <button class="profile-tab active" id="ptab-stats" onclick="ProfilePage.switchTab('stats')">📊 Stats</button>
-        ${wizzData !== null
-          ? `<button class="profile-tab" id="ptab-wizz" onclick="ProfilePage.switchTab('wizz')">⚡ Wizz${hasUnread ? ` <span class="wizz-tab-badge">${wizzData.unread}</span>` : ''}</button>`
-          : ''}
-      </div>
 
       <div id="profile-panel-stats">
         <div class="profile-stats-tab-bar">
@@ -108,23 +94,10 @@ const ProfilePage = (() => {
               : '<p style="color:var(--text3);text-align:center;padding:32px 0">Aucune donnée salle pour le moment.<br>Commence une séance dans l\'onglet Muscu !</p>'}
         </div>
       </div>
-
-      ${wizzData !== null ? `<div id="profile-panel-wizz" style="display:none">${_renderWizz(wizzData.wizzes)}</div>` : ''}
     `;
   }
 
   // ── Tab switch ──────────────────────────────────────────────
-  function switchTab(tab) {
-    const panels = ['stats', 'wizz'];
-    panels.forEach(p => {
-      const panel = document.getElementById(`profile-panel-${p}`);
-      const btn   = document.getElementById(`ptab-${p}`);
-      if (panel) panel.style.display = p === tab ? 'block' : 'none';
-      if (btn)   btn.classList.toggle('active', p === tab);
-    });
-    document.getElementById('admin-content')?.scrollTo(0, 0);
-    window.scrollTo(0, 0);
-  }
 
   function switchStatsTab(tab) {
     _activeStatsTab = tab;
@@ -301,19 +274,14 @@ const ProfilePage = (() => {
 
   // ── 1. Hero card ────────────────────────────────────────────
   function _renderHero(avatar, name, rank, progress, tokens) {
-    const tokenCard = tokens > 0
-      ? `<div class="profile-stat-card profile-stat-card--token" title="Les gemmes servent à envoyer des Wizz à tes coéquipiers">
-           <span class="profile-stat-icon ptb-icon" style="filter:drop-shadow(0 0 5px rgba(100,180,255,0.9))">💎</span>
-           <span class="profile-stat-value" style="color:#7dd3fc;text-shadow:0 0 10px rgba(100,180,255,0.5)">${tokens}</span>
-           <span class="profile-stat-label">Gemme${tokens > 1 ? 's' : ''}</span>
-           <span class="profile-stat-sublabel">Pour envoyer des Wizz ⚡</span>
-         </div>`
+    const gemBadge = tokens > 0
+      ? `<span class="profile-hero-gems" title="Gemmes — servent à envoyer des Wizz">💎 ${tokens}</span>`
       : '';
     return `
       <div class="profile-hero" style="animation:fadeIn 0.3s ease">
         <div class="profile-hero-avatar${_isOwnProfile ? ' profile-hero-avatar--editable' : ''}" ${_isOwnProfile ? 'onclick="ProfilePage.openAvatarPicker()" title="Changer l\'avatar"' : ''}>${avatar}${_isOwnProfile ? '<span class="profile-hero-avatar-edit">✏️</span>' : ''}</div>
         <div class="profile-hero-name">${name}</div>
-        <div class="profile-hero-rank">${rank.emoji} ${rank.title}</div>
+        <div class="profile-hero-rank">${rank.emoji} ${rank.title}${gemBadge}</div>
         <div class="player-xp-bar" style="margin-top:12px;width:100%;max-width:280px;">
           <div class="player-xp-bar-track">
             <div class="player-xp-bar-fill" style="width:${progress.pct}%"></div>
@@ -323,8 +291,7 @@ const ProfilePage = (() => {
             <span>${progress.needed} XP</span>
           </div>
         </div>
-      </div>
-      ${tokenCard ? `<div class="profile-stats-grid" style="animation:fadeIn 0.3s ease 0.04s both;justify-content:center">${tokenCard}</div>` : ''}`;
+      </div>`;
   }
 
   // ── 1b. Stats grid (Maison) ───────────────────────────────
@@ -872,6 +839,6 @@ const ProfilePage = (() => {
     }
   }
 
-  return { render, init, switchTab, switchStatsTab, calPage, gymCalPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar };
+  return { render, init, switchStatsTab, calPage, gymCalPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar };
 })();
 

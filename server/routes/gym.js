@@ -158,7 +158,7 @@ router.get('/stats/:id', requireAuth, async (req, res) => {
          WHERE user_id = $1
          GROUP BY entry_date, session_name
        )
-       SELECT DISTINCT entry_date::text AS date
+       SELECT DISTINCT entry_date, entry_date::text AS date
        FROM session_day
        WHERE done >= total AND total > 0
        ORDER BY entry_date DESC`,
