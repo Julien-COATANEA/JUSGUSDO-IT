@@ -121,17 +121,21 @@ router.get('/stats/:id', requireAuth, async (req, res) => {
   if (!userId || isNaN(userId)) return res.status(400).json({ error: 'ID invalide' });
 
   try {
-    // Helper: count of scheduled gym exercises for a given DOW (0..6)
-    // = exercises where type='gym', is_active, gym_session is in user's gym_session_assignments
-    //   AND (schedule is empty OR DOW is in schedule)
-    // We'll compute everything in SQL via a single CTE that produces, for each
-    // relevant date, { date, scheduled, done }.
-
-    // Build calendar over the last 35 days (5 weeks) — enough for 28-day heatmap
-    // and to compute streaks reliably for "current" + last few weeks.
+    // 28-day calendar aligned to ISO weeks (Mon→Sun), 4 full weeks ending at
+    // the Sunday of the current week. Same scheme as the home calendar so the
+    // frontend can simply chunk by 7.
     const calRes = await db.query(
-      `WITH days AS (
-         SELECT generate_series(CURRENT_DATE - 34, CURRENT_DATE, '1 day'::interval)::date AS d
+      `WITH cur_monday AS (
+         SELECT (CURRENT_DATE - (EXTRACT(ISODOW FROM CURRENT_DATE)::int - 1))::date AS d
+       ),
+       bounds AS (
+         SELECT (cm.d - 21)::date AS start_date,
+                (cm.d + 6)::date  AS end_date
+         FROM cur_monday cm
+       ),
+       days AS (
+         SELECT generate_series(b.start_date, b.end_date, '1 day'::interval)::date AS d
+         FROM bounds b
        ),
        scheduled AS (
          SELECT d.d AS entry_date,
@@ -154,7 +158,8 @@ router.get('/stats/:id', requireAuth, async (req, res) => {
                 COUNT(*) FILTER (WHERE completed = TRUE)::int AS done
          FROM gym_checklist_entries
          WHERE user_id = $1
-           AND entry_date >= CURRENT_DATE - 34
+           AND entry_date >= (SELECT start_date FROM bounds)
+           AND entry_date <= (SELECT end_date   FROM bounds)
          GROUP BY entry_date
        )
        SELECT s.entry_date::text AS date,
@@ -167,9 +172,48 @@ router.get('/stats/:id', requireAuth, async (req, res) => {
     );
 
     const today = new Date().toISOString().split('T')[0];
-    const calRows = calRes.rows; // [{ date, total, done }]
+    const calendar = calRes.rows; // already 28 days, Mon-Sun aligned
     const calMap = {};
-    calRows.forEach(r => { calMap[r.date] = { done: r.done, total: r.total }; });
+    calendar.forEach(r => { calMap[r.date] = { done: r.done, total: r.total }; });
+
+    // Wider window (last 180 days) for streak/full-days computation, with
+    // per-day scheduled total + done so streaks can correctly skip rest days.
+    const streakRes = await db.query(
+      `WITH days AS (
+         SELECT generate_series(CURRENT_DATE - 179, CURRENT_DATE, '1 day'::interval)::date AS d
+       ),
+       scheduled AS (
+         SELECT d.d AS entry_date,
+                (
+                  SELECT COUNT(*)::int FROM exercises e
+                  JOIN gym_session_assignments gsa
+                    ON gsa.session_name = e.gym_session
+                   AND gsa.user_id = $1
+                  WHERE e.is_active = TRUE
+                    AND e.type = 'gym'
+                    AND (
+                      COALESCE(array_length(gsa.schedule, 1), 0) = 0
+                      OR EXTRACT(DOW FROM d.d)::int = ANY(gsa.schedule)
+                    )
+                ) AS total
+         FROM days d
+       ),
+       done AS (
+         SELECT entry_date,
+                COUNT(*) FILTER (WHERE completed = TRUE)::int AS done
+         FROM gym_checklist_entries
+         WHERE user_id = $1
+           AND entry_date >= CURRENT_DATE - 179
+         GROUP BY entry_date
+       )
+       SELECT s.entry_date::text AS date, s.total, COALESCE(d.done, 0) AS done
+       FROM scheduled s LEFT JOIN done d ON d.entry_date = s.entry_date
+       ORDER BY s.entry_date DESC`,
+      [userId]
+    );
+
+    const streakMap = {};
+    streakRes.rows.forEach(r => { streakMap[r.date] = { done: r.done, total: r.total }; });
 
     // Aggregate totals (over all-time done entries — kept simple)
     const totalsRes = await db.query(
@@ -180,54 +224,21 @@ router.get('/stats/:id', requireAuth, async (req, res) => {
       [userId]
     );
 
-    // Full days = days where done >= total AND total > 0 (over the loaded window).
-    // For a true all-time value we'd need a wider window; 35 days is enough for
-    // streak + recent stats. We extend with a separate query for full_days history.
-    const fullDaysAllRes = await db.query(
-      `WITH all_dates AS (
-         SELECT DISTINCT entry_date FROM gym_checklist_entries WHERE user_id = $1
-       ),
-       per_day AS (
-         SELECT ad.entry_date,
-                (
-                  SELECT COUNT(*)::int FROM exercises e
-                  JOIN gym_session_assignments gsa
-                    ON gsa.session_name = e.gym_session
-                   AND gsa.user_id = $1
-                  WHERE e.is_active = TRUE
-                    AND e.type = 'gym'
-                    AND (
-                      COALESCE(array_length(gsa.schedule, 1), 0) = 0
-                      OR EXTRACT(DOW FROM ad.entry_date)::int = ANY(gsa.schedule)
-                    )
-                ) AS total,
-                (
-                  SELECT COUNT(*)::int FROM gym_checklist_entries gce
-                  WHERE gce.user_id = $1
-                    AND gce.entry_date = ad.entry_date
-                    AND gce.completed = TRUE
-                ) AS done
-         FROM all_dates ad
-       )
-       SELECT entry_date::text AS date
-       FROM per_day
-       WHERE total > 0 AND done >= total
-       ORDER BY entry_date DESC`,
-      [userId]
+    // Full days (in last 180 days) = days where done >= total > 0
+    const completedDates = new Set(
+      streakRes.rows.filter(r => r.total > 0 && r.done >= r.total).map(r => r.date)
     );
-
-    const completedDates = new Set(fullDaysAllRes.rows.map(r => r.date));
     const fullDaysCount = completedDates.size;
 
-    // Streaks
+    // Streaks (using 180-day streakMap so rest-day skipping is reliable)
     let currentStreak = 0;
     let bestStreak = 0;
     let running = 0;
-    for (let i = 0; i <= 365; i++) {
+    for (let i = 0; i <= 179; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const key = d.toISOString().split('T')[0];
-      const dayInfo = calMap[key];
+      const dayInfo = streakMap[key];
       const wasScheduled = dayInfo ? dayInfo.total > 0 : false;
       const wasFull = completedDates.has(key);
 
@@ -235,8 +246,7 @@ router.get('/stats/:id', requireAuth, async (req, res) => {
         running++;
         if (i === 0 || (i === 1 && !completedDates.has(today))) currentStreak = running;
       } else if (!wasScheduled) {
-        // Rest day: doesn't break streak, doesn't extend it
-        // (stays as-is)
+        // Rest day: streak passes through unchanged
       } else {
         // Scheduled but not completed -> break
         if (i > 0) { bestStreak = Math.max(bestStreak, running); running = 0; }
@@ -245,23 +255,6 @@ router.get('/stats/:id', requireAuth, async (req, res) => {
     }
     bestStreak = Math.max(bestStreak, running);
     if (completedDates.has(today)) currentStreak = Math.max(currentStreak, running);
-
-    // Build 28-day calendar starting from Monday 27 days ago
-    const startD = new Date();
-    startD.setDate(startD.getDate() - 27);
-    const dow = startD.getDay();
-    startD.setDate(startD.getDate() + (dow === 0 ? -6 : 1 - dow));
-    const calendar = [];
-    for (let i = 0; i < 28; i++) {
-      const d = new Date(startD);
-      d.setDate(startD.getDate() + i);
-      const date = d.toISOString().split('T')[0];
-      calendar.push({
-        date,
-        done:  calMap[date]?.done  ?? 0,
-        total: calMap[date]?.total ?? 0,
-      });
-    }
 
     res.json({
       stats: {
