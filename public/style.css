@@ -4171,8 +4171,9 @@ html, body {
 }
 .gym-admin-session-card-head {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
   padding: 14px 16px;
 }
 .gym-admin-session-icon {
@@ -4180,6 +4181,7 @@ html, body {
   flex-shrink: 0;
   width: 36px;
   text-align: center;
+  margin-top: 2px;
 }
 .gym-admin-session-info {
   flex: 1;
@@ -4200,14 +4202,18 @@ html, body {
   font-size: 11px;
   color: var(--text3);
   margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-word;
+  white-space: normal;
 }
 .gym-admin-session-assign-btn {
   flex-shrink: 0;
-  padding: 8px 14px;
+  width: auto;
+  padding: 7px 14px;
   font-size: 13px;
+  font-weight: 700;
+  align-self: flex-start;
+  box-shadow: none;
+  white-space: nowrap;
 }
 .gym-admin-session-details {
   border-top: 1px solid var(--border);
