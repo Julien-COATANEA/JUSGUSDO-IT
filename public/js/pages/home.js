@@ -22,7 +22,7 @@ const HomePage = (() => {
             <span class="header-username">JuGus Do-It 💪</span>
             <span class="header-rank">Notre progression</span>
           </div>
-          <button class="home-minigame-btn" onclick="MiniGame.open()" title="Mini-jeu">🎯 Jouer</button>
+          <button class="home-minigame-btn" id="minigame-btn" onclick="MiniGame.open()" title="Mini-jeu">🎯 Jouer</button>
           <button class="icon-btn" onclick="App.showProfileModal()" title="Mon profil"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
           <button class="theme-toggle" id="theme-toggle-btn" onclick="App.toggleTheme()" title="Thème"></button>
           <button class="icon-btn" style="color:var(--text3)" onclick="HomePage.logout()" title="Déconnexion"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
@@ -64,6 +64,8 @@ const HomePage = (() => {
       // Check for unread wizz
       const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
       _checkUnreadWizz(me);
+      // Mini-game levels badge
+      _updateMinigameBadge(me);
     } catch (err) {
       document.getElementById('activity-container').innerHTML =
         `<p style="color:var(--text3);text-align:center;padding:40px 0">Erreur de chargement</p>`;
@@ -104,12 +106,20 @@ const HomePage = (() => {
       return;
     }
 
+    // Sort by XP descending for ranking (preserve display order)
+    const sortedByXp = [...users].sort((a, b) => b.xp - a.xp);
+    const rankMap = {};
+    sortedByXp.forEach((u, idx) => { rankMap[u.id] = idx + 1; });
+    const RANK_MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
     grid.innerHTML = users.map((u, i) => {
       const rank     = Gamification.getRank(u.xp);
       const progress = Gamification.getProgress(u.xp);
       const isMe     = u.id === me.id;
       const avatar   = u.avatar || rank.emoji;
       const name     = escapeHtml(u.username.charAt(0).toUpperCase() + u.username.slice(1));
+      const pos      = rankMap[u.id];
+      const medal    = RANK_MEDALS[pos] || null;
 
       let dayBadge = '';
       if (isMe && _todayStatus && _todayStatus.total > 0) {
@@ -126,7 +136,7 @@ const HomePage = (() => {
         : '';
       return `
         <div class="player-card${isMe ? ' is-me' : ''}" style="animation:fadeIn 0.3s ease both;animation-delay:${i * 0.06}s" onclick="Router.navigate('profile',{userId:${u.id}})" role="button" tabindex="0">
-          <div class="player-avatar">${avatar}</div>
+          <div class="player-avatar">${avatar}${medal ? `<span class="player-pos-medal">${medal}</span>` : ''}</div>
           <div class="player-card-body">
             <div class="player-name">${name}</div>
             <div class="player-rank-title">${rank.emoji} ${rank.title}</div>
@@ -158,6 +168,27 @@ const HomePage = (() => {
       if (banner && unread > 0) {
         banner.style.display = 'flex';
         banner.innerHTML = `<span class="wizz-notif-icon">⚡</span> Tu as <strong>${unread}</strong> wizz non lu${unread > 1 ? 's' : ''} ! Tap pour voir`;
+      }
+    } catch (_) {}
+  }
+
+  async function _updateMinigameBadge(me) {
+    if (!me?.id) return;
+    const btn = document.getElementById('minigame-btn');
+    if (!btn) return;
+    try {
+      const status = await API.getMinigameStatus(me.id);
+      const levels = status.levels || {};
+      const remaining = Object.values(levels).filter(v => v === null).length;
+      const existing = btn.querySelector('.mg-btn-badge');
+      if (existing) existing.remove();
+      if (remaining > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'mg-btn-badge';
+        badge.textContent = remaining;
+        btn.appendChild(badge);
+      } else {
+        btn.style.opacity = '0.5';
       }
     } catch (_) {}
   }

@@ -206,19 +206,40 @@ function _applyDevMock() {
 
   // Muscle records
   let _devMuscleRecords = [
-    { id: 1, exercise_name: 'Développé Couché Haltères', category: 'Pecs Triceps', sets: 4, reps: 10, weight_kg: 30, updated_at: new Date().toISOString() },
-    { id: 2, exercise_name: 'Développé Couché Haltères', category: 'Pecs Triceps', sets: 5, reps: 5,  weight_kg: 40, updated_at: new Date().toISOString() },
-    { id: 3, exercise_name: 'Tirage Bucheron',            category: 'Dos Biceps',   sets: 3, reps: 12, weight_kg: 25, updated_at: new Date().toISOString() },
+    { id: 1, exercise_name: 'Développé Couché Haltères', category: 'Pecs Triceps', sets: 4, reps: 10, weight_kg: 30, updated_at: new Date(Date.now() - 20 * 86400000).toISOString() },
+    { id: 2, exercise_name: 'Développé Couché Haltères', category: 'Pecs Triceps', sets: 5, reps: 5,  weight_kg: 40, updated_at: new Date(Date.now() - 5  * 86400000).toISOString() },
+    { id: 3, exercise_name: 'Tirage Bucheron',            category: 'Dos Biceps',   sets: 3, reps: 12, weight_kg: 25, updated_at: new Date(Date.now() - 14 * 86400000).toISOString() },
+  ];
+  // Fake history for sparkline demo
+  let _devMuscleHistory = [
+    { exercise_name: 'Développé Couché Haltères', weight_kg: 25, recorded_at: new Date(Date.now() - 40 * 86400000).toISOString() },
+    { exercise_name: 'Développé Couché Haltères', weight_kg: 28, recorded_at: new Date(Date.now() - 30 * 86400000).toISOString() },
+    { exercise_name: 'Développé Couché Haltères', weight_kg: 30, recorded_at: new Date(Date.now() - 20 * 86400000).toISOString() },
+    { exercise_name: 'Développé Couché Haltères', weight_kg: 35, recorded_at: new Date(Date.now() - 10 * 86400000).toISOString() },
+    { exercise_name: 'Développé Couché Haltères', weight_kg: 40, recorded_at: new Date(Date.now() -  5 * 86400000).toISOString() },
+    { exercise_name: 'Tirage Bucheron', weight_kg: 20, recorded_at: new Date(Date.now() - 30 * 86400000).toISOString() },
+    { exercise_name: 'Tirage Bucheron', weight_kg: 22, recorded_at: new Date(Date.now() - 20 * 86400000).toISOString() },
+    { exercise_name: 'Tirage Bucheron', weight_kg: 25, recorded_at: new Date(Date.now() - 14 * 86400000).toISOString() },
   ];
   API.getMuscleRecords  = async () => ({ records: _devMuscleRecords.map(r => ({ ...r })) });
+  API.getMuscleHistory  = async (uid, exName) => ({
+    history: _devMuscleHistory.filter(h => !exName || h.exercise_name.toLowerCase() === exName.toLowerCase()),
+  });
   API.saveMuscleRecord  = async (uid, data) => {
     const rec = { id: Date.now(), ...data, updated_at: new Date().toISOString() };
     _devMuscleRecords.push(rec);
+    _devMuscleHistory.push({ exercise_name: data.exercise_name, weight_kg: data.weight_kg, recorded_at: new Date().toISOString() });
     return { record: rec };
   };
   API.updateMuscleRecord = async (uid, recordId, data) => {
     const idx = _devMuscleRecords.findIndex(r => r.id === Number(recordId));
-    if (idx >= 0) _devMuscleRecords[idx] = { ..._devMuscleRecords[idx], ...data, updated_at: new Date().toISOString() };
+    if (idx >= 0) {
+      const prev = _devMuscleRecords[idx];
+      _devMuscleRecords[idx] = { ...prev, ...data, updated_at: new Date().toISOString() };
+      if (data.weight_kg && data.weight_kg !== prev.weight_kg) {
+        _devMuscleHistory.push({ exercise_name: prev.exercise_name, weight_kg: data.weight_kg, recorded_at: new Date().toISOString() });
+      }
+    }
     return { record: _devMuscleRecords[idx] || {} };
   };
   API.deleteMuscleRecord = async (uid, recordId) => {
@@ -227,8 +248,16 @@ function _applyDevMock() {
   };
 
   // Mini-game
-  API.getMinigameStatus  = async () => ({ eligible: true, last_played: null, level: 3 });
-  API.postMinigameResult = async () => ({ xp_earned: 50, new_level: 9 });
+  API.getMinigameStatus  = async () => ({
+    eligible: true,
+    last_played: null,
+    tokens: DEV_FAKE_USER.tokens,
+    levels: { easy: null, medium: null, hard: null },
+  });
+  API.postMinigameResult = async (uid, levelKey, won) => {
+    if (won) DEV_FAKE_USER.tokens += 1;
+    return { xp_earned: won ? 50 : 0, tokens: DEV_FAKE_USER.tokens };
+  };
 
   // Wizz
   API.sendWizz    = async (targetId, key, customText) => ({ ok: true, tokens: 4 });

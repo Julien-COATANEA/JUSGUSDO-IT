@@ -59,6 +59,7 @@ const API = (() => {
 
     // Muscle records
     getMuscleRecords: (userId) => request('GET', `/users/${userId}/muscle-records`),
+    getMuscleHistory: (userId, exerciseName) => request('GET', `/users/${userId}/muscle-history?exercise=${encodeURIComponent(exerciseName)}`),
     saveMuscleRecord: (userId, data) => request('POST', `/users/${userId}/muscle-records`, data),
     updateMuscleRecord: (userId, recordId, data) => request('PUT', `/users/${userId}/muscle-records/${recordId}`, data),
     deleteMuscleRecord: (userId, recordId) => request('DELETE', `/users/${userId}/muscle-records/${recordId}`),

@@ -9,6 +9,20 @@ const WorkoutPage = (() => {
   let currentUser = null;
   let stats = { streak: 0, totalCompletedDays: 0 };
 
+  // ── Rest days (localStorage) ──────────────────────────────
+  function _getRestDays() {
+    try { return JSON.parse(localStorage.getItem('rest_days') || '[]'); } catch { return []; }
+  }
+  function _isRestDay(key) { return _getRestDays().includes(key); }
+  function toggleRestDay(key) {
+    const list = _getRestDays();
+    const idx = list.indexOf(key);
+    if (idx >= 0) list.splice(idx, 1);
+    else list.push(key);
+    localStorage.setItem('rest_days', JSON.stringify(list));
+    renderWeek(getWeekDates(weekOffset));
+  }
+
   function render() {
     currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     return `
@@ -166,10 +180,11 @@ const WorkoutPage = (() => {
       }
 
       const ringPct = dayExercises.length > 0 ? Math.round(doneCount / dayExercises.length * 100) : 0;
-      const ringColor = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : '#ef4444';
+      const isRest = isPast && !allDone && _isRestDay(key);
+      const ringColor = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : isRest ? 'rgba(255,255,255,0.15)' : '#ef4444';
 
       const card = document.createElement('div');
-      card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${isToday ? ' open' : ''}`;
+      card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${isToday ? ' open' : ''}${isRest ? ' rest-day' : ''}`;
       card.dataset.key = key;
       card.id = `day-${key}`;
 
@@ -190,8 +205,7 @@ const WorkoutPage = (() => {
         <div class="exercises-list">
           ${dayExercises.length === 0
             ? `<p style="color:var(--text3);font-size:13px;text-align:center;padding:12px 0;">Repos 🙌</p>`
-            : dayExercises.map(ex => {
-            const checked = entries[`${key}_${ex.id}`] === true;
+            : dayExercises.map(ex => {            const checked = entries[`${key}_${ex.id}`] === true;
             const metaTags = ex.is_running
               ? `<span class="exercise-tag running">${escapeHtml(ex.emoji)} ${ex.reps}\u00a0${escapeHtml(ex.unit || 'min')}</span>`
               : `<span class="exercise-tag"><span class="exercise-tag-val">${ex.sets}</span> série${ex.sets > 1 ? 's' : ''}</span>
@@ -210,6 +224,10 @@ const WorkoutPage = (() => {
             `;
           }).join('')}
           <div class="all-done-badge">🎉 Journée complète ! Bravo !</div>
+          ${isPast && !allDone ? `
+          <button class="rest-day-btn${isRest ? ' active' : ''}" onclick="event.stopPropagation();WorkoutPage.toggleRestDay('${key}')">
+            ${isRest ? '✓ Repos noté' : '🛌 Marquer repos'}
+          </button>` : ''}
         </div>
       `;
 
@@ -240,8 +258,8 @@ const WorkoutPage = (() => {
       const total = dayExercises.length;
       const allDone = total > 0 && doneCount === total;
       const pct = total > 0 ? Math.round(doneCount / total * 100) : 0;
-      const ringC = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : '#ef4444';
-      const state = isFuture ? 'future' : allDone ? 'done' : doneCount > 0 ? 'partial' : 'missed';
+      const ringC = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : _isRestDay(key) ? 'rgba(255,255,255,0.18)' : '#ef4444';
+      const state = isFuture ? 'future' : allDone ? 'done' : doneCount > 0 ? 'partial' : _isRestDay(key) ? 'rest' : 'missed';
 
       return `
         <div class="wsd ${state}${isToday ? ' today-dot' : ''}" onclick="document.getElementById('day-${key}')?.scrollIntoView({behavior:'smooth',block:'center'})">
@@ -372,5 +390,5 @@ const WorkoutPage = (() => {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  return { render, init, toggleDay, toggleExercise, changeWeek, renderWeekStrip };
+  return { render, init, toggleDay, toggleExercise, changeWeek, renderWeekStrip, toggleRestDay };
 })();

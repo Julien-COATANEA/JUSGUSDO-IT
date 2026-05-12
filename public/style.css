@@ -331,6 +331,8 @@ html, body {
 .wsd.done      .wsd-inner { color: var(--green); }
 .wsd.partial   .wsd-inner { color: var(--gold); }
 .wsd.missed    .wsd-inner { color: var(--red); }
+.wsd.rest      .wsd-inner { color: var(--text3); }
+.wsd.rest      .wsd-ring  { opacity: 0.3; }
 .wsd.today-dot .wsd-ring  { box-shadow: 0 0 0 2.5px var(--accent3); }
 .wsd.future    .wsd-ring  { opacity: 0.3; }
 .wsd-lbl { font-size: 9px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; }
@@ -587,6 +589,27 @@ html, body {
 }
 .day-card.completed .all-done-badge { display: block; }
 
+/* Rest day button + state */
+.rest-day-btn {
+  display: block;
+  width: calc(100% - 24px);
+  margin: 8px 12px 4px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text3);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.rest-day-btn:hover { background: var(--bg2); color: var(--text2); }
+.rest-day-btn.active { background: var(--bg2); border-color: rgba(255,255,255,0.2); color: var(--text2); border-style: solid; }
+.day-card.rest-day .day-ring { opacity: 0.35; }
+
 .app-page.user-ju  .day-card.completed { border-color: rgba(180,141,232,0.3); box-shadow: 0 2px 20px rgba(124,92,191,0.08); }
 .app-page.user-ju  .day-card.completed .day-check { background: var(--ju); border-color: var(--ju); box-shadow: 0 0 14px rgba(124,92,191,0.4); }
 .app-page.user-gus .day-card.completed { border-color: rgba(255,107,138,0.3); box-shadow: 0 2px 20px rgba(233,69,96,0.08); }
@@ -662,7 +685,9 @@ html, body {
   line-height: 1;
   filter: drop-shadow(0 4px 14px rgba(0,0,0,0.45));
   flex-shrink: 0;
+  position: relative;
 }
+.player-pos-medal { position: absolute; bottom: -4px; right: -6px; font-size: 18px; line-height: 1; pointer-events: none; }
 
 .player-card-body {
   flex: 1;
@@ -712,6 +737,7 @@ html, body {
 }
 .player-xp-labels {
   display: flex;
+  justify-content: space-between;
   font-size: 10px;
   color: var(--text3);
   margin-top: 4px;
@@ -2177,6 +2203,18 @@ html, body {
   margin-bottom: 16px;
 }
 .profile-hero-avatar { font-size: 56px; line-height: 1; filter: drop-shadow(0 4px 16px rgba(0,0,0,0.4)); margin-bottom: 4px; }
+.profile-hero-avatar--editable { cursor: pointer; position: relative; display: inline-block; transition: transform 0.15s; }
+.profile-hero-avatar--editable:hover { transform: scale(1.08); }
+.profile-hero-avatar-edit { font-size: 14px; position: absolute; bottom: -2px; right: -4px; background: var(--card); border-radius: 50%; padding: 1px 3px; line-height: 1; pointer-events: none; }
+/* Avatar picker */
+.avatar-picker-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: flex-end; justify-content: center; z-index: 10000; opacity: 0; transition: opacity 0.22s; }
+.avatar-picker-overlay.avatar-picker-visible { opacity: 1; }
+.avatar-picker-sheet { background: var(--card); border-radius: 20px 20px 0 0; padding: 12px 20px 32px; width: 100%; max-width: 420px; transform: translateY(100%); transition: transform 0.28s cubic-bezier(0.32,0.72,0,1); }
+.avatar-picker-overlay.avatar-picker-visible .avatar-picker-sheet { transform: translateY(0); }
+.avatar-picker-title { font-size: 15px; font-weight: 700; text-align: center; margin: 10px 0 16px; color: var(--text); }
+.avatar-picker-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 16px; }
+.avatar-opt { font-size: 26px; background: var(--bg2); border: none; border-radius: 12px; padding: 10px 6px; cursor: pointer; transition: transform 0.12s, background 0.12s; line-height: 1; }
+.avatar-opt:hover { background: var(--bg3); transform: scale(1.15); }
 .profile-hero-name   { font-size: 22px; font-weight: 900; color: var(--text); letter-spacing: -0.4px; }
 .profile-hero-rank   { font-size: 13px; font-weight: 600; color: var(--text2); }
 .profile-hero .player-xp-bar { width: 100%; max-width: 280px; }
@@ -2838,6 +2876,8 @@ html, body {
   justify-content: space-between;
   gap: 8px;
 }
+.muscu-sparkline { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; flex-shrink: 0; }
+.muscu-sparkline-delta { font-size: 9px; font-weight: 800; white-space: nowrap; }
 .muscu-ex-record-row {
   display: flex;
   align-items: center;
@@ -3480,6 +3520,24 @@ html, body {
   flex-shrink: 0;
 }
 .home-minigame-btn:hover { opacity: 0.85; transform: scale(1.04); }
+.home-minigame-btn { position: relative; }
+.mg-btn-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  min-width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+}
 
 /* ===========================
    HOME — WIZZ BUTTON ON CARD

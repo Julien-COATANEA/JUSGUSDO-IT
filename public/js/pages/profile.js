@@ -44,7 +44,15 @@ const ProfilePage = (() => {
       const { user, stats } = results[0];
       const { records }     = results[1];
       const wizzData        = _isOwnProfile ? results[2] : null;
-      container.innerHTML = _renderAll(user, stats, records, wizzData);
+
+      // Fetch muscle history for sparklines (best-effort, non-blocking)
+      let muscleHistory = [];
+      try {
+        const { history } = await API.getMuscleHistory(_profileUserId, '');
+        muscleHistory = history || [];
+      } catch (_) {}
+
+      container.innerHTML = _renderAll(user, stats, records, wizzData, muscleHistory);
       requestAnimationFrame(_autoSizeCalendar);
       // Mark as read silently
       if (_isOwnProfile && wizzData?.unread > 0) {
@@ -59,7 +67,7 @@ const ProfilePage = (() => {
   }
 
   // ── Main renderer ───────────────────────────────────────────
-  function _renderAll(user, stats, records = [], wizzData = null) {
+  function _renderAll(user, stats, records = [], wizzData = null, muscleHistory = []) {
     const rank     = Gamification.getRank(user.xp);
     const progress = Gamification.getProgress(user.xp);
     const avatar   = user.avatar || rank.emoji;
@@ -87,7 +95,7 @@ const ProfilePage = (() => {
       </div>
 
       <div id="profile-panel-records" style="display:none">
-        ${_renderMuscleRecords(records, user.username)}
+        ${_renderMuscleRecords(records, user.username, muscleHistory)}
       </div>
 
       ${wizzData !== null ? `<div id="profile-panel-wizz" style="display:none">${_renderWizz(wizzData.wizzes)}</div>` : ''}
@@ -126,7 +134,7 @@ const ProfilePage = (() => {
       : '';
     return `
       <div class="profile-hero" style="animation:fadeIn 0.3s ease">
-        <div class="profile-hero-avatar">${avatar}</div>
+        <div class="profile-hero-avatar${_isOwnProfile ? ' profile-hero-avatar--editable' : ''}" ${_isOwnProfile ? 'onclick="ProfilePage.openAvatarPicker()" title="Changer l\'avatar"' : ''}>${avatar}${_isOwnProfile ? '<span class="profile-hero-avatar-edit">✏️</span>' : ''}</div>
         <div class="profile-hero-name">${name}</div>
         <div class="profile-hero-rank">${rank.emoji} ${rank.title}</div>
         <div class="player-xp-bar" style="margin-top:12px;width:100%;max-width:280px;">
@@ -482,7 +490,31 @@ const ProfilePage = (() => {
     return _MR_CATEGORIES.find(c => c.name === name) || _MR_CATEGORIES[_MR_CATEGORIES.length - 1];
   }
 
-  function _renderMuscuSessions(records = []) {
+  // ── Sparkline SVG (progression poids) ──────────────────────
+  function _renderSparkline(historyPoints) {
+    if (!historyPoints || historyPoints.length < 2) return '';
+    const vals = historyPoints.map(h => h.weight_kg);
+    const minV = Math.min(...vals);
+    const maxV = Math.max(...vals);
+    const W = 60, H = 18;
+    const range = maxV - minV || 1;
+    const pts = vals.map((v, i) => {
+      const x = Math.round((i / (vals.length - 1)) * W);
+      const y = Math.round(H - ((v - minV) / range) * H);
+      return `${x},${y}`;
+    }).join(' ');
+    const lastVal = vals[vals.length - 1];
+    const delta = lastVal - vals[0];
+    const color = delta > 0 ? '#22d18b' : delta < 0 ? '#ef4444' : 'var(--text3)';
+    return `<span class="muscu-sparkline" title="Progression : +${delta > 0 ? '+' : ''}${delta} kg">
+      <svg width="${W}" height="${H + 2}" viewBox="0 0 ${W} ${H + 2}" style="display:block">
+        <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+      </svg>
+      <span class="muscu-sparkline-delta" style="color:${color}">${delta > 0 ? '+' : ''}${delta}\u202fkg</span>
+    </span>`;
+  }
+
+  function _renderMuscuSessions(records = [], historyByName = {}) {
     // Group records by exercise name — multiple records allowed per exercise
     const recMap = {};
     records.forEach(r => {
@@ -547,6 +579,7 @@ const ProfilePage = (() => {
                     <div class="muscu-ex-left">
                       <div class="muscu-ex-name-row">
                         <span class="muscu-ex-name">${_escape(ex)}</span>
+                        ${historyByName[ex.toLowerCase()]?.length >= 2 ? _renderSparkline(historyByName[ex.toLowerCase()]) : ''}
                         ${_isOwnProfile ? `<button class="mr-btn-icon mr-btn-add" title="Ajouter un record" onclick="event.stopPropagation();ProfilePage.openSessionRecord('${safeEx}','${safeCat}')">＋</button>` : ''}
                       </div>
                       ${recs.length > 0 ? recordsHtml : `<span class="muscu-ex-empty">Aucun record</span>`}
@@ -607,7 +640,17 @@ const ProfilePage = (() => {
     </div>`;
   }
 
-  function _renderMuscleRecords(records, ownerUsername) {
+  function _renderMuscleRecords(records, ownerUsername, muscleHistory = []) {
+    // Build history lookup by exercise name (sorted by date asc)
+    const historyByName = {};
+    muscleHistory
+      .slice()
+      .sort((a, b) => new Date(a.recorded_at) - new Date(b.recorded_at))
+      .forEach(h => {
+        const key = h.exercise_name.toLowerCase();
+        if (!historyByName[key]) historyByName[key] = [];
+        historyByName[key].push(h);
+      });
     // Friendly empty state for other users' profiles
     if (!_isOwnProfile && (!records || records.length === 0)) {
       const displayName = ownerUsername
@@ -679,7 +722,7 @@ const ProfilePage = (() => {
 
     return `
       <div class="profile-section" id="muscle-records-section" style="animation:fadeIn 0.3s ease 0.22s both">
-        ${_renderMuscuSessions(records)}
+        ${_renderMuscuSessions(records, historyByName)}
         ${_isOwnProfile ? `
         <div class="muscle-records-title-row" style="margin-top:20px">
           <div class="profile-section-title" style="margin-bottom:0;font-size:11px">Exercice personnalisé</div>
@@ -1007,6 +1050,52 @@ const ProfilePage = (() => {
     }
   }
 
-  return { render, init, switchTab, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, calPage, setCalFilter, toggleNotif, saveNotifTime, testNotif };
+  // ── Avatar picker ───────────────────────────────────────────
+  const _AVATAR_OPTIONS = [
+    '💪','🔥','⚡','🏆','🌟','🦁','🐺','🦅','🏋️','🤸','🧗','🤼',
+    '🚴','🏃','🧘','🤾','🎯','🥊','🏊','⛷️','🤺','🦊','🐉','🔱',
+  ];
+
+  function openAvatarPicker() {
+    const existing = document.getElementById('avatar-picker-overlay');
+    if (existing) existing.remove();
+
+    const optionsHtml = _AVATAR_OPTIONS.map(e =>
+      `<button class="avatar-opt" onclick="ProfilePage.selectAvatar('${e}')">${e}</button>`
+    ).join('');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'avatar-picker-overlay';
+    overlay.className = 'avatar-picker-overlay';
+    overlay.innerHTML = `
+      <div class="avatar-picker-sheet" onclick="event.stopPropagation()">
+        <div class="mg-handle"></div>
+        <div class="avatar-picker-title">Choisir un avatar</div>
+        <div class="avatar-picker-grid">${optionsHtml}</div>
+        <button class="wizz-close-btn" onclick="document.getElementById('avatar-picker-overlay').remove()">Annuler</button>
+      </div>`;
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('avatar-picker-visible'));
+  }
+
+  async function selectAvatar(emoji) {
+    const overlay = document.getElementById('avatar-picker-overlay');
+    if (overlay) overlay.remove();
+    try {
+      const res = await API.updateProfile({ avatar: emoji });
+      const storage = localStorage.getItem('user') ? localStorage : sessionStorage;
+      const u = JSON.parse(storage.getItem('user') || '{}');
+      u.avatar = emoji;
+      storage.setItem('user', JSON.stringify(u));
+      // Update avatar on screen without full re-render
+      const avatarEl = document.querySelector('.profile-hero-avatar');
+      if (avatarEl) avatarEl.childNodes[0].textContent = emoji;
+    } catch (err) {
+      App.showToast('Erreur : ' + err.message);
+    }
+  }
+
+  return { render, init, switchTab, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, calPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar };
 })();
 
