@@ -2,7 +2,7 @@
 const MuscuPage = (() => {
   let _userId = null;
   let _customSessionExercises = {}; // { [sessionName]: string[] } – stored in localStorage
-  let _activeTab = 'records';  // 'records' | 'seance'
+  let _activeTab = 'seance';  // 'records' | 'seance'
   let _gymDate = null;         // ISO string YYYY-MM-DD (today by default)
   let _gymSelectedSession = null; // session name selected for the day
   let _gymEntries = [];        // gym checklist entries for the day
@@ -65,7 +65,7 @@ const MuscuPage = (() => {
       <div class="app-page">
         <header class="app-header">
           <div class="header-info" style="flex:1">
-            <span class="header-username">Muscu</span>
+            <span class="header-username">Salle</span>
             <span class="header-rank" id="muscu-header-sub">Chargement…</span>
           </div>
         </header>
@@ -88,7 +88,9 @@ const MuscuPage = (() => {
   // ── Init ─────────────────────────────────────────────────
   async function init() {
     _loadCustomExercises();
-    if (!_gymDate) _gymDate = new Date().toISOString().split('T')[0];
+    _gymDate = new Date().toISOString().split('T')[0]; // always reset to today on page load
+    _gymEntries = [];
+    _gymSelectedSession = null;
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     _userId = currentUser.id;
 
@@ -126,7 +128,7 @@ const MuscuPage = (() => {
   async function _initSeanceTab(container) {
     try {
       const sub = document.getElementById('muscu-header-sub');
-      if (sub) sub.textContent = 'Séance du jour';
+      if (sub) sub.textContent = "Séance du jour";
 
       const { entries } = await API.getGymChecklist(_gymDate, _gymDate);
       _gymEntries = entries || [];

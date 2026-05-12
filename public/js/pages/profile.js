@@ -40,7 +40,7 @@ const ProfilePage = (() => {
     try {
       const fetches = [
         API.getUserStats(_profileUserId),
-        API.getGymStats(_profileUserId),
+        API.getGymStats(_profileUserId).catch(() => null),
       ];
       if (_isOwnProfile) fetches.push(API.getWizz(_profileUserId));
       const results = await Promise.all(fetches);

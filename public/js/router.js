@@ -32,8 +32,8 @@ const Router = (() => {
     };
     const items = [
       { route: 'home',  icon: SVG.home,  label: 'Équipe' },
-      { route: 'app',   icon: SVG.app,   label: 'Suivi' },
-      { route: 'muscu', icon: SVG.muscu, label: 'Muscu' },
+      { route: 'app',   icon: SVG.app,   label: 'Maison' },
+      { route: 'muscu', icon: SVG.muscu, label: 'Salle' },
       { route: 'admin', icon: SVG.admin, label: 'Exercices' },
     ];
 
