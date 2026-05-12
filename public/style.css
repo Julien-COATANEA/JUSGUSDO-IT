@@ -4277,3 +4277,43 @@ html, body {
   background: color-mix(in srgb, var(--accent3) 10%, transparent);
   border-color: var(--accent3);
 }
+
+/* ─── Gym session creator — color / icon swatches ─────────── */
+.gym-session-color-swatches,
+.gym-session-icon-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.gym-swatch-color {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2.5px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.gym-swatch-color.active,
+.gym-swatch-color:hover {
+  border-color: var(--text);
+  transform: scale(1.15);
+}
+.gym-swatch-icon {
+  background: var(--card2);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 18px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gym-swatch-icon:hover {
+  background: color-mix(in srgb, var(--accent3) 15%, var(--card2));
+  border-color: var(--accent3);
+}

@@ -18,6 +18,7 @@ const AdminPage = (() => {
   let editingSession = null; // session name string when editing session assignments
   let pendingGymSession = null; // pre-fill gym_session when creating a new gym exercise
   let currentView = 'catalog';
+  let creatingSession = false;  // true when showing session creation form
   let currentExTab = 'home'; // 'home' | 'gym'
 
   function isCurrentUserAdmin() {
@@ -75,34 +76,47 @@ const AdminPage = (() => {
       renderShell(renderSessionEditorPage(), { editor: true, sessionEditor: true });
       return;
     }
+    if (currentView === 'session-creator') {
+      renderShell(renderGymSessionCreatorPage(), { editor: true, sessionCreator: true });
+      return;
+    }
     renderShell(renderCatalogPage(), { editor: false });
   }
 
-  function renderShell(bodyHtml, { editor = false, sessionEditor = false } = {}) {
+  function renderShell(bodyHtml, { editor = false, sessionEditor = false, sessionCreator = false } = {}) {
     const shell = document.getElementById('admin-page-shell');
     if (!shell) return;
 
+    const anyEditor = editor || sessionEditor || sessionCreator;
     const title = sessionEditor
       ? `Assigner — ${editingSession || ''}`
-      : (editor ? (editingId ? 'Modifier exercice' : 'Nouvel exercice') : 'Exercices');
+      : sessionCreator
+        ? 'Nouvelle séance'
+        : (editor ? (editingId ? 'Modifier exercice' : 'Nouvel exercice') : 'Exercices');
     const subtitle = sessionEditor
       ? 'Séance Salle'
-      : (editor ? 'Édition plein écran' : (isCurrentUserAdmin() ? 'Catalogue admin' : 'Lecture seule'));
-    const backFn = sessionEditor ? 'AdminPage.closeSessionEditor()' : 'AdminPage.closeExModal()';
-    const actionHtml = (editor || sessionEditor)
+      : sessionCreator
+        ? 'Salle de sport'
+        : (editor ? 'Édition plein écran' : (isCurrentUserAdmin() ? 'Catalogue admin' : 'Lecture seule'));
+    const backFn = sessionEditor
+      ? 'AdminPage.closeSessionEditor()'
+      : sessionCreator
+        ? 'AdminPage.closeSessionCreator()'
+        : 'AdminPage.closeExModal()';
+    const actionHtml = anyEditor
       ? `<button type="button" class="admin-secondary-btn ex-top-action" onclick="${backFn}">Retour au catalogue</button>`
       : ``;
 
     shell.innerHTML = `
       <header class="app-header">
-        ${(editor || sessionEditor) ? '' : `<button class="icon-btn" onclick="Router.navigate('home')">←</button>`}
+        ${anyEditor ? '' : `<button class="icon-btn" onclick="Router.navigate('home')">←</button>`}
         <div class="header-info" style="flex:1">
           <span class="header-username">${title}</span>
           <span class="header-rank" style="color:var(--accent3)">${subtitle}</span>
         </div>
         ${actionHtml}
       </header>
-      <div id="admin-content" class="ex-admin-shell${(editor || sessionEditor) ? ' editor-mode' : ''}">
+      <div id="admin-content" class="ex-admin-shell${anyEditor ? ' editor-mode' : ''}">
         ${bodyHtml}
       </div>
     `;
@@ -227,6 +241,7 @@ const AdminPage = (() => {
             <h1 class="ex-admin-title">Séances Salle de sport</h1>
             <p class="ex-admin-subtitle">Associez des séances à un jour et une personne</p>
           </div>
+          ${isCurrentUserAdmin() ? `<button type="button" class="submit-btn ex-admin-primary" onclick="AdminPage.openSessionCreator()">+ Nouvelle séance</button>` : ''}
         </div>
       </section>
 
@@ -337,9 +352,12 @@ const AdminPage = (() => {
               <label>Séance</label>
               <select id="ex-gym-session" class="mr-input mr-select">
                 <option value="Pecs Triceps"${(exercise.gymSession || '') === 'Pecs Triceps' ? ' selected' : ''}>💪 Pecs Triceps</option>
-                <option value="Dos Biceps"${(exercise.gymSession || '') === 'Dos Biceps' ? ' selected' : ''}>🍋️ Dos Biceps</option>
+                <option value="Dos Biceps"${(exercise.gymSession || '') === 'Dos Biceps' ? ' selected' : ''}>�️ Dos Biceps</option>
                 <option value="Jambes"${(exercise.gymSession || '') === 'Jambes' ? ' selected' : ''}>🦵 Jambes</option>
                 <option value="Full"${(exercise.gymSession || '') === 'Full' ? ' selected' : ''}>⚡ Full</option>
+                ${gymSessions.filter(s => !['Pecs Triceps','Dos Biceps','Jambes','Full'].includes(s.name)).map(s =>
+                  `<option value="${escapeHtml(s.name)}"${exercise.gymSession === s.name ? ' selected' : ''}>${escapeHtml(s.icon)} ${escapeHtml(s.name)}</option>`
+                ).join('')}
               </select>
             </div>` : ''}
           </section>
@@ -442,6 +460,58 @@ const AdminPage = (() => {
             </div>
           </div>
 
+        </form>
+      </section>
+    `;
+  }
+
+  function renderGymSessionCreatorPage() {
+    const PRESET_COLORS = ['#e94560','#7c5cbf','#22d18b','#fbbf24','#3b82f6','#f97316','#ec4899','#06b6d4'];
+    const PRESET_ICONS  = ['💪','🏋️','🦵','⚡','🎯','🔥','💥','👊','🔱','🏃'];
+    return `
+      <section class="ex-editor">
+        <div class="ex-editor-top">
+          <span class="ex-editor-top-emoji" id="new-session-icon-preview">💪</span>
+          <div class="ex-editor-top-info">
+            <h1>Nouvelle séance</h1>
+            <div class="ex-editor-top-chips"><span class="ex-editor-top-chip">Salle de sport</span></div>
+          </div>
+        </div>
+        <form id="new-session-form" onsubmit="AdminPage.saveNewSession(event)">
+          <section class="ex-editor-section">
+            <h2 class="ex-editor-section-title">Identité</h2>
+            <div class="ex-editor-id-grid">
+              <div class="form-group">
+                <label>Icone</label>
+                <input type="text" id="new-session-icon" value="💪" maxlength="4"
+                  oninput="document.getElementById('new-session-icon-preview').textContent=this.value||'💪'" />
+              </div>
+              <div class="form-group" style="flex:3">
+                <label>Nom de la séance *</label>
+                <input type="text" id="new-session-name" placeholder="Ex: Épaules Cardio" required />
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:12px">
+              <label>Icônes rapides</label>
+              <div class="gym-session-icon-swatches">
+                ${PRESET_ICONS.map(ic => `<button type="button" class="gym-swatch-icon" onclick="document.getElementById('new-session-icon').value='${ic}';document.getElementById('new-session-icon-preview').textContent='${ic}'">${ic}</button>`).join('')}
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:12px">
+              <label>Couleur</label>
+              <div class="gym-session-color-swatches">
+                ${PRESET_COLORS.map(c => `<button type="button" class="gym-swatch-color" style="background:${c}" data-color="${c}" onclick="this.closest('.gym-session-color-swatches').querySelectorAll('.gym-swatch-color').forEach(b=>b.classList.remove('active'));this.classList.add('active');document.getElementById('new-session-color').value='${c}'"></button>`).join('')}
+              </div>
+              <input type="hidden" id="new-session-color" value="${PRESET_COLORS[0]}" />
+            </div>
+          </section>
+          <div class="ex-editor-footer">
+            <p class="form-error" id="new-session-error"></p>
+            <div class="ex-editor-footer-actions">
+              <button type="button" class="admin-secondary-btn" onclick="AdminPage.closeSessionCreator()">Annuler</button>
+              <button type="submit" class="submit-btn">Créer la séance</button>
+            </div>
+          </div>
         </form>
       </section>
     `;
@@ -912,6 +982,37 @@ const AdminPage = (() => {
     renderCurrentView();
   }
 
+  function openSessionCreator() {
+    if (!isCurrentUserAdmin()) return;
+    currentView = 'session-creator';
+    renderCurrentView();
+  }
+
+  function closeSessionCreator() {
+    currentView = 'catalog';
+    renderCurrentView();
+  }
+
+  async function saveNewSession(event) {
+    event.preventDefault();
+    const errorEl = document.getElementById('new-session-error');
+    const submitBtn = event.target.querySelector('[type="submit"]');
+    const name = document.getElementById('new-session-name')?.value.trim();
+    const icon = document.getElementById('new-session-icon')?.value.trim() || '💪';
+    const color = document.getElementById('new-session-color')?.value || '#e94560';
+    if (!name) { errorEl.textContent = 'Le nom est obligatoire.'; return; }
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      await API.adminCreateGymSession({ name, icon, color });
+      App.showToast('✅ Séance créée');
+      closeSessionCreator();
+      await refreshData();
+    } catch (err) {
+      if (errorEl) errorEl.textContent = err.message || 'Erreur serveur';
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+
   function openNewGymExercise(sessionName) {
     if (!isCurrentUserAdmin()) return;
     pendingGymSession = sessionName;
@@ -1110,6 +1211,9 @@ const AdminPage = (() => {
     toggleSessionUserRow,
     saveSessionAssignments,
     openNewGymExercise,
+    openSessionCreator,
+    closeSessionCreator,
+    saveNewSession,
   };
 })();
 

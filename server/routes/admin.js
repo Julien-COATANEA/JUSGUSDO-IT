@@ -187,17 +187,12 @@ router.delete('/exercises/:id/assign/:userId', requireAdmin, async (req, res) =>
 });
 
 // ── Gym session assignments ────────────────────────────────
-const GYM_SESSION_DEFS = [
-  { name: 'Pecs Triceps', icon: '💪', color: '#e94560' },
-  { name: 'Dos Biceps',   icon: '🏋️', color: '#7c5cbf' },
-  { name: 'Jambes',       icon: '🦵', color: '#22d18b' },
-  { name: 'Full',         icon: '⚡', color: '#fbbf24' },
-];
 
 // GET /api/admin/gym-sessions — all gym sessions with their exercises and per-user assignments
 router.get('/gym-sessions', requireAdmin, async (req, res) => {
   try {
-    const [exResult, assignResult] = await Promise.all([
+    const [sessionDefs, exResult, assignResult] = await Promise.all([
+      db.query(`SELECT name, icon, color FROM gym_sessions ORDER BY order_index, name`),
       db.query(
         `SELECT id, name, emoji, sets, reps, unit, gym_session, order_index
          FROM exercises WHERE type = 'gym' AND is_active = TRUE
@@ -208,7 +203,6 @@ router.get('/gym-sessions', requireAdmin, async (req, res) => {
       ),
     ]);
 
-    // Group exercises by session
     const exBySession = {};
     exResult.rows.forEach(ex => {
       const key = ex.gym_session || 'Autre';
@@ -216,14 +210,13 @@ router.get('/gym-sessions', requireAdmin, async (req, res) => {
       exBySession[key].push(ex);
     });
 
-    // Group assignments by session
     const assignBySession = {};
     assignResult.rows.forEach(a => {
       if (!assignBySession[a.session_name]) assignBySession[a.session_name] = [];
       assignBySession[a.session_name].push({ user_id: a.user_id, schedule: a.schedule || [] });
     });
 
-    const sessions = GYM_SESSION_DEFS.map(def => ({
+    const sessions = sessionDefs.rows.map(def => ({
       name: def.name,
       icon: def.icon,
       color: def.color,
@@ -234,6 +227,28 @@ router.get('/gym-sessions', requireAdmin, async (req, res) => {
 
     res.json({ sessions });
   } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/admin/gym-sessions — create a new session
+router.post('/gym-sessions', requireAdmin, async (req, res) => {
+  const { name, icon, color } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Le nom de la séance est requis' });
+  }
+  try {
+    await db.query(
+      `INSERT INTO gym_sessions (name, icon, color, order_index)
+       VALUES ($1, $2, $3, (SELECT COALESCE(MAX(order_index), 0) + 1 FROM gym_sessions))`,
+      [name.trim(), icon || '💪', color || '#e94560']
+    );
+    res.status(201).json({ ok: true });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Une séance avec ce nom existe déjà' });
+    }
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });
   }

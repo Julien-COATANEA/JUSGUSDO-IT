@@ -330,7 +330,7 @@ function _applyDevMock() {
     'Jambes':       { icon: '🦵', color: '#22d18b' },
     'Full':         { icon: '⚡', color: '#fbbf24' },
   };
-  const _DEV_GYM_SESSION_ORDER = ['Pecs Triceps', 'Dos Biceps', 'Jambes', 'Full'];
+  let _DEV_GYM_SESSION_ORDER = ['Pecs Triceps', 'Dos Biceps', 'Jambes', 'Full'];
 
   let _devGymSessionAssignments = [
     { user_id: 1, session_name: 'Pecs Triceps', schedule: [1, 4] },
@@ -385,6 +385,15 @@ function _applyDevMock() {
       assigned_users: (assignBySession[name] || []).map(a => a.user_id),
     }));
     return { sessions };
+  };
+
+  API.adminCreateGymSession = async ({ name, icon, color }) => {
+    if (!name || !name.trim()) throw new Error('Le nom est requis');
+    if (_DEV_GYM_SESSION_ORDER.includes(name.trim())) throw new Error('Une séance avec ce nom existe déjà');
+    const n = name.trim();
+    _DEV_GYM_SESSION_META[n] = { icon: icon || '💪', color: color || '#e94560' };
+    _DEV_GYM_SESSION_ORDER.push(n);
+    return { ok: true };
   };
 
   API.adminAssignGymSession = async (name, assignments) => {

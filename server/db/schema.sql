@@ -211,6 +211,20 @@ INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index, sc
   ('Épaules',                               '💪', 3, 12, 'répétitions', 10, 132, '{}', TRUE, 'gym', 'Full')
 ON CONFLICT (name) DO NOTHING;
 
+-- Migration: gym session definitions table (replaces hardcoded GYM_SESSION_DEFS)
+CREATE TABLE IF NOT EXISTS gym_sessions (
+  name        VARCHAR(50) PRIMARY KEY,
+  icon        VARCHAR(10)  DEFAULT '💪',
+  color       VARCHAR(20)  DEFAULT '#e94560',
+  order_index INTEGER      DEFAULT 0
+);
+INSERT INTO gym_sessions (name, icon, color, order_index) VALUES
+  ('Pecs Triceps', '💪', '#e94560', 1),
+  ('Dos Biceps',   '🏋️', '#7c5cbf', 2),
+  ('Jambes',       '🦵', '#22d18b', 3),
+  ('Full',         '⚡', '#fbbf24', 4)
+ON CONFLICT (name) DO NOTHING;
+
 -- Migration: gym session-level assignments (assign a whole session to a user for specific days)
 CREATE TABLE IF NOT EXISTS gym_session_assignments (
   user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
