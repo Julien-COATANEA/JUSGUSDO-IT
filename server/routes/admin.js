@@ -186,4 +186,83 @@ router.delete('/exercises/:id/assign/:userId', requireAdmin, async (req, res) =>
   }
 });
 
+// ── Gym session assignments ────────────────────────────────
+const GYM_SESSION_DEFS = [
+  { name: 'Pecs Triceps', icon: '💪', color: '#e94560' },
+  { name: 'Dos Biceps',   icon: '🏋️', color: '#7c5cbf' },
+  { name: 'Jambes',       icon: '🦵', color: '#22d18b' },
+  { name: 'Full',         icon: '⚡', color: '#fbbf24' },
+];
+
+// GET /api/admin/gym-sessions — all gym sessions with their exercises and per-user assignments
+router.get('/gym-sessions', requireAdmin, async (req, res) => {
+  try {
+    const [exResult, assignResult] = await Promise.all([
+      db.query(
+        `SELECT id, name, emoji, sets, reps, unit, gym_session, order_index
+         FROM exercises WHERE type = 'gym' AND is_active = TRUE
+         ORDER BY gym_session, order_index, id`
+      ),
+      db.query(
+        `SELECT user_id, session_name, schedule FROM gym_session_assignments ORDER BY session_name, user_id`
+      ),
+    ]);
+
+    // Group exercises by session
+    const exBySession = {};
+    exResult.rows.forEach(ex => {
+      const key = ex.gym_session || 'Autre';
+      if (!exBySession[key]) exBySession[key] = [];
+      exBySession[key].push(ex);
+    });
+
+    // Group assignments by session
+    const assignBySession = {};
+    assignResult.rows.forEach(a => {
+      if (!assignBySession[a.session_name]) assignBySession[a.session_name] = [];
+      assignBySession[a.session_name].push({ user_id: a.user_id, schedule: a.schedule || [] });
+    });
+
+    const sessions = GYM_SESSION_DEFS.map(def => ({
+      name: def.name,
+      icon: def.icon,
+      color: def.color,
+      exercises: exBySession[def.name] || [],
+      assignments: assignBySession[def.name] || [],
+      assigned_users: (assignBySession[def.name] || []).map(a => a.user_id),
+    }));
+
+    res.json({ sessions });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/admin/gym-sessions/:name/assign — replace assignments for a session
+// Body: { assignments: [{ user_id, schedule }] }
+router.post('/gym-sessions/:name/assign', requireAdmin, async (req, res) => {
+  const { name } = req.params;
+  const { assignments } = req.body;
+  if (!Array.isArray(assignments)) {
+    return res.status(400).json({ error: 'assignments requis (tableau)' });
+  }
+  const assigns = assignments
+    .map(a => ({ user_id: Number(a.user_id), schedule: Array.isArray(a.schedule) ? a.schedule.map(Number) : [] }))
+    .filter(a => a.user_id > 0);
+  try {
+    await db.query('DELETE FROM gym_session_assignments WHERE session_name = $1', [name]);
+    for (const a of assigns) {
+      await db.query(
+        `INSERT INTO gym_session_assignments (user_id, session_name, schedule) VALUES ($1, $2, $3)`,
+        [a.user_id, name, a.schedule]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;

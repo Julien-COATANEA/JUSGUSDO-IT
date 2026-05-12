@@ -210,3 +210,12 @@ INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index, sc
   ('Triceps Corde / Élévation Latérale',    '💪', 3, 12, 'répétitions', 10, 131, '{}', TRUE, 'gym', 'Full'),
   ('Épaules',                               '💪', 3, 12, 'répétitions', 10, 132, '{}', TRUE, 'gym', 'Full')
 ON CONFLICT (name) DO NOTHING;
+
+-- Migration: gym session-level assignments (assign a whole session to a user for specific days)
+CREATE TABLE IF NOT EXISTS gym_session_assignments (
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  session_name VARCHAR(50) NOT NULL,
+  schedule     INTEGER[] DEFAULT '{}',
+  PRIMARY KEY (user_id, session_name)
+);
+CREATE INDEX IF NOT EXISTS idx_gym_session_assignments_user ON gym_session_assignments(user_id);

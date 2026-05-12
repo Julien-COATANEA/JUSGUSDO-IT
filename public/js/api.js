@@ -56,6 +56,8 @@ const API = (() => {
     adminPromoteUser: (id, is_admin) => request('PATCH', `/admin/users/${id}/promote`, { is_admin }),
     adminAssignExercise: (id, assignments) => request('POST', `/admin/exercises/${id}/assign`, { assignments }),
     adminUnassignExercise: (id, userId) => request('DELETE', `/admin/exercises/${id}/assign/${userId}`),
+    adminGetGymSessions: () => request('GET', '/admin/gym-sessions'),
+    adminAssignGymSession: (name, assignments) => request('POST', `/admin/gym-sessions/${encodeURIComponent(name)}/assign`, { assignments }),
 
     // Muscle records
     getMuscleRecords: (userId) => request('GET', `/users/${userId}/muscle-records`),

@@ -13,7 +13,9 @@ const AdminPage = (() => {
 
   let exercises = [];
   let users = [];
+  let gymSessions = [];      // from API.adminGetGymSessions()
   let editingId = null;
+  let editingSession = null; // session name string when editing session assignments
   let currentView = 'catalog';
   let currentExTab = 'home'; // 'home' | 'gym'
 
@@ -43,12 +45,14 @@ const AdminPage = (() => {
   async function refreshData() {
     renderLoadingState();
     try {
-      const [exerciseData, userData] = await Promise.all([
+      const [exerciseData, userData, gymSessionData] = await Promise.all([
         API.adminGetExercises(),
         API.adminGetUsers(),
+        API.adminGetGymSessions().catch(() => ({ sessions: [] })),
       ]);
       exercises = (exerciseData.exercises || []).map(normalizeExercise);
       users = (userData.users || []).map(normalizeUser);
+      gymSessions = gymSessionData.sessions || [];
       renderCurrentView();
     } catch (err) {
       renderShell(renderErrorState(err));
@@ -66,29 +70,38 @@ const AdminPage = (() => {
       toggleAudienceMode();
       return;
     }
+    if (currentView === 'session-editor') {
+      renderShell(renderSessionEditorPage(), { editor: true, sessionEditor: true });
+      return;
+    }
     renderShell(renderCatalogPage(), { editor: false });
   }
 
-  function renderShell(bodyHtml, { editor = false } = {}) {
+  function renderShell(bodyHtml, { editor = false, sessionEditor = false } = {}) {
     const shell = document.getElementById('admin-page-shell');
     if (!shell) return;
 
-    const title = editor ? (editingId ? 'Modifier exercice' : 'Nouvel exercice') : 'Exercices';
-      const subtitle = editor ? 'Édition plein écran' : (isCurrentUserAdmin() ? 'Catalogue admin' : 'Lecture seule');
-    const actionHtml = editor
-      ? `<button type="button" class="admin-secondary-btn ex-top-action" onclick="AdminPage.closeExModal()">Retour au catalogue</button>`
+    const title = sessionEditor
+      ? `Assigner — ${editingSession || ''}`
+      : (editor ? (editingId ? 'Modifier exercice' : 'Nouvel exercice') : 'Exercices');
+    const subtitle = sessionEditor
+      ? 'Séance Salle'
+      : (editor ? 'Édition plein écran' : (isCurrentUserAdmin() ? 'Catalogue admin' : 'Lecture seule'));
+    const backFn = sessionEditor ? 'AdminPage.closeSessionEditor()' : 'AdminPage.closeExModal()';
+    const actionHtml = (editor || sessionEditor)
+      ? `<button type="button" class="admin-secondary-btn ex-top-action" onclick="${backFn}">Retour au catalogue</button>`
       : ``;
 
     shell.innerHTML = `
       <header class="app-header">
-        ${editor ? '' : `<button class="icon-btn" onclick="Router.navigate('home')">←</button>`}
+        ${(editor || sessionEditor) ? '' : `<button class="icon-btn" onclick="Router.navigate('home')">←</button>`}
         <div class="header-info" style="flex:1">
           <span class="header-username">${title}</span>
           <span class="header-rank" style="color:var(--accent3)">${subtitle}</span>
         </div>
         ${actionHtml}
       </header>
-      <div id="admin-content" class="ex-admin-shell${editor ? ' editor-mode' : ''}">
+      <div id="admin-content" class="ex-admin-shell${(editor || sessionEditor) ? ' editor-mode' : ''}">
         ${bodyHtml}
       </div>
     `;
@@ -129,14 +142,22 @@ const AdminPage = (() => {
   }
 
   function renderCatalogPage() {
-    const stats = buildStats();
-    const visibleExercises = getFilteredExercises();
-
-    return `
+    const tabBar = `
       <div class="admin-ex-tab-bar">
         <button class="admin-ex-tab${currentExTab === 'home' ? ' active' : ''}" onclick="AdminPage.switchExTab('home')">🏠 Maison</button>
         <button class="admin-ex-tab${currentExTab === 'gym' ? ' active' : ''}" onclick="AdminPage.switchExTab('gym')">🏋️ Salle</button>
       </div>
+    `;
+
+    if (currentExTab === 'gym') {
+      return tabBar + renderGymSessionsCatalog();
+    }
+
+    const stats = buildStats();
+    const visibleExercises = getFilteredExercises();
+
+    return `
+      ${tabBar}
 
       <section class="ex-admin-hero">
         <div class="ex-admin-hero-top">
@@ -193,6 +214,68 @@ const AdminPage = (() => {
           ? `<div class="exercise-grid">${visibleExercises.map(renderExerciseCard).join('')}</div>`
           : renderEmptyState()}
       </section>
+    `;
+  }
+
+  function renderGymSessionsCatalog() {
+    return `
+      <section class="ex-admin-hero">
+        <div class="ex-admin-hero-top">
+          <div class="ex-admin-copy">
+            <span class="ex-admin-eyebrow">Pilotage</span>
+            <h1 class="ex-admin-title">Séances Salle de sport</h1>
+            <p class="ex-admin-subtitle">Associez des séances à un jour et une personne</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="ex-admin-list">
+        <div class="ex-admin-list-header">
+          <div>
+            <h2>Séances</h2>
+            <p>${gymSessions.length} séance${gymSessions.length !== 1 ? 's' : ''}</p>
+          </div>
+        </div>
+        ${gymSessions.length
+          ? gymSessions.map(renderGymSessionCard).join('')
+          : '<div class="exercise-empty"><strong>Aucune séance chargée</strong></div>'}
+      </section>
+    `;
+  }
+
+  function renderGymSessionCard(session) {
+    const assignSummary = session.assignments && session.assignments.length
+      ? session.assignments.map(a => {
+          const name = escapeHtml(getUserName(a.user_id));
+          const sched = formatSchedule(a.schedule);
+          return `${name}: ${sched}`;
+        }).join(' · ')
+      : 'Aucune assignation';
+
+    const exListItems = (session.exercises || []).map(ex =>
+      `<li>${escapeHtml(ex.emoji || '💪')} ${escapeHtml(ex.name)}</li>`
+    ).join('');
+
+    return `
+      <article class="gym-admin-session-card" style="--session-color:${session.color}">
+        <div class="gym-admin-session-card-head">
+          <span class="gym-admin-session-icon">${session.icon}</span>
+          <div class="gym-admin-session-info">
+            <h3>${escapeHtml(session.name)}</h3>
+            <p class="gym-admin-session-exercises">${(session.exercises || []).length} exercice${(session.exercises || []).length !== 1 ? 's' : ''}</p>
+            <p class="gym-admin-session-assign-summary">${assignSummary}</p>
+          </div>
+          ${isCurrentUserAdmin() ? `
+          <button type="button" class="submit-btn gym-admin-session-assign-btn"
+            onclick="AdminPage.openSessionEditor(${JSON.stringify(session.name)})">
+            Assigner
+          </button>` : ''}
+        </div>
+        <details class="gym-admin-session-details">
+          <summary>Voir les exercices (${(session.exercises || []).length})</summary>
+          <ul class="gym-admin-session-ex-list">${exListItems}</ul>
+        </details>
+      </article>
     `;
   }
 
@@ -355,6 +438,77 @@ const AdminPage = (() => {
         </form>
       </section>
     `;
+  }
+
+  function renderSessionEditorPage() {
+    const session = gymSessions.find(s => s.name === editingSession);
+    if (!session) return '<p class="exercise-empty">Séance introuvable.</p>';
+
+    const exPreview = (session.exercises || []).slice(0, 5).map(e => escapeHtml(e.name)).join(', ');
+    const extraCount = Math.max(0, (session.exercises || []).length - 5);
+
+    return `
+      <section class="ex-editor">
+        <div class="ex-editor-top">
+          <span class="ex-editor-top-emoji">${session.icon}</span>
+          <div class="ex-editor-top-info">
+            <h1>Assigner — ${escapeHtml(session.name)}</h1>
+            <div class="ex-editor-top-chips">
+              <span class="ex-editor-top-chip">${(session.exercises || []).length} exercices</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ex-impact-banner ex-impact-banner--global">
+          📋 ${escapeHtml(exPreview)}${extraCount ? ` +${extraCount} autres` : ''}
+        </div>
+
+        <form id="session-assign-form" onsubmit="AdminPage.saveSessionAssignments(event)">
+          <section class="ex-editor-section">
+            <h2 class="ex-editor-section-title">Assignation — par personne</h2>
+            <div id="session-assign-users" class="exercise-users-list">
+              ${renderSessionAssignmentRowsMarkup(session.assignments || [])}
+            </div>
+          </section>
+
+          <div class="ex-editor-footer">
+            <p class="form-error" id="session-assign-error"></p>
+            <div class="ex-editor-footer-actions">
+              <button type="button" class="admin-secondary-btn" onclick="AdminPage.closeSessionEditor()">Annuler</button>
+              <button type="submit" class="submit-btn">Enregistrer l'assignation</button>
+            </div>
+          </div>
+        </form>
+      </section>
+    `;
+  }
+
+  function renderSessionAssignmentRowsMarkup(assignments) {
+    const assignmentMap = new Map(assignments.map(a => [a.user_id, a.schedule || []]));
+    if (!users.length) {
+      return '<span class="exercise-inline-help">Aucun utilisateur chargé.</span>';
+    }
+    return users.map(user => {
+      const checked = assignmentMap.has(user.id);
+      const schedule = assignmentMap.get(user.id) || [];
+      return `
+        <div class="exercise-user-row">
+          <label class="exercise-user-main">
+            <input type="checkbox" value="${user.id}" ${checked ? 'checked' : ''}
+              onchange="AdminPage.toggleSessionUserRow(${user.id}, this.checked)" />
+            <span class="exercise-user-avatar">${Gamification.getRank(user.xp).emoji}</span>
+            <span class="exercise-user-meta">
+              <strong>${escapeHtml(user.username)}</strong>
+              <small>${user.is_admin ? 'Admin' : 'Joueur'}</small>
+            </span>
+          </label>
+          <div class="exercise-user-schedule" id="ssp-${user.id}" style="${checked ? '' : 'display:none;'}">
+            <div class="schedule-picker exercise-day-row">${renderDayButtons(schedule)}</div>
+            <p class="exercise-inline-help">Aucun jour = tous les jours pour ${escapeHtml(user.username)}.</p>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   function renderKpiCard(value, label) {
@@ -739,8 +893,50 @@ const AdminPage = (() => {
   function switchExTab(tab) {
     currentExTab = tab;
     editingId = null;
+    editingSession = null;
     currentView = 'catalog';
     renderCurrentView();
+  }
+
+  function openSessionEditor(sessionName) {
+    if (!isCurrentUserAdmin()) return;
+    editingSession = sessionName;
+    currentView = 'session-editor';
+    renderCurrentView();
+  }
+
+  function closeSessionEditor() {
+    editingSession = null;
+    currentView = 'catalog';
+    renderCurrentView();
+  }
+
+  function toggleSessionUserRow(userId, checked) {
+    const picker = document.getElementById(`ssp-${userId}`);
+    if (picker) picker.style.display = checked ? '' : 'none';
+  }
+
+  async function saveSessionAssignments(event) {
+    event.preventDefault();
+    const errorEl = document.getElementById('session-assign-error');
+    const submitBtn = event.target.querySelector('[type="submit"]');
+
+    const assignmentsData = [...document.querySelectorAll('#session-assign-users input[type="checkbox"]:checked')].map(input => {
+      const userId = parseInt(input.value, 10);
+      const picker = document.getElementById(`ssp-${userId}`);
+      return { user_id: userId, schedule: getActiveDaysFrom(picker) };
+    });
+
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      await API.adminAssignGymSession(editingSession, assignmentsData);
+      App.showToast('✅ Assignation enregistrée');
+      closeSessionEditor();
+      await refreshData();
+    } catch (err) {
+      if (errorEl) errorEl.textContent = err.message || 'Erreur serveur';
+      if (submitBtn) submitBtn.disabled = false;
+    }
   }
 
   function setQuery(query) {
@@ -893,6 +1089,10 @@ const AdminPage = (() => {
     toggleExerciseState,
     deleteCurrentExercise,
     setCardioActivity,
+    openSessionEditor,
+    closeSessionEditor,
+    toggleSessionUserRow,
+    saveSessionAssignments,
   };
 })();
 

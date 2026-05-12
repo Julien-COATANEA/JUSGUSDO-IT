@@ -4094,6 +4094,18 @@ html, body {
   padding: 0 8px;
 }
 
+/* Gym seance session group label inside day cards */
+.gym-seance-session-group { margin-top: 6px; }
+.gym-seance-session-group:first-child { margin-top: 0; }
+.gym-seance-session-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 8px 16px 4px;
+  opacity: 0.85;
+}
+
 /* ═══ Profile: Maison / Salle tab switcher ══════════════════ */
 .profile-stats-tab-bar {
   display: flex;
@@ -4147,4 +4159,75 @@ html, body {
   background: var(--card);
   color: var(--text);
   box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+
+/* ─── Gym admin session cards (Salle catalog) ─────────────── */
+.gym-admin-session-card {
+  background: var(--card);
+  border: 1.5px solid color-mix(in srgb, var(--session-color, var(--accent3)) 30%, var(--border));
+  border-radius: 16px;
+  margin: 0 16px 12px;
+  overflow: hidden;
+}
+.gym-admin-session-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+.gym-admin-session-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  width: 36px;
+  text-align: center;
+}
+.gym-admin-session-info {
+  flex: 1;
+  min-width: 0;
+}
+.gym-admin-session-info h3 {
+  font-size: 15px;
+  font-weight: 800;
+  margin: 0 0 2px;
+  color: var(--text);
+}
+.gym-admin-session-exercises {
+  font-size: 12px;
+  color: var(--text3);
+  margin: 0 0 2px;
+}
+.gym-admin-session-assign-summary {
+  font-size: 11px;
+  color: var(--text3);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gym-admin-session-assign-btn {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.gym-admin-session-details {
+  border-top: 1px solid var(--border);
+}
+.gym-admin-session-details summary {
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--text3);
+  cursor: pointer;
+  user-select: none;
+}
+.gym-admin-session-ex-list {
+  list-style: none;
+  padding: 4px 16px 12px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gym-admin-session-ex-list li {
+  font-size: 13px;
+  color: var(--text2);
 }

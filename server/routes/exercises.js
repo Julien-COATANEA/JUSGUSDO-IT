@@ -86,7 +86,7 @@ const GYM_SESSION_ORDER = ['Pecs Triceps', 'Dos Biceps', 'Jambes', 'Full'];
 
 // GET /api/exercises/gym-assigned?date=YYYY-MM-DD
 // Returns gym exercises assigned to the current user for the given date's day-of-week,
-// grouped by gym_session. If no assignments exist, returns all active gym exercises.
+// grouped by gym_session (using gym_session_assignments table). Returns empty if no assignments.
 router.get('/gym-assigned', requireAuth, async (req, res) => {
   const { date } = req.query;
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -97,20 +97,17 @@ router.get('/gym-assigned', requireAuth, async (req, res) => {
   try {
     const result = await db.query(
       `SELECT e.id, e.name, e.emoji, e.sets, e.reps, e.unit,
-              e.gym_session, e.order_index,
-              COALESCE(uea.schedule, e.schedule) AS schedule
+              e.gym_session, e.order_index
        FROM exercises e
-       LEFT JOIN user_exercise_assignments uea
-         ON uea.exercise_id = e.id AND uea.user_id = $1
        WHERE e.is_active = TRUE
          AND e.type = 'gym'
-         AND (
-           NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
-           OR uea.user_id IS NOT NULL
-         )
-         AND (
-           COALESCE(array_length(COALESCE(uea.schedule, e.schedule), 1), 0) = 0
-           OR EXTRACT(DOW FROM $2::date)::int = ANY(COALESCE(uea.schedule, e.schedule))
+         AND e.gym_session IN (
+           SELECT session_name FROM gym_session_assignments
+           WHERE user_id = $1
+             AND (
+               COALESCE(array_length(schedule, 1), 0) = 0
+               OR EXTRACT(DOW FROM $2::date)::int = ANY(schedule)
+             )
          )
        ORDER BY e.gym_session, e.order_index ASC, e.id ASC`,
       [req.user.id, date]

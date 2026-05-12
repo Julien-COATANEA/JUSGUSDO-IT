@@ -331,25 +331,23 @@ function _applyDevMock() {
     'Full':         { icon: '⚡', color: '#fbbf24' },
   };
   const _DEV_GYM_SESSION_ORDER = ['Pecs Triceps', 'Dos Biceps', 'Jambes', 'Full'];
+
+  let _devGymSessionAssignments = [
+    { user_id: 1, session_name: 'Pecs Triceps', schedule: [1, 4] },
+    { user_id: 2, session_name: 'Pecs Triceps', schedule: [1, 4] },
+    { user_id: 1, session_name: 'Dos Biceps',   schedule: [2, 5] },
+  ];
+
   API.getGymExercises = async (date) => {
     const dow = new Date(date + 'T12:00:00').getDay();
     const gymExs = DEV_FAKE_EXERCISES.filter(e => e.type === 'gym' && e.is_active);
 
-    // Filter by assignment/schedule (same logic as backend)
-    const assigned = gymExs.filter(ex => {
-      const hasAssignment = ex.assigned_users && ex.assigned_users.length > 0;
-      if (hasAssignment) {
-        const myAssignment = ex.assignments.find(a => a.user_id === DEV_FAKE_USER.id);
-        if (!myAssignment) return false;
-        const sched = myAssignment.schedule;
-        if (!sched || sched.length === 0) return true;
-        return sched.includes(dow);
-      }
-      // Global exercise
-      const sched = ex.schedule;
-      if (!sched || sched.length === 0) return true;
-      return sched.includes(dow);
-    });
+    // Filter by session-level assignments
+    const assignedSessions = _devGymSessionAssignments
+      .filter(a => a.user_id === DEV_FAKE_USER.id && (a.schedule.length === 0 || a.schedule.includes(dow)))
+      .map(a => a.session_name);
+
+    const assigned = gymExs.filter(ex => assignedSessions.includes(ex.gym_session));
 
     // Group by gym_session
     const sessionMap = {};
@@ -364,6 +362,37 @@ function _applyDevMock() {
       .map(s => ({ name: s, ...(_DEV_GYM_SESSION_META[s] || { icon: '🏋️', color: '#888' }), exercises: sessionMap[s] }));
 
     return { sessions };
+  };
+
+  API.adminGetGymSessions = async () => {
+    const gymExs = DEV_FAKE_EXERCISES.filter(e => e.type === 'gym' && e.is_active);
+    const exBySession = {};
+    gymExs.forEach(ex => {
+      const key = ex.gym_session || 'Autre';
+      if (!exBySession[key]) exBySession[key] = [];
+      exBySession[key].push({ id: ex.id, name: ex.name, emoji: ex.emoji, sets: ex.sets, reps: ex.reps, unit: ex.unit, gym_session: ex.gym_session, order_index: ex.order_index });
+    });
+    const assignBySession = {};
+    _devGymSessionAssignments.forEach(a => {
+      if (!assignBySession[a.session_name]) assignBySession[a.session_name] = [];
+      assignBySession[a.session_name].push({ user_id: a.user_id, schedule: a.schedule });
+    });
+    const sessions = _DEV_GYM_SESSION_ORDER.map(name => ({
+      name,
+      ...(_DEV_GYM_SESSION_META[name] || { icon: '🏋️', color: '#888' }),
+      exercises: exBySession[name] || [],
+      assignments: assignBySession[name] || [],
+      assigned_users: (assignBySession[name] || []).map(a => a.user_id),
+    }));
+    return { sessions };
+  };
+
+  API.adminAssignGymSession = async (name, assignments) => {
+    _devGymSessionAssignments = _devGymSessionAssignments.filter(a => a.session_name !== name);
+    (assignments || []).forEach(a => {
+      if (a.user_id) _devGymSessionAssignments.push({ user_id: a.user_id, session_name: name, schedule: a.schedule || [] });
+    });
+    return { ok: true };
   };
 
   // Push
