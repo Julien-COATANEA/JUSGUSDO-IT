@@ -38,9 +38,14 @@ const ProfilePage = (() => {
     _isOwnProfile  = _profileUserId === currentUser.id;
 
     try {
+      let gymStatsError = null;
       const fetches = [
         API.getUserStats(_profileUserId),
-        API.getGymStats(_profileUserId).catch(() => null),
+        API.getGymStats(_profileUserId).catch(err => {
+          console.warn('[Profile] getGymStats failed:', err);
+          gymStatsError = err;
+          return null;
+        }),
       ];
       if (_isOwnProfile) fetches.push(API.getWizz(_profileUserId));
       const results = await Promise.all(fetches);
@@ -48,7 +53,7 @@ const ProfilePage = (() => {
       const gymStats  = results[1]?.stats || null;
       const wizzData  = _isOwnProfile ? results[2] : null;
 
-      container.innerHTML = _renderAll(user, stats, gymStats, wizzData);
+      container.innerHTML = _renderAll(user, stats, gymStats, wizzData, gymStatsError);
       requestAnimationFrame(_autoSizeCalendar);
       requestAnimationFrame(_autoSizeGymCalendar);
       // Mark as read silently
@@ -64,7 +69,7 @@ const ProfilePage = (() => {
   }
 
   // ── Main renderer ───────────────────────────────────────────
-  function _renderAll(user, stats, gymStats, wizzData = null) {
+  function _renderAll(user, stats, gymStats, wizzData = null, gymStatsError = null) {
     const rank     = Gamification.getRank(user.xp);
     const progress = Gamification.getProgress(user.xp);
     const avatar   = user.avatar || rank.emoji;
@@ -96,7 +101,11 @@ const ProfilePage = (() => {
           ${_isOwnProfile ? _renderNotifSection() : ''}
         </div>
         <div id="profile-stats-salle" ${_activeStatsTab !== 'salle' ? 'style="display:none"' : ''}>
-          ${gymStats ? _renderGymStats(gymStats) : '<p style="color:var(--text3);text-align:center;padding:32px 0">Aucune donnée salle pour le moment.<br>Commence une séance dans l\'onglet Muscu !</p>'}
+          ${gymStats
+            ? _renderGymStats(gymStats)
+            : gymStatsError
+              ? `<p style="color:#ef4444;text-align:center;padding:32px 16px">⚠️ Erreur de chargement des stats salle<br><span style="color:var(--text3);font-size:13px">${_escape(String(gymStatsError.message || gymStatsError))}</span></p>`
+              : '<p style="color:var(--text3);text-align:center;padding:32px 0">Aucune donnée salle pour le moment.<br>Commence une séance dans l\'onglet Muscu !</p>'}
         </div>
       </div>
 
