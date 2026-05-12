@@ -2852,6 +2852,7 @@ html, body {
 }
 
 .muscu-ex-row {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -2966,6 +2967,52 @@ html, body {
 }
 .muscu-sparkline { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; flex-shrink: 0; }
 .muscu-sparkline-delta { font-size: 9px; font-weight: 800; white-space: nowrap; }
+
+.muscu-ex-row.muscu-ex-confirming > *:not(.muscu-ex-delete-confirm) { opacity: 0.25; pointer-events: none; }
+.muscu-ex-delete-confirm {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: color-mix(in srgb, #ef4444 10%, var(--bg3));
+  border: 1px solid rgba(239,68,68,0.35);
+  border-radius: inherit;
+  z-index: 2;
+  animation: muscu-confirm-in 0.15s ease;
+}
+@keyframes muscu-confirm-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+.muscu-ex-delete-confirm-label {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ef4444;
+  white-space: nowrap;
+}
+.muscu-ex-delete-yes-btn {
+  font-size: 12px;
+  font-weight: 700;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 5px 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.muscu-ex-delete-no-btn {
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.08);
+  color: var(--text2);
+  border: none;
+  border-radius: 7px;
+  padding: 5px 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
 
 /* Add exercise inline form */
 .muscu-add-ex-row {

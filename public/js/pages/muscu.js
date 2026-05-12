@@ -99,6 +99,7 @@ const MuscuPage = (() => {
       if (sub) sub.textContent = `${totalPRs} record${totalPRs !== 1 ? 's' : ''} enregistré${totalPRs !== 1 ? 's' : ''}`;
 
       container.innerHTML = _renderPage(records, muscleHistory);
+      _initLongPress();
     } catch (err) {
       console.error('[Muscu]', err);
       container.innerHTML = `<p style="color:var(--text3);text-align:center;padding:40px 16px">Erreur de chargement</p>`;
@@ -234,13 +235,12 @@ const MuscuPage = (() => {
                   }).join('');
 
                   return `
-                  <div class="muscu-ex-row${recs.length > 0 ? ' has-record' : ''}">
+                  <div class="muscu-ex-row${recs.length > 0 ? ' has-record' : ''}"${isCustom ? ` data-custom="1" data-session-idx="${idx}" data-ex-name="${_escape(ex)}"` : ''}>
                     <div class="muscu-ex-left">
                       <div class="muscu-ex-name-row">
                         <span class="muscu-ex-name">${_escape(ex)}</span>
                         ${historyByName[ex.toLowerCase()]?.length >= 2 ? _renderSparkline(historyByName[ex.toLowerCase()]) : ''}
                         <button class="mr-btn-icon mr-btn-add" title="Ajouter un record" onclick="event.stopPropagation();MuscuPage.openSessionRecord('${safeEx}','${safeCat}')">＋</button>
-                        ${isCustom ? `<button class="mr-btn-icon muscu-ex-delete-btn" title="Retirer cet exercice" onclick="event.stopPropagation();MuscuPage.removeExerciseFromSession(${idx},'${safeEx}')">✕</button>` : ''}
                       </div>
                       ${recs.length > 0 ? recordsHtml : `<span class="muscu-ex-empty">Aucun record</span>`}
                     </div>
@@ -514,6 +514,64 @@ const MuscuPage = (() => {
     if (sub) sub.textContent = `${totalPRs} record${totalPRs !== 1 ? 's' : ''} enregistré${totalPRs !== 1 ? 's' : ''}`;
 
     container.innerHTML = _renderPage(records, muscleHistory);
+    _initLongPress();
+  }
+
+  // ── Long-press delete for custom exercises ────────────────
+  function _initLongPress() {
+    document.querySelectorAll('.muscu-ex-row[data-custom="1"]').forEach(row => {
+      let timer = null;
+      let moved = false;
+      let sx = 0, sy = 0;
+      const onStart = (e) => {
+        if (row.querySelector('.muscu-ex-delete-confirm')) return;
+        const pt = e.touches ? e.touches[0] : e;
+        sx = pt.clientX; sy = pt.clientY; moved = false;
+        timer = setTimeout(() => { if (!moved) _showDeleteConfirm(row); }, 600);
+      };
+      const onMove = (e) => {
+        const pt = e.touches ? e.touches[0] : e;
+        if (Math.abs(pt.clientX - sx) > 8 || Math.abs(pt.clientY - sy) > 8) {
+          moved = true;
+          if (timer) { clearTimeout(timer); timer = null; }
+        }
+      };
+      const onEnd = () => { if (timer) { clearTimeout(timer); timer = null; } };
+      row.addEventListener('touchstart', onStart, { passive: true });
+      row.addEventListener('touchmove',  onMove,  { passive: true });
+      row.addEventListener('touchend',   onEnd);
+      row.addEventListener('mousedown',  onStart);
+      row.addEventListener('mousemove',  onMove);
+      row.addEventListener('mouseup',    onEnd);
+      row.addEventListener('mouseleave', onEnd);
+    });
+  }
+
+  function _showDeleteConfirm(row) {
+    if (row.querySelector('.muscu-ex-delete-confirm')) return;
+    row.classList.add('muscu-ex-confirming');
+    const el = document.createElement('div');
+    el.className = 'muscu-ex-delete-confirm';
+    const label  = document.createElement('span');
+    label.className = 'muscu-ex-delete-confirm-label';
+    label.textContent = 'Retirer cet exercice ?';
+    const btnYes = document.createElement('button');
+    btnYes.className = 'muscu-ex-delete-yes-btn';
+    btnYes.textContent = 'Supprimer';
+    const btnNo = document.createElement('button');
+    btnNo.className = 'muscu-ex-delete-no-btn';
+    btnNo.textContent = 'Annuler';
+    el.append(label, btnYes, btnNo);
+    row.appendChild(el);
+    btnYes.addEventListener('click', (e) => {
+      e.stopPropagation();
+      MuscuPage.removeExerciseFromSession(parseInt(row.dataset.sessionIdx), row.dataset.exName);
+    });
+    btnNo.addEventListener('click', (e) => {
+      e.stopPropagation();
+      row.classList.remove('muscu-ex-confirming');
+      el.remove();
+    });
   }
 
   // ── Add / remove exercises from sessions ─────────────────
