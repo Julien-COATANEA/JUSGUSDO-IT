@@ -257,20 +257,28 @@ html, body {
 .app-page.user-ju  .xp-bar-fill { background: linear-gradient(90deg, var(--ju), var(--ju-light)); }
 .app-page.user-gus .xp-bar-fill { background: linear-gradient(90deg, var(--gus), var(--gus-light)); }
 
-/* WEEK NAV */
-.week-nav {
+/* WEEK CONTEXT (nav + strip integrated) */
+.week-context {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 10px 12px 0;
   background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+.week-inner {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .week-btn {
   background: var(--card);
   border: 1px solid var(--border);
   color: var(--text);
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-sm);
   font-size: 20px;
   cursor: pointer;
@@ -278,20 +286,20 @@ html, body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  align-self: center;
+  margin-bottom: 8px;
   transition: background 0.15s;
   font-family: inherit;
 }
 .week-btn:active { background: var(--card2); }
-.week-label { flex: 1; text-align: center; font-size: 13px; font-weight: 700; color: var(--text2); }
+.week-label { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
 
-/* WEEK STRIP (day rings) */
+/* WEEK STRIP (day rings) — inside .week-context */
 .week-strip {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 14px 4px;
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
+  padding: 0 0 8px;
   gap: 2px;
 }
 .wsd {
@@ -339,30 +347,46 @@ html, body {
 .wsd.today-dot .wsd-lbl { color: var(--accent3); }
 .wsd.done      .wsd-lbl { color: var(--green); }
 
-/* STATS BAND */
-.stats-band {
+/* SLIM STATS BAR */
+.today-stats-bar {
   display: flex;
-  gap: 10px;
-  padding: 14px 16px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
   background: var(--bg2);
   border-bottom: 1px solid var(--border);
 }
-.stat-pill {
-  flex: 1;
-  background: var(--card);
-  border-radius: var(--radius-sm);
-  padding: 12px 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  border: 1px solid var(--border);
+.tsb-pill {
+  font-size: 12px;
+  color: var(--text2);
+  font-weight: 600;
+  white-space: nowrap;
 }
-.stat-val { font-size: 22px; font-weight: 900; color: var(--text); letter-spacing: -0.5px; line-height: 1; }
-.stat-lbl { font-size: 10px; color: var(--text2); font-weight: 600; text-align: center; white-space: nowrap; }
+.tsb-pill b { color: var(--text); font-weight: 800; }
+.tsb-sep { width: 1px; height: 14px; background: var(--border); flex-shrink: 0; }
 
 /* CALENDAR */
 .calendar-container { padding: 14px 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+
+/* SECTION DIVIDERS (Passé / À venir) */
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+  color: var(--text3);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.section-divider::before, .section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
 
 /* DAY CARD */
 .day-card {
@@ -412,6 +436,26 @@ html, body {
 .day-card.future .day-name, .day-card.future .day-date { opacity: 0.6; }
 .day-date { font-size: 11px; color: var(--text2); margin-top: 2px; font-weight: 500; }
 .day-card.today .day-name { color: var(--accent3); }
+
+/* HERO CARD (today, always open, prominent) */
+.day-card.hero {
+  border-color: rgba(78,205,196,0.3);
+  box-shadow: 0 0 0 1px rgba(78,205,196,0.1), 0 8px 40px rgba(78,205,196,0.08);
+  background: linear-gradient(160deg, var(--card), rgba(78,205,196,0.03));
+}
+.day-card.hero .day-header { padding: 20px 16px 16px; }
+.day-card.hero .day-name { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+.day-card.hero .day-date { font-size: 13px; margin-top: 3px; }
+.day-card.hero .day-ring { width: 56px; height: 56px; }
+.day-card.hero .day-ring::after { inset: 6px; }
+.day-card.hero .day-ring-val { font-size: 13px; }
+.day-card.hero .day-toggle { display: none; }
+.day-card.hero .exercises-list { max-height: 2000px; padding: 0 12px 16px; }
+.day-card.hero .exercise-item { min-height: 60px; padding: 14px 16px; }
+.day-card.hero.completed {
+  border-color: rgba(34,209,139,0.4);
+  box-shadow: 0 0 0 1px rgba(34,209,139,0.15), 0 8px 40px rgba(34,209,139,0.1);
+}
 
 .today-badge {
   font-size: 9px;
@@ -559,20 +603,20 @@ html, body {
 .exercise-item.checked .exercise-tag { opacity: 0.5; }
 
 .exercise-checkbox {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   border: 2px solid var(--text3);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   flex-shrink: 0;
   transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   color: white;
 }
-.exercise-item.checked .exercise-checkbox { background: var(--green); border-color: var(--green); box-shadow: 0 0 10px rgba(34,209,139,0.35); }
+.exercise-item.checked .exercise-checkbox { background: var(--green); border-color: var(--green); box-shadow: 0 0 14px rgba(34,209,139,0.5); }
 
 .exercise-item.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 .day-card.past .day-header { cursor: default; }

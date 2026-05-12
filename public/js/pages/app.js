@@ -28,7 +28,7 @@ const WorkoutPage = (() => {
     return `
       <div class="app-page user-${currentUser.username?.toLowerCase()}">
         <header class="app-header">
-          <button class="icon-btn" onclick="Router.navigate('home')">←</button>
+          <button class="icon-btn" onclick="Router.navigate('home')" style="visibility:hidden">←</button>
           <div class="header-info">
             <span class="header-username" id="header-username">${escapeHtml(currentUser.username || '')}</span>
             <span class="header-rank" id="header-rank">Chargement...</span>
@@ -48,27 +48,21 @@ const WorkoutPage = (() => {
           </div>
         </div>
 
-        <div class="week-nav">
+        <div class="week-context">
           <button class="week-btn" onclick="WorkoutPage.changeWeek(-1)">‹</button>
-          <div class="week-label" id="week-label">Cette semaine</div>
+          <div class="week-inner">
+            <div class="week-label" id="week-label">Cette semaine</div>
+            <div class="week-strip" id="week-strip"></div>
+          </div>
           <button class="week-btn" onclick="WorkoutPage.changeWeek(1)">›</button>
         </div>
 
-        <div class="week-strip" id="week-strip"></div>
-
-        <div class="stats-band">
-          <div class="stat-pill">
-            <span class="stat-val" id="stat-streak">0</span>
-            <span class="stat-lbl">🔥 Série</span>
-          </div>
-          <div class="stat-pill">
-            <span class="stat-val" id="stat-week">0/7</span>
-            <span class="stat-lbl">📅 Cette sem.</span>
-          </div>
-          <div class="stat-pill">
-            <span class="stat-val" id="stat-total">0</span>
-            <span class="stat-lbl">⚡ Total jours</span>
-          </div>
+        <div class="today-stats-bar">
+          <span class="tsb-pill">🔥&nbsp;<b id="stat-streak">0</b>&nbsp;jours</span>
+          <span class="tsb-sep"></span>
+          <span class="tsb-pill">📅&nbsp;<b id="stat-week">0/7</b>&nbsp;sem.</span>
+          <span class="tsb-sep"></span>
+          <span class="tsb-pill">⚡&nbsp;<b id="stat-total">0</b>&nbsp;total</span>
         </div>
 
         <main class="calendar-container" id="calendar-container">
@@ -143,6 +137,74 @@ const WorkoutPage = (() => {
     }
   }
 
+  function _buildDayCard(date, isHero) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const key = dateKey(date);
+    const isToday = date.getTime() === today.getTime();
+    const isFuture = date > today;
+    const isPast = !isToday && !isFuture;
+
+    const dayExercises = getExercisesForDay(date);
+    const doneCount = dayExercises.filter(ex => entries[`${key}_${ex.id}`] === true).length;
+    const allDone = dayExercises.length > 0 && doneCount === dayExercises.length;
+    const ringPct = dayExercises.length > 0 ? Math.round(doneCount / dayExercises.length * 100) : 0;
+    const isRest = isPast && !allDone && _isRestDay(key);
+    const ringColor = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : isRest ? 'rgba(255,255,255,0.15)' : '#ef4444';
+
+    const card = document.createElement('div');
+    card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${(isHero || isToday) ? ' open' : ''}${isRest ? ' rest-day' : ''}${isHero ? ' hero' : ''}`;
+    card.dataset.key = key;
+    card.id = `day-${key}`;
+
+    const exercisesHTML = dayExercises.length === 0
+      ? `<p style="color:var(--text3);font-size:13px;text-align:center;padding:12px 0;">Repos 🙌</p>`
+      : dayExercises.map(ex => {
+          const checked = entries[`${key}_${ex.id}`] === true;
+          const metaTags = ex.is_running
+            ? `<span class="exercise-tag running">${escapeHtml(ex.emoji)} ${ex.reps}\u00a0${escapeHtml(ex.unit || 'min')}</span>`
+            : `<span class="exercise-tag"><span class="exercise-tag-val">${ex.sets}</span> série${ex.sets > 1 ? 's' : ''}</span>
+               <span class="exercise-tag"><span class="exercise-tag-val">${ex.reps}</span> rép.</span>`;
+          return `
+            <div class="exercise-item${checked ? ' checked' : ''}${isPast ? ' disabled' : ''}${isFuture ? ' future-day' : ''}"
+                 id="ex-${key}-${ex.id}"
+                 onclick="WorkoutPage.toggleExercise('${key}', ${ex.id}, this)">
+              <div class="exercise-icon">${escapeHtml(ex.emoji)}</div>
+              <div class="exercise-info">
+                <div class="exercise-name">${escapeHtml(ex.name)}</div>
+                <div class="exercise-meta">${metaTags}</div>
+              </div>
+              <div class="exercise-checkbox">${checked ? '✓' : ''}</div>
+            </div>
+          `;
+        }).join('');
+
+    card.innerHTML = `
+      <div class="day-header" onclick="WorkoutPage.toggleDay(this)">
+        <div class="day-check">${allDone ? '✓' : ''}</div>
+        <div class="day-name-block">
+          <div class="day-name">${DAYS_FR[date.getDay()]}</div>
+          <div class="day-date">${date.getDate()} ${MONTHS_FR[date.getMonth()]}</div>
+        </div>
+        ${isToday ? '<span class="today-badge">Aujourd\'hui</span>' : ''}
+        ${isFuture ? '<span class="preview-badge">À venir</span>' : ''}
+        <div class="day-ring" style="--ring-p:${ringPct};--ring-c:${ringColor}">
+          <span class="day-ring-val">${doneCount}/${dayExercises.length}</span>
+        </div>
+        ${!isHero ? '<div class="day-toggle">▼</div>' : ''}
+      </div>
+      <div class="exercises-list">
+        ${exercisesHTML}
+        <div class="all-done-badge">🎉 Journée complète ! Bravo !</div>
+        ${isPast && !allDone ? `
+        <button class="rest-day-btn${isRest ? ' active' : ''}" onclick="event.stopPropagation();WorkoutPage.toggleRestDay('${key}')">
+          ${isRest ? '✓ Repos noté' : '🛌 Marquer repos'}
+        </button>` : ''}
+      </div>
+    `;
+    return card;
+  }
+
   function renderWeek(dates) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -163,75 +225,20 @@ const WorkoutPage = (() => {
 
     let weekDone = 0;
     let weekTotal = 0;
-
     dates.forEach(date => {
       const key = dateKey(date);
-      const isToday = date.getTime() === today.getTime();
       const isFuture = date > today;
-      const isPast = !isToday && !isFuture;
-
-      const dayExercises = getExercisesForDay(date);
-      const doneCount = dayExercises.filter(ex => entries[`${key}_${ex.id}`] === true).length;
-      const allDone = dayExercises.length > 0 && doneCount === dayExercises.length;
-
       if (!isFuture) {
         weekTotal++;
-        if (allDone) weekDone++;
+        const dayExercises = getExercisesForDay(date);
+        if (dayExercises.length > 0 && dayExercises.every(ex => entries[`${key}_${ex.id}`] === true)) weekDone++;
       }
+    });
 
-      const ringPct = dayExercises.length > 0 ? Math.round(doneCount / dayExercises.length * 100) : 0;
-      const isRest = isPast && !allDone && _isRestDay(key);
-      const ringColor = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : isRest ? 'rgba(255,255,255,0.15)' : '#ef4444';
-
-      const card = document.createElement('div');
-      card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${isToday ? ' open' : ''}${isRest ? ' rest-day' : ''}`;
-      card.dataset.key = key;
-      card.id = `day-${key}`;
-
-      card.innerHTML = `
-        <div class="day-header" onclick="WorkoutPage.toggleDay(this)">
-          <div class="day-check">${allDone ? '✓' : ''}</div>
-          <div class="day-name-block">
-            <div class="day-name">${DAYS_FR[date.getDay()]}</div>
-            <div class="day-date">${date.getDate()} ${MONTHS_FR[date.getMonth()]}</div>
-          </div>
-          ${isToday ? '<span class="today-badge">Aujourd\'hui</span>' : ''}
-          ${isFuture ? '<span class="preview-badge">À venir</span>' : ''}
-          <div class="day-ring" style="--ring-p:${ringPct};--ring-c:${ringColor}">
-            <span class="day-ring-val">${doneCount}/${dayExercises.length}</span>
-          </div>
-          <div class="day-toggle">▼</div>
-        </div>
-        <div class="exercises-list">
-          ${dayExercises.length === 0
-            ? `<p style="color:var(--text3);font-size:13px;text-align:center;padding:12px 0;">Repos 🙌</p>`
-            : dayExercises.map(ex => {            const checked = entries[`${key}_${ex.id}`] === true;
-            const metaTags = ex.is_running
-              ? `<span class="exercise-tag running">${escapeHtml(ex.emoji)} ${ex.reps}\u00a0${escapeHtml(ex.unit || 'min')}</span>`
-              : `<span class="exercise-tag"><span class="exercise-tag-val">${ex.sets}</span> série${ex.sets > 1 ? 's' : ''}</span>
-                 <span class="exercise-tag"><span class="exercise-tag-val">${ex.reps}</span> rép.</span>`;
-            return `
-              <div class="exercise-item${checked ? ' checked' : ''}${isPast ? ' disabled' : ''}${isFuture ? ' future-day' : ''}"
-                   id="ex-${key}-${ex.id}"
-                   onclick="WorkoutPage.toggleExercise('${key}', ${ex.id}, this)">
-                <div class="exercise-icon">${escapeHtml(ex.emoji)}</div>
-                <div class="exercise-info">
-                  <div class="exercise-name">${escapeHtml(ex.name)}</div>
-                  <div class="exercise-meta">${metaTags}</div>
-                </div>
-                <div class="exercise-checkbox">${checked ? '✓' : ''}</div>
-              </div>
-            `;
-          }).join('')}
-          <div class="all-done-badge">🎉 Journée complète ! Bravo !</div>
-          ${isPast && !allDone ? `
-          <button class="rest-day-btn${isRest ? ' active' : ''}" onclick="event.stopPropagation();WorkoutPage.toggleRestDay('${key}')">
-            ${isRest ? '✓ Repos noté' : '🛌 Marquer repos'}
-          </button>` : ''}
-        </div>
-      `;
-
-      container.appendChild(card);
+    // Render all days in chronological order (Mon→Sun)
+    dates.forEach(d => {
+      const isHero = weekOffset === 0 && d.getTime() === today.getTime();
+      container.appendChild(_buildDayCard(d, isHero));
     });
 
     document.getElementById('stat-week').textContent = `${weekDone}/${weekTotal}`;
@@ -239,6 +246,13 @@ const WorkoutPage = (() => {
     document.getElementById('stat-total').textContent = stats.totalCompletedDays;
 
     renderWeekStrip(dates);
+
+    // Auto-scroll to today on current week
+    if (weekOffset === 0) {
+      const todayKey = dateKey(today);
+      const todayCard = document.getElementById(`day-${todayKey}`);
+      if (todayCard) setTimeout(() => todayCard.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
+    }
   }
 
   const DAY_LETTERS = ['D','L','M','M','J','V','S']; // Sun=0

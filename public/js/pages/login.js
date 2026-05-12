@@ -96,7 +96,7 @@ const LoginPage = (() => {
     try {
       const data = await API.login(username, password);
       _saveSession(data, remember);
-      Router.navigate('home');
+      Router.navigate('app');
     } catch (err) {
       showError(err.message);
       setLoading(false);
@@ -117,7 +117,7 @@ const LoginPage = (() => {
     try {
       const data = await API.register(username, password);
       _saveSession(data, true); // always remember on register
-      Router.navigate('home');
+      Router.navigate('app');
     } catch (err) {
       showError(err.message);
       setLoading(false);

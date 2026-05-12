@@ -53,7 +53,7 @@ const Router = (() => {
     if (!config) return navigate('login');
 
     if (config.requireAuth && !isLoggedIn()) return navigate('login');
-    if (!config.requireAuth && isLoggedIn() && route === 'login') return navigate('home');
+    if (!config.requireAuth && isLoggedIn() && route === 'login') return navigate('app');
     if (config.requireAdmin && !isAdmin()) return navigate('home');
 
     // Cleanup previous page
@@ -76,7 +76,7 @@ const Router = (() => {
   // Bootstrap
   function start() {
     if (isLoggedIn()) {
-      navigate('home');
+      navigate('app');
     } else {
       navigate('login');
     }
