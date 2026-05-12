@@ -238,7 +238,7 @@ router.get('/stats/:id', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[gym] stats', err);
-    res.status(500).json({ error: 'Erreur serveur' });
+    res.status(500).json({ error: 'Erreur serveur', detail: err.message, where: err.where, hint: err.hint });
   }
 });
 

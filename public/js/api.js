@@ -20,7 +20,10 @@ const API = (() => {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      throw new Error(data.error || `Erreur ${res.status}`);
+      const msg = data.detail
+        ? `${data.error || 'Erreur'} (${res.status}) — ${data.detail}`
+        : (data.error || `Erreur ${res.status}`);
+      throw new Error(msg);
     }
     return data;
   }

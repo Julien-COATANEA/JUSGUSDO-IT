@@ -44,8 +44,10 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
     const totalsRes = await db.query(
       `SELECT COUNT(*) AS total_completed,
               COUNT(DISTINCT entry_date) AS active_days
-       FROM checklist_entries
-       WHERE user_id = $1 AND completed = TRUE`,
+       FROM checklist_entries ce
+       JOIN exercises e ON e.id = ce.exercise_id
+       WHERE ce.user_id = $1 AND ce.completed = TRUE
+         AND COALESCE(e.type, 'home') = 'home'`,
       [userId]
     );
 
@@ -67,6 +69,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
                    WHERE uea.exercise_id = e2.id AND uea.user_id = $1 LIMIT 1
                  ) usch2 ON TRUE
                  WHERE e2.is_active = TRUE
+                   AND COALESCE(e2.type, 'home') = 'home'
                    AND (
                      COALESCE(array_length(COALESCE(usch2.schedule, e2.schedule), 1), 0) = 0
                      OR EXTRACT(DOW FROM dc.entry_date)::int = ANY(COALESCE(usch2.schedule, e2.schedule))
@@ -102,6 +105,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
                    WHERE uea.exercise_id = e2.id AND uea.user_id = $1 LIMIT 1
                  ) usch2 ON TRUE
                  WHERE e2.is_active = TRUE
+                   AND COALESCE(e2.type, 'home') = 'home'
                    AND (
                      COALESCE(array_length(COALESCE(usch2.schedule, e2.schedule), 1), 0) = 0
                      OR EXTRACT(DOW FROM dc.entry_date)::int = ANY(COALESCE(usch2.schedule, e2.schedule))
@@ -126,6 +130,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
        FROM checklist_entries ce
        JOIN exercises e ON e.id = ce.exercise_id
        WHERE ce.user_id = $1 AND ce.completed = TRUE
+         AND COALESCE(e.type, 'home') = 'home'
        GROUP BY e.name
        ORDER BY times DESC
        LIMIT 5`,
@@ -142,6 +147,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
          WHERE ce.user_id = $1
            AND ce.entry_date = CURRENT_DATE
            AND ce.completed = TRUE
+           AND COALESCE(e.type, 'home') = 'home'
            AND (
              COALESCE(array_length(COALESCE(uea.schedule, e.schedule), 1), 0) = 0
              OR EXTRACT(DOW FROM CURRENT_DATE)::int = ANY(COALESCE(uea.schedule, e.schedule))
@@ -157,6 +163,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
          FROM exercises e
          LEFT JOIN user_exercise_assignments uea ON uea.exercise_id = e.id AND uea.user_id = $1
          WHERE e.is_active = TRUE
+           AND COALESCE(e.type, 'home') = 'home'
            AND (
              COALESCE(array_length(COALESCE(uea.schedule, e.schedule), 1), 0) = 0
              OR EXTRACT(DOW FROM CURRENT_DATE)::int = ANY(COALESCE(uea.schedule, e.schedule))
@@ -203,6 +210,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
             WHERE uea.exercise_id = e2.id AND uea.user_id = $1 LIMIT 1
           ) usch2 ON TRUE
           WHERE e2.is_active = TRUE
+            AND COALESCE(e2.type, 'home') = 'home'
             AND (
               COALESCE(array_length(COALESCE(usch2.schedule, e2.schedule), 1), 0) = 0
               OR EXTRACT(DOW FROM d.entry_date)::int = ANY(COALESCE(usch2.schedule, e2.schedule))
@@ -232,6 +240,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
                    WHERE uea.exercise_id = e.id AND uea.user_id = $1 LIMIT 1
                  ) usch ON TRUE
                  WHERE e.is_active = TRUE
+                   AND COALESCE(e.type, 'home') = 'home'
                    AND (
                      COALESCE(array_length(COALESCE(usch.schedule, e.schedule), 1), 0) = 0
                      OR EXTRACT(DOW FROM d.entry_date)::int = ANY(COALESCE(usch.schedule, e.schedule))
@@ -250,6 +259,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
          JOIN exercises e ON e.id = ce.exercise_id
          WHERE ce.user_id = $1
            AND ce.completed = TRUE
+           AND COALESCE(e.type, 'home') = 'home'
            AND ce.entry_date >= CURRENT_DATE - 29
          GROUP BY ce.entry_date
        )
