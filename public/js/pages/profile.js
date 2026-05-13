@@ -39,18 +39,22 @@ const ProfilePage = (() => {
 
     try {
       let gymStatsError = null;
-      const [userStatsRes, gymStatsRes] = await Promise.all([
+      const [userStatsRes, gymStatsRes, gymRecordsRes, gymSessionsRes] = await Promise.all([
         API.getUserStats(_profileUserId),
         API.getGymStats(_profileUserId).catch(err => {
           console.warn('[Profile] getGymStats failed:', err);
           gymStatsError = err;
           return null;
         }),
+        API.getMuscleRecords(_profileUserId).catch(() => ({ records: [] })),
+        API.getGymSessionsAll().catch(() => ({ sessions: [] })),
       ]);
       const { user, stats } = userStatsRes;
-      const gymStats  = gymStatsRes?.stats || null;
+      const gymStats    = gymStatsRes?.stats || null;
+      const gymRecords  = gymRecordsRes?.records || [];
+      const gymSessions = gymSessionsRes?.sessions || [];
 
-      container.innerHTML = _renderAll(user, stats, gymStats, gymStatsError);
+      container.innerHTML = _renderAll(user, stats, gymStats, gymStatsError, gymRecords, gymSessions);
       requestAnimationFrame(_autoSizeCalendar);
       requestAnimationFrame(_autoSizeGymCalendar);
 
@@ -63,7 +67,7 @@ const ProfilePage = (() => {
   }
 
   // ── Main renderer ───────────────────────────────────────────
-  function _renderAll(user, stats, gymStats, gymStatsError = null) {
+  function _renderAll(user, stats, gymStats, gymStatsError = null, gymRecords = [], gymSessions = []) {
     const rank     = Gamification.getRank(user.xp);
     const progress = Gamification.getProgress(user.xp);
     const avatar   = user.avatar || rank.emoji;
@@ -92,6 +96,7 @@ const ProfilePage = (() => {
             : gymStatsError
               ? `<p style="color:#ef4444;text-align:center;padding:32px 16px">⚠️ Erreur de chargement des stats salle<br><span style="color:var(--text3);font-size:13px">${_escape(String(gymStatsError.message || gymStatsError))}</span></p>`
               : '<p style="color:var(--text3);text-align:center;padding:32px 0">Aucune donnée salle pour le moment.<br>Commence une séance dans l\'onglet Muscu !</p>'}
+          ${_renderGymRecords(gymRecords, gymSessions)}
         </div>
       </div>
     `;
@@ -151,6 +156,77 @@ const ProfilePage = (() => {
       ${todayBadge}
       ${_renderGymCalendar(gymStats.calendar)}
     `;
+  }
+
+  function _renderGymRecords(records, sessions) {
+    if (!records || records.length === 0) return '';
+
+    // Group records by exercise name (keep best = highest weight)
+    const recMap = {};
+    records.forEach(r => {
+      const key = r.exercise_name.toLowerCase();
+      if (!recMap[key] || r.weight_kg > recMap[key].weight_kg) recMap[key] = r;
+    });
+
+    // Build session groups using DB sessions order
+    const rendered = [];
+    const usedKeys = new Set();
+
+    sessions.forEach(session => {
+      const sessionExNames = (session.exercises || []).map(e => typeof e === 'string' ? e : e.name);
+      const sessionRecs = sessionExNames
+        .map(name => recMap[name.toLowerCase()])
+        .filter(Boolean);
+      if (sessionRecs.length === 0) return;
+
+      sessionRecs.forEach(r => usedKeys.add(r.exercise_name.toLowerCase()));
+
+      rendered.push(`
+        <div class="prof-rec-session">
+          <div class="prof-rec-session-label" style="color:${session.color}">
+            ${session.icon} ${_escape(session.name)}
+          </div>
+          <div class="prof-rec-list">
+            ${sessionRecs.map(r => _renderRecRow(r)).join('')}
+          </div>
+        </div>`);
+    });
+
+    // Extra records not in any known session
+    const extras = Object.values(recMap).filter(r => !usedKeys.has(r.exercise_name.toLowerCase()));
+    if (extras.length > 0) {
+      rendered.push(`
+        <div class="prof-rec-session">
+          <div class="prof-rec-session-label" style="color:var(--text3)">🎯 Personnalisés</div>
+          <div class="prof-rec-list">
+            ${extras.map(r => _renderRecRow(r)).join('')}
+          </div>
+        </div>`);
+    }
+
+    if (rendered.length === 0) return '';
+
+    return `
+      <div class="prof-rec-wrap" style="animation:fadeIn 0.3s ease both">
+        <div class="prof-rec-title">🏆 Records personnels</div>
+        ${rendered.join('')}
+      </div>`;
+  }
+
+  function _renderRecRow(r) {
+    const w = r.weight_kg % 1 === 0 ? r.weight_kg : Number(r.weight_kg).toFixed(1);
+    const date = r.updated_at
+      ? new Date(r.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' })
+      : null;
+    return `
+      <div class="prof-rec-row">
+        <span class="prof-rec-name">${_escape(r.exercise_name)}</span>
+        <span class="prof-rec-tags">
+          <span class="prof-rec-tag">${r.sets}&nbsp;×&nbsp;${r.reps != null ? r.reps + '&nbsp;rép' : '—'}</span>
+          <span class="prof-rec-tag weight">${w}&nbsp;kg</span>
+          ${date ? `<span class="prof-rec-tag date">${date}</span>` : ''}
+        </span>
+      </div>`;
   }
 
   function _renderGymCalendar(calendar) {
