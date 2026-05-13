@@ -329,17 +329,17 @@ const MuscuPage = (() => {
       summaryHtml = `<p class="gym-rest-day-msg">${isToday ? 'Pas encore d’activité' : 'Aucune activité ce jour'}</p>`;
     }
 
-    const ctaLabel = isFuture ? '' : (active || rest ? '✎&nbsp;Modifier' : '+&nbsp;Enregistrer mon activité');
+    const ctaLabel = isToday ? (active || rest ? '✎&nbsp;Modifier' : '+&nbsp;Enregistrer mon activité') : '';
     const ctaClass = `gym-day-cta${(active || rest) ? ' cta-edit' : ''}${isToday ? ' cta-today' : ''}`;
-    const cta = isFuture ? '' : `
-      <button type="button" class="${ctaClass}" onclick="event.stopPropagation();MuscuPage.openDayActionsSheet('${key}')">${ctaLabel}</button>`;
+    const cta = isToday ? `
+      <button type="button" class="${ctaClass}" onclick="event.stopPropagation();MuscuPage.openDayActionsSheet('${key}')">${ctaLabel}</button>` : '';
 
     const card = document.createElement('div');
     card.className = `day-card${active ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${(isHero || isToday) ? ' open' : ''}${isHero ? ' hero' : ''}${rest ? ' gym-rest-day' : ''}`;
     card.dataset.key = key;
     card.id = `gday-${key}`;
     card.innerHTML = `
-      <div class="day-header" onclick="${isFuture ? '' : `MuscuPage.openDayActionsSheet('${key}')`}">
+      <div class="day-header" onclick="${isToday ? `MuscuPage.openDayActionsSheet('${key}')` : ''}">
         <div class="day-check">${active ? '✓' : rest ? '🛌' : ''}</div>
         <div class="day-name-block">
           <div class="day-name">${_DAYS_FR[date.getDay()]}</div>
@@ -367,7 +367,8 @@ const MuscuPage = (() => {
   function openDayActionsSheet(dateStr) {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const [y, m, d] = dateStr.split('-').map(Number);
-    if (new Date(y, m - 1, d) > today) return;
+    const target = new Date(y, m - 1, d);
+    if (target > today || target < today) return; // only today allowed
     _activeSheetDate = dateStr;
     let sheet = document.getElementById('gym-day-sheet');
     if (!sheet) {
