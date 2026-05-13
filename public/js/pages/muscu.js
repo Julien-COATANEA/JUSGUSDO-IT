@@ -339,13 +339,13 @@ const MuscuPage = (() => {
         <div class="day-name-block">
           <div class="day-name">${_DAYS_FR[date.getDay()]}</div>
           <div class="day-date">${date.getDate()} ${_MONTHS_FR[date.getMonth()]}</div>
+          ${isToday || isFuture || (isRest && !isFuture) ? `
+          <div class="day-badges">
+            ${isToday ? "<span class=\"today-badge\">Aujourd'hui</span>" : ''}
+            ${isFuture ? '<span class="preview-badge">\u00c0 venir</span>' : ''}
+            ${isRest && !isFuture ? '<span class="rest-badge">Repos</span>' : ''}
+          </div>` : ''}
         </div>
-        ${isToday || isFuture || (isRest && !isFuture) ? `
-        <div class="day-badges">
-          ${isToday ? "<span class=\"today-badge\">Aujourd'hui</span>" : ''}
-          ${isFuture ? '<span class="preview-badge">\u00c0 venir</span>' : ''}
-          ${isRest && !isFuture ? '<span class="rest-badge">Repos</span>' : ''}
-        </div>` : ''}
         <div class="day-ring" style="--ring-p:${ringPct};--ring-c:${ringColor}">
           <span class="day-ring-val">${isRest ? '·' : `${doneCount}/${allExs.length}`}</span>
         </div>

@@ -470,17 +470,13 @@ html, body {
   white-space: nowrap;
 }
 
-/* Badge group — holds today / rest / future pills; shrinks before the ring */
+/* Badge group — lives inside day-name-block, below the date line */
 .day-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   align-items: center;
-  min-width: 0;
-  flex-shrink: 1;
-  overflow: hidden;
-  /* On very small screens collapse to max one line */
-  max-height: 24px;
+  margin-top: 5px;
 }
 /* Ring must never shrink */
 .day-ring { flex-shrink: 0; }
@@ -4030,25 +4026,34 @@ html, body {
 /* ═══ Muscu tab bar (Records / Séance) ══════════════════════════ */
 .muscu-tab-bar {
   display: flex;
-  gap: 6px;
-  padding: 10px 16px 0;
-  border-bottom: 1px solid var(--border);
+  gap: 4px;
+  margin: 14px 16px 6px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 4px;
 }
 .muscu-tab {
   flex: 1;
-  padding: 8px 0;
+  padding: 9px 0;
   font-size: 13px;
   font-weight: 700;
   border: none;
   background: transparent;
   color: var(--text2);
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s, border-color 0.15s;
+  border-radius: 10px;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+  letter-spacing: 0.1px;
+}
+.muscu-tab:not(.active):hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.04);
 }
 .muscu-tab.active {
-  color: var(--accent3);
-  border-bottom-color: var(--accent3);
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06);
 }
 
 /* ═══ Séance tab ══════════════════════════════════════════════ */
@@ -4174,28 +4179,34 @@ html, body {
 /* ═══ Profile: Maison / Salle tab switcher ══════════════════ */
 .profile-stats-tab-bar {
   display: flex;
-  gap: 6px;
-  margin: 12px 0 16px;
+  gap: 4px;
+  margin: 14px 0 18px;
   background: var(--card2);
-  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
   padding: 4px;
 }
 .profile-stats-tab {
   flex: 1;
-  padding: 8px 0;
+  padding: 9px 0;
   font-size: 13px;
   font-weight: 700;
   border: none;
   background: transparent;
   color: var(--text2);
   cursor: pointer;
-  border-radius: 9px;
-  transition: background 0.15s, color 0.15s;
+  border-radius: 10px;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+  letter-spacing: 0.1px;
+}
+.profile-stats-tab:not(.active):hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.04);
 }
 .profile-stats-tab.active {
   background: var(--card);
   color: var(--text);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06);
 }
 
 

@@ -128,10 +128,18 @@ router.get('/stats/:id', requireAuth, async (req, res) => {
       `WITH cur_monday AS (
          SELECT (CURRENT_DATE - (EXTRACT(ISODOW FROM CURRENT_DATE)::int - 1))::date AS d
        ),
+       user_first AS (
+         SELECT COALESCE(MIN(entry_date), CURRENT_DATE) AS first_date
+         FROM gym_checklist_entries WHERE user_id = $1
+       ),
        bounds AS (
-         SELECT (cm.d - 21)::date AS start_date,
-                (cm.d + 6)::date  AS end_date
-         FROM cur_monday cm
+         SELECT
+           GREATEST(
+             (uf.first_date - (EXTRACT(ISODOW FROM uf.first_date)::int - 1))::date,
+             (cm.d - 357)::date
+           ) AS start_date,
+           (cm.d + 6)::date AS end_date
+         FROM cur_monday cm, user_first uf
        ),
        days AS (
          SELECT generate_series(b.start_date, b.end_date, '1 day'::interval)::date AS d
