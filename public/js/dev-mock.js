@@ -288,9 +288,14 @@ function _applyDevMock() {
   API.getGymChecklist = async (start, end) => ({
     entries: _devGymEntries.filter(e => e.entry_date >= start && e.entry_date <= end),
   });
+  const _devDayIsActive = (date) =>
+    _devGymEntries.some(e => e.entry_date === date && e.completed) ||
+    _devGymZoneEntries.some(e => e.entry_date === date);
+
   API.toggleGymChecklist = async (exercise_name, session_name, entry_date) => {
     const today = new Date().toISOString().split('T')[0];
     if (entry_date > today) throw new Error('Impossible de cocher une date future');
+    const wasActive = _devDayIsActive(entry_date);
     const idx = _devGymEntries.findIndex(e => e.entry_date === entry_date && e.exercise_name === exercise_name);
     let newCompleted;
     if (idx >= 0) {
@@ -301,11 +306,12 @@ function _applyDevMock() {
       newCompleted = true;
       _devGymEntries.push({ id: Date.now(), entry_date, exercise_name, session_name, completed: true, completed_at: new Date().toISOString() });
     }
+    const isActive = _devDayIsActive(entry_date);
+    const xpDelta = (isActive && !wasActive) ? 30 : (!isActive && wasActive) ? -30 : 0;
+    DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
     const sessionEntries = _devGymEntries.filter(e => e.entry_date === entry_date && e.session_name === session_name);
     const doneNow = sessionEntries.filter(e => e.completed).length;
-    const xpDelta = newCompleted ? 4 : -4;
-    DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
-    return { completed: newCompleted, xp: DEV_FAKE_USER.xp, xpDelta, sessionDone: doneNow, sessionTotal: sessionEntries.length };
+    return { completed: newCompleted, xp: DEV_FAKE_USER.xp, xpDelta, sessionDone: doneNow, sessionTotal: 0 };
   };
   API.getGymStats = async (userId) => {
     const today = new Date().toISOString().split('T')[0];
@@ -380,15 +386,18 @@ function _applyDevMock() {
     if (entry_date > today) throw new Error('Impossible de cocher une date future');
     const zid = parseInt(zone_id, 10);
     if (!_devGymZones.some(z => z.id === zid)) throw new Error('Zone introuvable');
+    const wasActive = _devDayIsActive(entry_date);
     const idx = _devGymZoneEntries.findIndex(e => e.entry_date === entry_date && e.zone_id === zid);
-    let active, xpDelta;
+    let active;
     if (idx >= 0) {
       _devGymZoneEntries.splice(idx, 1);
-      active = false; xpDelta = -30;
+      active = false;
     } else {
       _devGymZoneEntries.push({ id: _devNextZoneEntryId++, entry_date, zone_id: zid });
-      active = true; xpDelta = 30;
+      active = true;
     }
+    const isActive = _devDayIsActive(entry_date);
+    const xpDelta = (isActive && !wasActive) ? 30 : (!isActive && wasActive) ? -30 : 0;
     DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
     return { active, xp: DEV_FAKE_USER.xp, xpDelta };
   };

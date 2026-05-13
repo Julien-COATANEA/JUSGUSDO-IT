@@ -50,6 +50,15 @@ router.post('/toggle', requireAuth, async (req, res) => {
   }
 
   try {
+    // Day-activation XP: +30 when the day goes from inactive → active, -30 the reverse.
+    const DAY_ACTIVE_SQL = `
+      SELECT (
+        EXISTS(SELECT 1 FROM gym_checklist_entries WHERE user_id = $1 AND entry_date = $2 AND completed = TRUE)
+        OR EXISTS(SELECT 1 FROM gym_zone_entries WHERE user_id = $1 AND entry_date = $2)
+      ) AS is_active`;
+    const wasActiveRes = await db.query(DAY_ACTIVE_SQL, [req.user.id, entry_date]);
+    const wasActive = wasActiveRes.rows[0].is_active;
+
     const existing = await db.query(
       `SELECT id, completed FROM gym_checklist_entries
        WHERE user_id = $1 AND entry_date = $2 AND exercise_name = $3`,
@@ -72,16 +81,6 @@ router.post('/toggle', requireAuth, async (req, res) => {
       );
     }
 
-    // Total exercises for that session = currently active gym exercises
-    // attached to the session in the catalogue (assignment-free).
-    const totalRes = await db.query(
-      `SELECT COUNT(*)::int AS total
-       FROM exercises
-       WHERE type = 'gym' AND is_active = TRUE AND gym_session = $1`,
-      [session_name]
-    );
-    const sessionTotal = totalRes.rows[0]?.total || 0;
-
     const doneRes = await db.query(
       `SELECT COUNT(*)::int AS done
        FROM gym_checklist_entries
@@ -90,19 +89,13 @@ router.post('/toggle', requireAuth, async (req, res) => {
     );
     const sessionDone = doneRes.rows[0]?.done || 0;
 
-    // XP split: 30 / N per exercise + completion bonus when full.
-    // Falls back to flat 30 XP if no exercises remain in the session.
-    const baseXP = sessionTotal > 0 ? Math.floor(DAILY_GYM_XP / sessionTotal) : DAILY_GYM_XP;
-    const completionBonus = sessionTotal > 0 ? DAILY_GYM_XP - baseXP * sessionTotal : 0;
+    const isActiveRes = await db.query(DAY_ACTIVE_SQL, [req.user.id, entry_date]);
+    const isActive = isActiveRes.rows[0].is_active;
 
-    let xpDelta = 0;
-    if (newCompleted) {
-      xpDelta = baseXP;
-      if (sessionTotal > 0 && sessionDone === sessionTotal) xpDelta += completionBonus;
-    } else {
-      xpDelta = -baseXP;
-      if (sessionTotal > 0 && sessionDone + 1 === sessionTotal) xpDelta -= completionBonus;
-    }
+    // XP = 30 only when the day transitions between inactive ↔ active
+    const xpDelta = (isActive && !wasActive) ? DAILY_GYM_XP
+                  : (!isActive && wasActive)  ? -DAILY_GYM_XP
+                  : 0;
 
     if (xpDelta !== 0) {
       await db.query(
@@ -118,7 +111,7 @@ router.post('/toggle', requireAuth, async (req, res) => {
       xp: userRes.rows[0]?.xp ?? 0,
       xpDelta,
       sessionDone,
-      sessionTotal,
+      sessionTotal: 0,
     });
   } catch (err) {
     console.error('[gym] toggle', err);
@@ -165,7 +158,7 @@ router.get('/zones/entries', requireAuth, async (req, res) => {
 });
 
 // POST /api/gym-checklist/zones/toggle  body: { zone_id, entry_date }
-// 30 XP per zone toggled (cumulable with everything else for the day).
+// XP for zones: +30 when the day goes inactive → active (first activity), -30 on reverse.
 router.post('/zones/toggle', requireAuth, async (req, res) => {
   const zoneId = parseInt(req.body.zone_id, 10);
   const entryDate = req.body.entry_date;
@@ -177,6 +170,15 @@ router.post('/zones/toggle', requireAuth, async (req, res) => {
   }
 
   try {
+    const DAY_ACTIVE_SQL = `
+      SELECT (
+        EXISTS(SELECT 1 FROM gym_checklist_entries WHERE user_id = $1 AND entry_date = $2 AND completed = TRUE)
+        OR EXISTS(SELECT 1 FROM gym_zone_entries WHERE user_id = $1 AND entry_date = $2)
+      ) AS is_active`;
+
+    const wasActiveRes = await db.query(DAY_ACTIVE_SQL, [req.user.id, entryDate]);
+    const wasActive = wasActiveRes.rows[0].is_active;
+
     const zoneRes = await db.query('SELECT id FROM gym_zones WHERE id = $1', [zoneId]);
     if (!zoneRes.rows[0]) return res.status(404).json({ error: 'Zone introuvable' });
 
@@ -186,24 +188,30 @@ router.post('/zones/toggle', requireAuth, async (req, res) => {
     );
 
     let active;
-    let xpDelta;
     if (existing.rows[0]) {
       await db.query('DELETE FROM gym_zone_entries WHERE id = $1', [existing.rows[0].id]);
       active = false;
-      xpDelta = -ZONE_XP;
     } else {
       await db.query(
         `INSERT INTO gym_zone_entries (user_id, entry_date, zone_id) VALUES ($1, $2, $3)`,
         [req.user.id, entryDate, zoneId]
       );
       active = true;
-      xpDelta = ZONE_XP;
     }
 
-    await db.query(
-      `UPDATE users SET xp = GREATEST(0, xp + $1) WHERE id = $2`,
-      [xpDelta, req.user.id]
-    );
+    const isActiveRes = await db.query(DAY_ACTIVE_SQL, [req.user.id, entryDate]);
+    const isActive = isActiveRes.rows[0].is_active;
+
+    const xpDelta = (isActive && !wasActive) ? DAILY_GYM_XP
+                  : (!isActive && wasActive)  ? -DAILY_GYM_XP
+                  : 0;
+
+    if (xpDelta !== 0) {
+      await db.query(
+        `UPDATE users SET xp = GREATEST(0, xp + $1) WHERE id = $2`,
+        [xpDelta, req.user.id]
+      );
+    }
     const userRes = await db.query('SELECT xp FROM users WHERE id = $1', [req.user.id]);
 
     res.json({ active, xp: userRes.rows[0]?.xp ?? 0, xpDelta });
