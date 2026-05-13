@@ -43,7 +43,8 @@ const AdminPage = (() => {
     `;
   }
 
-  async function init() {
+  async function init({ exTab } = {}) {
+    if (exTab === 'home' || exTab === 'gym') currentExTab = exTab;
     await refreshData();
   }
 

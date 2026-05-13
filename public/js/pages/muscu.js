@@ -76,6 +76,7 @@ const MuscuPage = (() => {
             <span class="header-username">Salle</span>
             <span class="header-rank" id="muscu-header-sub">Chargement…</span>
           </div>
+          <button class="icon-btn" onclick="Router.navigate('admin',{exTab:'gym'})" title="Exercices Salle" style="font-size:18px">🏋️</button>
         </header>
         <div class="muscu-tab-bar">
           <button class="muscu-tab${_activeTab === 'records' ? ' active' : ''}" onclick="MuscuPage.switchMuscuTab('records')">📊 Records</button>

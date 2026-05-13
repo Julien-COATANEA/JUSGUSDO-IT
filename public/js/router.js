@@ -34,7 +34,6 @@ const Router = (() => {
       { route: 'home',  icon: SVG.home,  label: 'Équipe' },
       { route: 'app',   icon: SVG.app,   label: 'Maison' },
       { route: 'muscu', icon: SVG.muscu, label: 'Salle' },
-      { route: 'admin', icon: SVG.admin, label: 'Exercices' },
     ];
 
     const nav = document.createElement('nav');
