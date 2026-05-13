@@ -329,9 +329,10 @@ const MuscuPage = (() => {
       summaryHtml = `<p class="gym-rest-day-msg">${isToday ? 'Pas encore d’activité' : 'Aucune activité ce jour'}</p>`;
     }
 
-    const ctaLabel = isFuture ? '' : (active || rest ? 'Modifier' : 'Enregistrer mon activité');
+    const ctaLabel = isFuture ? '' : (active || rest ? '✎&nbsp;Modifier' : '+&nbsp;Enregistrer mon activité');
+    const ctaClass = `gym-day-cta${(active || rest) ? ' cta-edit' : ''}${isToday ? ' cta-today' : ''}`;
     const cta = isFuture ? '' : `
-      <button type="button" class="submit-btn gym-day-cta" onclick="event.stopPropagation();MuscuPage.openDayActionsSheet('${key}')">${ctaLabel}</button>`;
+      <button type="button" class="${ctaClass}" onclick="event.stopPropagation();MuscuPage.openDayActionsSheet('${key}')">${ctaLabel}</button>`;
 
     const card = document.createElement('div');
     card.className = `day-card${active ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${(isHero || isToday) ? ' open' : ''}${isHero ? ' hero' : ''}${rest ? ' gym-rest-day' : ''}`;

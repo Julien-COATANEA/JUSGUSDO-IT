@@ -4875,3 +4875,70 @@ html, body {
 .gym-zone-form-actions { display: flex; gap: 6px; margin-left: auto; }
 .gym-zone-form-actions .submit-btn,
 .gym-zone-form-actions .admin-secondary-btn { padding: 6px 12px; font-size: 12px; }
+
+/* === gym-day-cta redesign (overrides duplicate blocks above) ============= */
+.gym-day-cta {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: calc(100% - 28px);
+  margin: 8px 14px 14px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(34,209,139,0.28);
+  background: rgba(34,209,139,0.07);
+  color: var(--green);
+  font-size: 13px; font-weight: 700; font-family: inherit; letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: none;
+}
+.gym-day-cta:hover { background: rgba(34,209,139,0.14); border-color: rgba(34,209,139,0.5); }
+.gym-day-cta:active { transform: scale(0.98); }
+.gym-day-cta.cta-today {
+  background: rgba(34,209,139,0.13);
+  border-color: rgba(34,209,139,0.48);
+  box-shadow: 0 2px 12px rgba(34,209,139,0.12);
+}
+.gym-day-cta.cta-edit {
+  border-color: rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.03);
+  color: var(--text3);
+  font-weight: 600;
+}
+.gym-day-cta.cta-edit:hover {
+  background: rgba(255,255,255,0.07);
+  color: var(--text2);
+  border-color: rgba(255,255,255,0.13);
+}
+/* === gym-day-cta redesign (overrides duplicate blocks above) ============= */
+.gym-day-cta {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: calc(100% - 28px);
+  margin: 8px 14px 14px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(34,209,139,0.28);
+  background: rgba(34,209,139,0.07);
+  color: var(--green);
+  font-size: 13px; font-weight: 700; font-family: inherit; letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: none;
+}
+.gym-day-cta:hover { background: rgba(34,209,139,0.14); border-color: rgba(34,209,139,0.5); }
+.gym-day-cta:active { transform: scale(0.98); }
+.gym-day-cta.cta-today {
+  background: rgba(34,209,139,0.13);
+  border-color: rgba(34,209,139,0.48);
+  box-shadow: 0 2px 12px rgba(34,209,139,0.12);
+}
+.gym-day-cta.cta-edit {
+  border-color: rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.03);
+  color: var(--text3);
+  font-weight: 600;
+}
+.gym-day-cta.cta-edit:hover {
+  background: rgba(255,255,255,0.07);
+  color: var(--text2);
+  border-color: rgba(255,255,255,0.13);
+}
