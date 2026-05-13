@@ -382,6 +382,57 @@ const MuscuPage = (() => {
     }
     _renderDayActionsSheet();
     sheet.classList.add('open');
+    // Attach swipe-down-to-close after render (inner panel is recreated on each render)
+    requestAnimationFrame(() => _attachSheetSwipe(sheet));
+  }
+
+  function _attachSheetSwipe(backdrop) {
+    const panel = backdrop.querySelector('.gym-day-sheet');
+    if (!panel || panel._swipeAttached) return;
+    panel._swipeAttached = true;
+
+    let startY = 0, startX = 0, dragging = false, currentY = 0;
+    const THRESHOLD = 80; // px downward drag to trigger close
+
+    function onStart(e) {
+      // Only start drag from the handle or sheet header
+      const handle = panel.querySelector('.sheet-handle, .sheet-header');
+      if (!handle) return;
+      const src = e.touches ? e.touches[0] : e;
+      startY = src.clientY; startX = src.clientX; currentY = 0; dragging = true;
+      panel.style.transition = 'none';
+    }
+    function onMove(e) {
+      if (!dragging) return;
+      const src = e.touches ? e.touches[0] : e;
+      const dy = src.clientY - startY;
+      const dx = src.clientX - startX;
+      if (Math.abs(dx) > Math.abs(dy) + 10) { dragging = false; return; } // horizontal swipe → ignore
+      if (dy < 0) { panel.style.transform = ''; return; } // upward → no effect
+      currentY = dy;
+      panel.style.transform = `translateY(${dy}px)`;
+      panel.style.opacity = String(Math.max(0.3, 1 - dy / 300));
+    }
+    function onEnd() {
+      if (!dragging) return;
+      dragging = false;
+      panel.style.transition = '';
+      if (currentY >= THRESHOLD) {
+        panel.style.transform = `translateY(100%)`;
+        panel.style.opacity = '0';
+        setTimeout(() => closeDayActionsSheet(), 200);
+      } else {
+        panel.style.transform = '';
+        panel.style.opacity = '';
+      }
+    }
+    panel.addEventListener('touchstart', onStart, { passive: true });
+    panel.addEventListener('touchmove',  onMove,  { passive: true });
+    panel.addEventListener('touchend',   onEnd);
+    panel.addEventListener('mousedown',  onStart);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup',   onEnd);
+  }
   }
 
   function closeDayActionsSheet() {
@@ -548,6 +599,9 @@ const MuscuPage = (() => {
         if (_openAccordions.has(i)) el.open = true;
       });
     }
+    // Re-attach swipe handler since innerHTML was replaced
+    const backdrop = document.getElementById('gym-day-sheet');
+    if (backdrop) requestAnimationFrame(() => _attachSheetSwipe(backdrop));
   }
 
   // ── Main renderer ─────────────────────────────────────────
