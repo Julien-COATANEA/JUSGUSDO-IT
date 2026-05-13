@@ -477,7 +477,7 @@ router.get('/day/:userId/:date', requireAuth, async (req, res) => {
         [userId, date]
       ),
       db.query(
-        `SELECT z.id, z.name, z.icon, z.color, p.name AS parent_name, p.icon AS parent_icon, e.created_at
+        `SELECT z.id, z.name, z.icon, z.color, p.name AS parent_name, p.icon AS parent_icon
            FROM gym_zone_entries e
            JOIN gym_zones z ON z.id = e.zone_id
       LEFT JOIN gym_zones p ON p.id = z.parent_id
