@@ -34,6 +34,7 @@ const WorkoutPage = (() => {
             <span class="header-rank" id="header-rank">Chargement...</span>
           </div>
           <button class="header-avatar-btn" id="header-avatar-btn" onclick="App.showProfileModal()">${escapeHtml(currentUser.avatar || '💪')}</button>
+          <button class="icon-btn" onclick="Router.navigate('admin',{exTab:'home'})" title="Exercices Maison" style="font-size:18px">🏠</button>
           <div class="header-xp" id="header-xp-val">0 XP</div>
         </header>
 
