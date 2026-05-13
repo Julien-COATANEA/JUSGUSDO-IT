@@ -419,20 +419,20 @@ const MuscuPage = (() => {
             const exSets  = ex.sets || null;
             const exReps  = ex.reps || null;
             const checked = !!_gymEntries[`${dateStr}_${exName.toLowerCase()}`]?.completed;
-            const metaTags = exSets
-              ? `<span class="exercise-tag"><span class="exercise-tag-val">${exSets}</span> série${exSets > 1 ? 's' : ''}</span>
-                 <span class="exercise-tag"><span class="exercise-tag-val">${exReps}</span> rép.</span>`
+            const setsRepsTag = exSets
+              ? `<span class="exercise-tag sheet-tag-reps">${exSets}&nbsp;×&nbsp;${exReps}&nbsp;rép.</span>`
               : '';
             const safeEx  = _escape(exName).replace(/'/g, "\\'");
             return `
-              <div class="exercise-item${checked ? ' checked' : ''}"
+              <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}"
                    onclick="MuscuPage.toggleGymExercise('${safeEx}','${safeSes}','${dateStr}',this)">
-                <div class="exercise-icon">${exEmoji}</div>
                 <div class="exercise-info">
                   <div class="exercise-name">${_escape(exName)}</div>
-                  <div class="exercise-meta">${metaTags}</div>
                 </div>
-                <div class="exercise-checkbox">${checked ? '✓' : ''}</div>
+                <div class="sheet-ex-right">
+                  ${setsRepsTag}
+                  <span class="sheet-ex-check${checked ? ' on' : ''}">✓</span>
+                </div>
               </div>`;
           }).join('') || '<p class="exercise-inline-help" style="padding:8px 12px">Aucun exercice dans cette séance</p>';
           return `
@@ -499,7 +499,7 @@ const MuscuPage = (() => {
           </section>
           <section class="sheet-section">
             <h4 class="sheet-section-title">🎯 Zones de travail libres</h4>
-            <p class="sheet-section-help">+30 XP par zone validée (cumulables)</p>
+            <p class="sheet-section-help">+30 XP pour la journée (exercices + zones confondus)</p>
             ${zonesHtml}
           </section>
         </div>
