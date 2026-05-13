@@ -434,7 +434,6 @@ const MuscuPage = (() => {
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup',   onEnd);
   }
-  }
 
   function closeDayActionsSheet() {
     _activeSheetDate = null;
