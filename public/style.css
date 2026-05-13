@@ -467,9 +467,23 @@ html, body {
   border-radius: 100px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  flex-shrink: 0;
   white-space: nowrap;
 }
+
+/* Badge group — holds today / rest / future pills; shrinks before the ring */
+.day-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  /* On very small screens collapse to max one line */
+  max-height: 24px;
+}
+/* Ring must never shrink */
+.day-ring { flex-shrink: 0; }
 
 /* Progress ring on day card */
 .day-ring {
@@ -515,7 +529,6 @@ html, body {
   border-radius: 100px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  flex-shrink: 0;
   white-space: nowrap;
 }
 
@@ -530,7 +543,6 @@ html, body {
   border-radius: 100px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  flex-shrink: 0;
   white-space: nowrap;
 }
 .day-card.gym-rest-day {
