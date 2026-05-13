@@ -391,6 +391,15 @@ const MuscuPage = (() => {
   function _renderDayActionsSheet() {
     const sheet = document.getElementById('gym-day-sheet');
     if (!sheet || !_activeSheetDate) return;
+
+    // Preserve scroll position + open accordions before full re-render
+    const _prevBody = sheet.querySelector('.sheet-body');
+    const _savedScroll = _prevBody ? _prevBody.scrollTop : 0;
+    const _openAccordions = new Set();
+    sheet.querySelectorAll('details.sheet-accordion').forEach((el, i) => {
+      if (el.open) _openAccordions.add(i);
+    });
+
     const dateStr = _activeSheetDate;
     const [y, m, d] = dateStr.split('-').map(Number);
     const dateObj = new Date(y, m - 1, d);
@@ -495,6 +504,15 @@ const MuscuPage = (() => {
         </div>
       </div>
     `;
+
+    // Restore scroll position and accordion open state
+    const _newBody = sheet.querySelector('.sheet-body');
+    if (_newBody && _savedScroll > 0) _newBody.scrollTop = _savedScroll;
+    if (_openAccordions.size > 0) {
+      sheet.querySelectorAll('details.sheet-accordion').forEach((el, i) => {
+        if (_openAccordions.has(i)) el.open = true;
+      });
+    }
   }
 
   // ── Main renderer ─────────────────────────────────────────
