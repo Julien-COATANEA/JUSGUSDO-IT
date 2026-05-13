@@ -3407,6 +3407,7 @@ html, body {
 .cal-cell.full    { background: var(--green); opacity: 0.9; }
 .cal-cell.partial { background: var(--gold);  opacity: 0.65; }
 .cal-cell.empty   { background: rgba(255,255,255,0.06); }
+.cal-cell.rest    { background: #3b82f6; opacity: 0.55; }
 .cal-cell.future  { background: rgba(255,255,255,0.02); opacity: 0.35; }
 .cal-cell.cal-today { outline: 2px solid var(--accent3); outline-offset: 2px; }
 .cal-legend {

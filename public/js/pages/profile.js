@@ -191,7 +191,8 @@ const ProfilePage = (() => {
         <div class="cal-legend">
           <div class="cal-cell full"  style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Séance complète</span>
           <div class="cal-cell partial" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>En cours</span>
-          <div class="cal-cell empty" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Aucun</span>
+          <div class="cal-cell empty" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Manquée</span>
+          <div class="cal-cell rest" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Repos</span>
         </div>
       </div>`;
   }
