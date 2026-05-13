@@ -209,11 +209,13 @@ const ProfilePage = (() => {
       }
       const cells = week.map(day => {
         const pct = day.total > 0 ? day.done / day.total : 0;
-        const cls = day.date > today ? 'future'
-                  : pct >= 1        ? 'full'
-                  : pct > 0         ? 'partial'
-                  :                   'empty';
-        return `<div class="cal-cell ${cls}${day.date === today ? ' cal-today' : ''}" title="${day.date} · ${day.done}/${day.total}"></div>`;
+        const cls = day.date > today  ? 'future'
+                  : day.total === 0   ? 'rest'
+                  : pct >= 1          ? 'full'
+                  : pct > 0           ? 'partial'
+                  :                     'empty';
+        const tip = day.total === 0 ? `${day.date} · Jour de repos` : `${day.date} · ${day.done}/${day.total}`;
+        return `<div class="cal-cell ${cls}${day.date === today ? ' cal-today' : ''}" title="${tip}"></div>`;
       }).join('');
       return `<div class="cal-week-col"><div class="cal-month-label">${monthLabel}</div>${cells}</div>`;
     }).join('');
