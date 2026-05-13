@@ -5098,3 +5098,161 @@ html, body {
   color: #fff;
   box-shadow: 0 0 10px rgba(34,209,139,0.45);
 }
+/* === New zone selection UI (cards + tiles) ============================== */
+.zone-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.zone-card {
+  position: relative;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--zc) 8%, transparent), rgba(255,255,255,0.02));
+  border: 1px solid color-mix(in srgb, var(--zc) 22%, rgba(255,255,255,0.06));
+  border-radius: 14px;
+  padding: 12px 12px 10px;
+  transition: border-color 0.18s, background 0.18s, transform 0.1s;
+  font-family: inherit;
+  text-align: left;
+  color: var(--text);
+}
+.zone-card.group.some-on { border-color: color-mix(in srgb, var(--zc) 45%, rgba(255,255,255,0.08)); }
+.zone-card.group.all-on  { border-color: var(--zc); background: linear-gradient(180deg, color-mix(in srgb, var(--zc) 18%, transparent), rgba(255,255,255,0.02)); }
+
+/* Single-zone (parent without children) — large tappable card */
+.zone-card.single {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%;
+  cursor: pointer;
+  padding: 14px 14px;
+}
+.zone-card.single:hover { background: linear-gradient(180deg, color-mix(in srgb, var(--zc) 14%, transparent), rgba(255,255,255,0.03)); }
+.zone-card.single:active { transform: scale(0.985); }
+.zone-card.single.on {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--zc) 22%, transparent), rgba(255,255,255,0.02));
+  border-color: var(--zc);
+  box-shadow: 0 0 0 1px var(--zc) inset, 0 4px 18px color-mix(in srgb, var(--zc) 25%, transparent);
+}
+.zone-card.single .zone-card-state {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.05);
+  border: 1.5px solid rgba(255,255,255,0.12);
+  font-size: 14px; font-weight: 800; color: transparent;
+  transition: all 0.18s cubic-bezier(0.34,1.56,0.64,1);
+  flex-shrink: 0;
+}
+.zone-card.single.on .zone-card-state {
+  background: var(--zc); border-color: var(--zc); color: #fff;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--zc) 55%, transparent);
+}
+
+/* Group card header (parent with children) */
+.zone-card-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 8px;
+}
+.zone-card-emoji {
+  font-size: 26px;
+  width: 42px; height: 42px;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--zc) 14%, rgba(255,255,255,0.04));
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+.zone-card-text { flex: 1; min-width: 0; }
+.zone-card-text h5 {
+  margin: 0; font-size: 14px; font-weight: 800; color: var(--text);
+  letter-spacing: 0.3px; text-transform: uppercase;
+}
+.zone-card-text small { font-size: 11px; color: var(--text3); font-weight: 600; }
+.zone-card.group.some-on .zone-card-text small,
+.zone-card.group.all-on  .zone-card-text small { color: color-mix(in srgb, var(--zc) 70%, var(--text2)); }
+
+.zone-card-quick {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text2);
+  font-size: 11px; font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.zone-card-quick:hover { background: rgba(255,255,255,0.09); color: var(--text); }
+.zone-card-quick[data-act="false"] {
+  background: color-mix(in srgb, var(--zc) 15%, transparent);
+  border-color: color-mix(in srgb, var(--zc) 35%, transparent);
+  color: var(--zc);
+}
+
+/* Progress bar */
+.zone-card-progress {
+  height: 3px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.zone-card-progress > span {
+  display: block; height: 100%;
+  background: var(--zc);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--zc) 60%, transparent);
+}
+
+/* Child tiles (sub-zones grid) */
+.zone-card-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  gap: 6px;
+}
+.zone-tile {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px;
+  padding: 10px 6px 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1.5px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text2);
+  transition: background 0.16s, border-color 0.16s, transform 0.08s, color 0.16s;
+}
+.zone-tile:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.14);
+  color: var(--text);
+}
+.zone-tile:active { transform: scale(0.96); }
+.zone-tile.on {
+  background: color-mix(in srgb, var(--zc) 18%, transparent);
+  border-color: var(--zc);
+  color: var(--text);
+  box-shadow: 0 2px 14px color-mix(in srgb, var(--zc) 28%, transparent);
+}
+.zone-tile-emoji { font-size: 20px; line-height: 1; }
+.zone-tile-name {
+  font-size: 11px; font-weight: 700; text-align: center;
+  letter-spacing: 0.1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
+}
+.zone-tile-check {
+  position: absolute; top: 4px; right: 4px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--zc); color: #fff;
+  font-size: 9px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--zc) 60%, transparent);
+}
+.zone-tile:not(.on) .zone-tile-check { display: none; }
+
+/* Wider screens: 2-column zone grid */
+@media (min-width: 480px) {
+  .zone-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+}
