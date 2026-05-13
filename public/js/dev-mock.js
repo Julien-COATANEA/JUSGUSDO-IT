@@ -404,6 +404,40 @@ function _applyDevMock() {
     return { ok: true };
   };
 
+  API.adminUpdateGymSession = async (name, data) => {
+    if (!_DEV_GYM_SESSION_ORDER.includes(name)) throw new Error('Séance introuvable');
+    const newName = (data && typeof data.name === 'string') ? data.name.trim() : '';
+    const renaming = newName && newName !== name;
+    if (renaming && _DEV_GYM_SESSION_ORDER.includes(newName)) {
+      throw new Error('Une séance avec ce nom existe déjà');
+    }
+    const meta = _DEV_GYM_SESSION_META[name] || { icon: '💪', color: '#e94560' };
+    if (data && data.icon)  meta.icon  = data.icon;
+    if (data && data.color) meta.color = data.color;
+    if (renaming) {
+      _DEV_GYM_SESSION_META[newName] = meta;
+      delete _DEV_GYM_SESSION_META[name];
+      const idx = _DEV_GYM_SESSION_ORDER.indexOf(name);
+      if (idx >= 0) _DEV_GYM_SESSION_ORDER[idx] = newName;
+      DEV_FAKE_EXERCISES.forEach(ex => { if (ex.gym_session === name) ex.gym_session = newName; });
+      _devGymSessionAssignments.forEach(a => { if (a.session_name === name) a.session_name = newName; });
+    } else {
+      _DEV_GYM_SESSION_META[name] = meta;
+    }
+    return { ok: true, name: renaming ? newName : name };
+  };
+
+  API.adminDeleteGymSession = async (name) => {
+    if (!_DEV_GYM_SESSION_ORDER.includes(name)) throw new Error('Séance introuvable');
+    _DEV_GYM_SESSION_ORDER = _DEV_GYM_SESSION_ORDER.filter(n => n !== name);
+    delete _DEV_GYM_SESSION_META[name];
+    _devGymSessionAssignments = _devGymSessionAssignments.filter(a => a.session_name !== name);
+    DEV_FAKE_EXERCISES.forEach(ex => {
+      if (ex.gym_session === name) { ex.gym_session = null; ex.is_active = false; }
+    });
+    return { ok: true };
+  };
+
   // Push
   API.post = async (path, body) => {
     if (path.includes('push')) return { ok: true };

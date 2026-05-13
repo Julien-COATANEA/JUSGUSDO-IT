@@ -61,6 +61,8 @@ const API = (() => {
     adminUnassignExercise: (id, userId) => request('DELETE', `/admin/exercises/${id}/assign/${userId}`),
     adminGetGymSessions: () => request('GET', '/admin/gym-sessions'),
     adminCreateGymSession: (data) => request('POST', '/admin/gym-sessions', data),
+    adminUpdateGymSession: (name, data) => request('PUT', `/admin/gym-sessions/${encodeURIComponent(name)}`, data),
+    adminDeleteGymSession: (name) => request('DELETE', `/admin/gym-sessions/${encodeURIComponent(name)}`),
     adminAssignGymSession: (name, assignments) => request('POST', `/admin/gym-sessions/${encodeURIComponent(name)}/assign`, { assignments }),
 
     // Muscle records

@@ -80,6 +80,10 @@ const AdminPage = (() => {
       renderShell(renderGymSessionCreatorPage(), { editor: true, sessionCreator: true });
       return;
     }
+    if (currentView === 'session-meta-editor') {
+      renderShell(renderGymSessionMetaEditorPage(), { editor: true, sessionCreator: true });
+      return;
+    }
     renderShell(renderCatalogPage(), { editor: false });
   }
 
@@ -285,8 +289,14 @@ const AdminPage = (() => {
             <p class="gym-admin-session-assign-summary">${assignSummary}</p>
           </div>
           ${isCurrentUserAdmin() ? `
-          <button type="button" class="submit-btn gym-admin-session-assign-btn"
-            onclick="AdminPage.openSessionEditor('${escapeHtml(session.name)}')">Assigner</button>` : ''}
+          <div class="gym-admin-session-card-actions">
+            <button type="button" class="submit-btn gym-admin-session-assign-btn"
+              onclick="AdminPage.openSessionEditor('${escapeHtml(session.name)}')">Assigner</button>
+            <button type="button" class="admin-secondary-btn gym-admin-session-edit-btn"
+              onclick="AdminPage.openSessionMetaEditor('${escapeHtml(session.name)}')" title="Modifier la séance">✏️</button>
+            <button type="button" class="admin-secondary-btn gym-admin-session-delete-btn"
+              onclick="AdminPage.deleteGymSession('${escapeHtml(session.name)}')" title="Supprimer la séance">🗑️</button>
+          </div>` : ''}
         </div>
         <details class="gym-admin-session-details">
           <summary>Exercices (${(session.exercises || []).length})</summary>
@@ -510,6 +520,72 @@ const AdminPage = (() => {
             <div class="ex-editor-footer-actions">
               <button type="button" class="admin-secondary-btn" onclick="AdminPage.closeSessionCreator()">Annuler</button>
               <button type="submit" class="submit-btn">Créer la séance</button>
+            </div>
+          </div>
+        </form>
+      </section>
+    `;
+  }
+
+  function renderGymSessionMetaEditorPage() {
+    const PRESET_COLORS = ['#e94560','#7c5cbf','#22d18b','#fbbf24','#3b82f6','#f97316','#ec4899','#06b6d4'];
+    const PRESET_ICONS  = ['💪','🏋️','🦵','⚡','🎯','🔥','💥','👊','🔱','🏃'];
+    const session = gymSessions.find(s => s.name === editingSession);
+    if (!session) return '<p class="exercise-empty">Séance introuvable.</p>';
+    const exCount = (session.exercises || []).length;
+    const assignCount = (session.assignments || []).length;
+    return `
+      <section class="ex-editor">
+        <div class="ex-editor-top">
+          <span class="ex-editor-top-emoji" id="edit-session-icon-preview">${escapeHtml(session.icon || '💪')}</span>
+          <div class="ex-editor-top-info">
+            <h1>Modifier — ${escapeHtml(session.name)}</h1>
+            <div class="ex-editor-top-chips">
+              <span class="ex-editor-top-chip">${exCount} exercice${exCount !== 1 ? 's' : ''}</span>
+              <span class="ex-editor-top-chip">${assignCount} assignation${assignCount !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ex-impact-banner ex-impact-banner--global">
+          ✅ Renommer ou modifier cette séance n'efface aucun historique : les coches passées et les stats restent intactes.
+        </div>
+
+        <form id="edit-session-form" onsubmit="AdminPage.saveSessionMeta(event)">
+          <section class="ex-editor-section">
+            <h2 class="ex-editor-section-title">Identité</h2>
+            <div class="ex-editor-id-grid">
+              <div class="form-group">
+                <label>Icone</label>
+                <input type="text" id="edit-session-icon" value="${escapeHtml(session.icon || '💪')}" maxlength="4"
+                  oninput="document.getElementById('edit-session-icon-preview').textContent=this.value||'💪'" />
+              </div>
+              <div class="form-group" style="flex:3">
+                <label>Nom de la séance *</label>
+                <input type="text" id="edit-session-name" value="${escapeHtml(session.name)}" required />
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:12px">
+              <label>Icônes rapides</label>
+              <div class="gym-session-icon-swatches">
+                ${PRESET_ICONS.map(ic => `<button type="button" class="gym-swatch-icon" onclick="document.getElementById('edit-session-icon').value='${ic}';document.getElementById('edit-session-icon-preview').textContent='${ic}'">${ic}</button>`).join('')}
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:12px">
+              <label>Couleur</label>
+              <div class="gym-session-color-swatches">
+                ${PRESET_COLORS.map(c => `<button type="button" class="gym-swatch-color${(session.color || '').toLowerCase() === c.toLowerCase() ? ' active' : ''}" style="background:${c}" data-color="${c}" onclick="this.closest('.gym-session-color-swatches').querySelectorAll('.gym-swatch-color').forEach(b=>b.classList.remove('active'));this.classList.add('active');document.getElementById('edit-session-color').value='${c}'"></button>`).join('')}
+              </div>
+              <input type="hidden" id="edit-session-color" value="${escapeHtml(session.color || PRESET_COLORS[0])}" />
+            </div>
+          </section>
+          <div class="ex-editor-footer">
+            <p class="form-error" id="edit-session-error"></p>
+            <div class="ex-editor-footer-actions">
+              <button type="button" class="admin-secondary-btn" onclick="AdminPage.closeSessionMetaEditor()">Annuler</button>
+              <button type="button" class="admin-secondary-btn" style="color:#e94560"
+                onclick="AdminPage.deleteGymSession('${escapeHtml(session.name)}')">Supprimer la séance</button>
+              <button type="submit" class="submit-btn">Enregistrer</button>
             </div>
           </div>
         </form>
@@ -1020,6 +1096,65 @@ const AdminPage = (() => {
     openExModal(null);
   }
 
+  function openSessionMetaEditor(sessionName) {
+    if (!isCurrentUserAdmin()) return;
+    editingSession = sessionName;
+    currentView = 'session-meta-editor';
+    renderCurrentView();
+  }
+
+  function closeSessionMetaEditor() {
+    editingSession = null;
+    currentView = 'catalog';
+    renderCurrentView();
+  }
+
+  async function saveSessionMeta(event) {
+    event.preventDefault();
+    const errorEl = document.getElementById('edit-session-error');
+    const submitBtn = event.target.querySelector('[type="submit"]');
+    const originalName = editingSession;
+    const newName = document.getElementById('edit-session-name')?.value.trim();
+    const icon = document.getElementById('edit-session-icon')?.value.trim() || '💪';
+    const color = document.getElementById('edit-session-color')?.value || '#e94560';
+    if (!originalName) return;
+    if (!newName) { if (errorEl) errorEl.textContent = 'Le nom est obligatoire.'; return; }
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      await API.adminUpdateGymSession(originalName, { name: newName, icon, color });
+      App.showToast('✅ Séance mise à jour');
+      editingSession = null;
+      currentView = 'catalog';
+      await refreshData();
+    } catch (err) {
+      if (errorEl) errorEl.textContent = err.message || 'Erreur serveur';
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+
+  function deleteGymSession(sessionName) {
+    if (!isCurrentUserAdmin() || !sessionName) return;
+    const session = gymSessions.find(s => s.name === sessionName);
+    const exCount = session ? (session.exercises || []).length : 0;
+    const assignCount = session ? (session.assignments || []).length : 0;
+    App.showConfirm(
+      'Supprimer la séance',
+      `Supprimer la séance « ${escapeHtml(sessionName)} » ? ${exCount} exercice${exCount !== 1 ? 's seront archivés' : ' sera archivé'} et ${assignCount} assignation${assignCount !== 1 ? 's seront retirées' : ' sera retirée'}. L'historique des coches passées et les stats sont conservés.`,
+      async ok => {
+        if (!ok) return;
+        try {
+          await API.adminDeleteGymSession(sessionName);
+          App.showToast('Séance supprimée');
+          editingSession = null;
+          currentView = 'catalog';
+          await refreshData();
+        } catch (err) {
+          App.showToast(err.message || 'Erreur serveur');
+        }
+      }
+    );
+  }
+
   function closeSessionEditor() {
     editingSession = null;
     currentView = 'catalog';
@@ -1214,6 +1349,10 @@ const AdminPage = (() => {
     openSessionCreator,
     closeSessionCreator,
     saveNewSession,
+    openSessionMetaEditor,
+    closeSessionMetaEditor,
+    saveSessionMeta,
+    deleteGymSession,
   };
 })();
 

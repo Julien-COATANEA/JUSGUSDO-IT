@@ -254,6 +254,127 @@ router.post('/gym-sessions', requireAdmin, async (req, res) => {
   }
 });
 
+// PUT /api/admin/gym-sessions/:name — rename or update icon/color
+// Renames are propagated to exercises.gym_session, gym_session_assignments
+// and gym_checklist_entries (history) so past activity stays attributed to
+// the renamed session. No checklist row is ever deleted, so stats are
+// preserved.
+router.put('/gym-sessions/:name', requireAdmin, async (req, res) => {
+  const { name } = req.params;
+  const { name: newNameRaw, icon, color } = req.body || {};
+  const newName = typeof newNameRaw === 'string' ? newNameRaw.trim() : '';
+  const renaming = newName && newName !== name;
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existing = await client.query(
+      'SELECT name FROM gym_sessions WHERE name = $1 FOR UPDATE',
+      [name]
+    );
+    if (!existing.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Séance introuvable' });
+    }
+
+    if (renaming) {
+      const dup = await client.query(
+        'SELECT 1 FROM gym_sessions WHERE name = $1',
+        [newName]
+      );
+      if (dup.rows[0]) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Une séance avec ce nom existe déjà' });
+      }
+      // Update the PK first, then propagate the textual references.
+      await client.query(
+        `UPDATE gym_sessions SET name = $1,
+                icon = COALESCE($2, icon),
+                color = COALESCE($3, color)
+         WHERE name = $4`,
+        [newName, icon ?? null, color ?? null, name]
+      );
+      await client.query(
+        `UPDATE exercises SET gym_session = $1 WHERE gym_session = $2`,
+        [newName, name]
+      );
+      await client.query(
+        `UPDATE gym_session_assignments SET session_name = $1 WHERE session_name = $2`,
+        [newName, name]
+      );
+      await client.query(
+        `UPDATE gym_checklist_entries SET session_name = $1 WHERE session_name = $2`,
+        [newName, name]
+      );
+    } else {
+      await client.query(
+        `UPDATE gym_sessions
+         SET icon = COALESCE($1, icon),
+             color = COALESCE($2, color)
+         WHERE name = $3`,
+        [icon ?? null, color ?? null, name]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, name: renaming ? newName : name });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[admin] update gym-session', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /api/admin/gym-sessions/:name — remove a gym session and unlink its
+// exercises. The historical gym_checklist_entries rows are intentionally NOT
+// deleted: there is no FK to gym_sessions/exercises on that table, so past
+// progression and stats stay intact.
+router.delete('/gym-sessions/:name', requireAdmin, async (req, res) => {
+  const { name } = req.params;
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existing = await client.query(
+      'SELECT name FROM gym_sessions WHERE name = $1 FOR UPDATE',
+      [name]
+    );
+    if (!existing.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Séance introuvable' });
+    }
+
+    // Drop session-level assignments (no longer scheduled for anyone).
+    await client.query(
+      'DELETE FROM gym_session_assignments WHERE session_name = $1',
+      [name]
+    );
+    // Detach exercises that belonged to this session: keep them in the
+    // catalogue but unassigned from any session and archived so they no
+    // longer appear in the gym scheduler. We do NOT delete them, so any
+    // user_exercise_assignments / checklist data stay valid.
+    await client.query(
+      `UPDATE exercises
+       SET gym_session = NULL, is_active = FALSE
+       WHERE gym_session = $1 AND type = 'gym'`,
+      [name]
+    );
+    await client.query('DELETE FROM gym_sessions WHERE name = $1', [name]);
+
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[admin] delete gym-session', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  } finally {
+    client.release();
+  }
+});
+
 // POST /api/admin/gym-sessions/:name/assign — replace assignments for a session
 // Body: { assignments: [{ user_id, schedule }] }
 router.post('/gym-sessions/:name/assign', requireAdmin, async (req, res) => {
