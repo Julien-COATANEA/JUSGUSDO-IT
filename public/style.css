@@ -519,6 +519,47 @@ html, body {
   white-space: nowrap;
 }
 
+/* "Repos" badge — used on gym day cards when no exercise is scheduled */
+.rest-badge {
+  font-size: 9px;
+  font-weight: 800;
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  padding: 2px 7px;
+  border-radius: 100px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.day-card.gym-rest-day {
+  border-color: rgba(59, 130, 246, 0.25);
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.05), transparent 60%), var(--card);
+}
+.day-card.gym-rest-day .day-check {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+}
+.day-card.gym-rest-day .day-ring { opacity: 0.55; }
+.day-card.gym-rest-day .day-ring-val { color: #93c5fd; }
+.gym-rest-day-msg {
+  margin: 0;
+  padding: 14px 16px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px dashed rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+}
+/* Week strip (wsd) — rest day in blue */
+.wsd.rest .wsd-ring  { opacity: 0.6; }
+.wsd.rest .wsd-inner { color: #93c5fd; }
+.wsd.rest .wsd-lbl   { color: #93c5fd; }
+
 /* EXERCISES LIST */
 .exercises-list {
   padding: 0;

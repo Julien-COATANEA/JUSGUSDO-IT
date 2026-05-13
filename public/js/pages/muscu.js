@@ -216,12 +216,16 @@ const MuscuPage = (() => {
       const total  = allExs.length;
       const allDone = total > 0 && doneCount === total;
       const pct    = total > 0 ? Math.round(doneCount / total * 100) : 0;
-      const ringC  = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : total === 0 ? 'rgba(255,255,255,0.18)' : '#ef4444';
+      const ringC  = allDone ? '#22d18b'
+                  : doneCount > 0 ? '#fbbf24'
+                  : isFuture ? 'rgba(255,255,255,0.07)'
+                  : total === 0 ? '#3b82f6'
+                  : '#ef4444';
       const state  = total === 0 ? 'rest' : isFuture ? 'future' : allDone ? 'done' : doneCount > 0 ? 'partial' : 'missed';
       return `
         <div class="wsd ${state}${isToday ? ' today-dot' : ''}" onclick="document.getElementById('gday-${key}')?.scrollIntoView({behavior:'smooth',block:'center'})">
-          <div class="wsd-ring" style="--ring-p:${pct};--ring-c:${ringC}">
-            <span class="wsd-inner">${total > 0 ? doneCount : '–'}</span>
+          <div class="wsd-ring" style="--ring-p:${total === 0 ? 100 : pct};--ring-c:${ringC}">
+            <span class="wsd-inner">${total > 0 ? doneCount : '·'}</span>
           </div>
           <span class="wsd-lbl">${_DAY_LETTERS[date.getDay()]}</span>
         </div>`;
@@ -281,12 +285,18 @@ const MuscuPage = (() => {
     const allExs    = sessions.flatMap(s => (s.exercises || []).map(ex => ({ ...ex, _sessionName: s.name, _sessionIcon: s.icon, _sessionColor: s.color })));
     const doneCount = allExs.filter(ex => !!(_gymEntries[`${key}_${(ex.name || ex).toLowerCase()}`]?.completed)).length;
     const allDone   = allExs.length > 0 && doneCount === allExs.length;
-    const ringPct   = allExs.length > 0 ? Math.round(doneCount / allExs.length * 100) : 0;
-    const ringColor = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : allExs.length === 0 ? 'rgba(255,255,255,0.18)' : '#ef4444';
+    const isRest    = allExs.length === 0 && !isFuture;
+    const ringPct   = allExs.length > 0 ? Math.round(doneCount / allExs.length * 100) : (isRest ? 100 : 0);
+    const ringColor = allDone ? '#22d18b'
+                    : doneCount > 0 ? '#fbbf24'
+                    : isFuture ? 'rgba(255,255,255,0.07)'
+                    : isRest ? '#3b82f6'
+                    : allExs.length === 0 ? 'rgba(255,255,255,0.18)'
+                    : '#ef4444';
 
     let exercisesHTML;
     if (allExs.length === 0) {
-      exercisesHTML = `<p style="color:var(--text3);font-size:13px;text-align:center;padding:12px 0;">Pas de séance programmée 🏖️</p>`;
+      exercisesHTML = `<p class="gym-rest-day-msg">🛌 Jour de repos — aucune séance programmée</p>`;
     } else {
       exercisesHTML = sessions.map(session => {
         const sessionExs = session.exercises || [];
@@ -320,20 +330,21 @@ const MuscuPage = (() => {
     }
 
     const card = document.createElement('div');
-    card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${(isHero || isToday) ? ' open' : ''}${isHero ? ' hero' : ''}`;
+    card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${(isHero || isToday) ? ' open' : ''}${isHero ? ' hero' : ''}${isRest ? ' gym-rest-day' : ''}`;
     card.dataset.key = key;
     card.id = `gday-${key}`;
     card.innerHTML = `
       <div class="day-header" onclick="this.closest('.day-card').classList.toggle('open')">
-        <div class="day-check">${allDone ? '✓' : ''}</div>
+        <div class="day-check">${allDone ? '✓' : isRest ? '🛌' : ''}</div>
         <div class="day-name-block">
           <div class="day-name">${_DAYS_FR[date.getDay()]}</div>
           <div class="day-date">${date.getDate()} ${_MONTHS_FR[date.getMonth()]}</div>
         </div>
         ${isToday ? "<span class=\"today-badge\">Aujourd'hui</span>" : ''}
         ${isFuture ? '<span class="preview-badge">À venir</span>' : ''}
+        ${isRest && !isFuture ? '<span class="rest-badge">Repos</span>' : ''}
         <div class="day-ring" style="--ring-p:${ringPct};--ring-c:${ringColor}">
-          <span class="day-ring-val">${doneCount}/${allExs.length}</span>
+          <span class="day-ring-val">${isRest ? '·' : `${doneCount}/${allExs.length}`}</span>
         </div>
         ${!isHero ? '<div class="day-toggle">▼</div>' : ''}
       </div>
