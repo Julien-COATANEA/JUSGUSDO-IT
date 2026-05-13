@@ -88,5 +88,7 @@ const API = (() => {
     getGymStats: (userId) => request('GET', `/gym-checklist/stats/${userId}`),
     // Gym assigned exercises (for Séance tab)
     getGymExercises: (date) => request('GET', `/exercises/gym-assigned?date=${date}`),
+    // All gym sessions with exercises (for Records tab)
+    getGymSessionsAll: () => request('GET', '/exercises/gym-sessions-all'),
   };
 })();

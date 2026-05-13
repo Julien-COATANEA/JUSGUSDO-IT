@@ -438,6 +438,18 @@ function _applyDevMock() {
     return { ok: true };
   };
 
+  API.getGymSessionsAll = async () => {
+    const sessions = _DEV_GYM_SESSION_ORDER.map((name, idx) => ({
+      name,
+      ...(_DEV_GYM_SESSION_META[name] || { icon: '🏋️', color: '#888' }),
+      order_index: idx,
+      exercises: DEV_FAKE_EXERCISES
+        .filter(e => e.gym_session === name && e.is_active !== false && e.type === 'gym')
+        .map(e => ({ id: e.id, name: e.name, emoji: e.emoji || '💪', sets: e.sets, reps: e.reps })),
+    }));
+    return { sessions };
+  };
+
   // Push
   API.post = async (path, body) => {
     if (path.includes('push')) return { ok: true };

@@ -11,8 +11,8 @@ const MuscuPage = (() => {
   const _MONTHS_FR = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
   const _DAY_LETTERS = ['D','L','M','M','J','V','S'];
 
-  // ── Session definitions ──────────────────────────────────
-  const _MUSCU_SESSIONS = [
+  // ── Session definitions (fallback; overridden by DB data at runtime) ──────
+  let _muscuSessions = [
     {
       name: 'Pecs Triceps', icon: '💪', color: '#e94560',
       exercises: [
@@ -42,7 +42,7 @@ const MuscuPage = (() => {
     },
   ];
 
-  const _MR_CATEGORIES = _MUSCU_SESSIONS.map(s => ({ name: s.name, icon: s.icon, color: s.color }));
+  function _getMRCategories() { return _muscuSessions.map(s => ({ name: s.name, icon: s.icon, color: s.color })); }
 
   function _escape(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -110,10 +110,18 @@ const MuscuPage = (() => {
 
   async function _initRecordsTab(container) {
     try {
-      const [{ records }, histRes] = await Promise.all([
+      const [{ records }, histRes, sessionsRes] = await Promise.all([
         API.getMuscleRecords(_userId),
         API.getMuscleHistory(_userId, '').catch(() => ({ history: [] })),
+        API.getGymSessionsAll().catch(() => ({ sessions: [] })),
       ]);
+      // Load sessions from DB; normalize exercises to name strings
+      if (sessionsRes.sessions && sessionsRes.sessions.length > 0) {
+        _muscuSessions = sessionsRes.sessions.map(s => ({
+          ...s,
+          exercises: (s.exercises || []).map(ex => typeof ex === 'string' ? ex : (ex.name || ex)),
+        }));
+      }
       const muscleHistory = histRes.history || [];
 
       // Update subtitle
@@ -374,9 +382,9 @@ const MuscuPage = (() => {
 
     // Summary stats
     const totalPRs    = records.length;
-    const totalExs    = _MUSCU_SESSIONS.reduce((n, s) => n + _getSessionExercises(s).length, 0);
+    const totalExs    = _muscuSessions.reduce((n, s) => n + _getSessionExercises(s).length, 0);
     const sessionExNames = new Set();
-    _MUSCU_SESSIONS.forEach(s => _getSessionExercises(s).forEach(ex => sessionExNames.add(ex.toLowerCase())));
+    _muscuSessions.forEach(s => _getSessionExercises(s).forEach(ex => sessionExNames.add(ex.toLowerCase())));
     const customCount = records.filter(r => !sessionExNames.has(r.exercise_name.toLowerCase())).length;
 
     return `
@@ -387,7 +395,7 @@ const MuscuPage = (() => {
         </div>
         <div class="muscu-pg-sep"></div>
         <div class="muscu-pg-stat">
-          <span class="muscu-pg-stat-val">${_MUSCU_SESSIONS.length}</span>
+          <span class="muscu-pg-stat-val">${_muscuSessions.length}</span>
           <span class="muscu-pg-stat-lbl">Séances</span>
         </div>
         <div class="muscu-pg-sep"></div>
@@ -438,7 +446,7 @@ const MuscuPage = (() => {
     return `
       <div class="muscu-sessions-label">📋 Programme des séances</div>
       <div class="muscu-sessions">
-        ${_MUSCU_SESSIONS.map((session, idx) => {
+        ${_muscuSessions.map((session, idx) => {
           const allExercises = _getSessionExercises(session);
           const customExSet  = new Set((_customSessionExercises[session.name] || []).map(e => e.toLowerCase()));
           const recCount     = allExercises.filter(ex => (recMap[ex.toLowerCase()] || []).length > 0).length;
@@ -620,7 +628,7 @@ const MuscuPage = (() => {
   // ── Custom exercises section ──────────────────────────────
   function _renderCustomSection(records) {
     const sessionExNames = new Set();
-    _MUSCU_SESSIONS.forEach(s => _getSessionExercises(s).forEach(ex => sessionExNames.add(ex.toLowerCase())));
+    _muscuSessions.forEach(s => _getSessionExercises(s).forEach(ex => sessionExNames.add(ex.toLowerCase())));
     const extraRecords = records.filter(r => !sessionExNames.has(r.exercise_name.toLowerCase()));
 
     const extraByName = {};
@@ -631,18 +639,18 @@ const MuscuPage = (() => {
     });
     const extraGroups = Object.values(extraByName);
 
-    const catOptions = _MR_CATEGORIES.map(c =>
+    const catOptions = _getMRCategories().map(c =>
       `<option value="${c.name}">${c.icon} ${c.name}</option>`
     ).join('');
 
     let extraHtml = '';
     if (extraGroups.length > 0) {
       const items = extraGroups.map(group => {
-        const safeCategory = _escape(group.category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name).replace(/'/g, "\\'");
+        const safeCategory = _escape(group.category || _getMRCategories().slice(-1)[0]?.name || '').replace(/'/g, "\\'");
         const safeName     = _escape(group.name).replace(/'/g, "\\'");
         const rowsHtml = group.records.map(r => {
           const wFmt  = r.weight_kg % 1 === 0 ? r.weight_kg : r.weight_kg.toFixed(1);
-          const rCat  = _escape(r.category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name).replace(/'/g, "\\'");
+          const rCat  = _escape(r.category || _getMRCategories().slice(-1)[0]?.name || '').replace(/'/g, "\\'");
           return `
           <div class="mr2-card">
             <div class="mr2-card-left">
@@ -651,7 +659,7 @@ const MuscuPage = (() => {
             </div>
             <div class="mr2-actions">
               <button class="mr-btn-icon" onclick="MuscuPage.showEditRecordForm(${r.id},'${safeName}',${r.sets},${r.reps != null ? r.reps : 'null'},${r.weight_kg},'${rCat}')">✏️</button>
-              <button class="mr-btn-icon mr-btn-del" onclick="MuscuPage.deleteRecord(${r.id})">🗑️</button>
+              <button class="mr-btn-icon mr-btn-del" onclick="MuscuPage.deleteRecord(${r.id})">\uD83D\uDDD1\uFE0F</button>
             </div>
           </div>`;
         }).join('');
@@ -689,7 +697,7 @@ const MuscuPage = (() => {
 
   // ── Form modal ────────────────────────────────────────────
   function _renderFormModal() {
-    const catOptions = _MR_CATEGORIES.map(c =>
+    const catOptions = _getMRCategories().map(c =>
       `<option value="${c.name}">${c.icon} ${c.name}</option>`
     ).join('');
 
@@ -758,7 +766,7 @@ const MuscuPage = (() => {
     const nameEl = document.getElementById('mr-name');
     if (nameEl) { nameEl.value = ''; nameEl.style.display = 'block'; }
     const catEl = document.getElementById('mr-category');
-    if (catEl) { catEl.value = _MR_CATEGORIES[0].name; catEl.style.display = 'block'; }
+    if (catEl) { catEl.value = _getMRCategories()[0]?.name || ''; catEl.style.display = 'block'; }
     document.getElementById('mr-sets').value   = '';
     document.getElementById('mr-reps').value   = '';
     document.getElementById('mr-weight').value = '';
@@ -773,7 +781,7 @@ const MuscuPage = (() => {
     const nameEl = document.getElementById('mr-name');
     if (nameEl) { nameEl.value = name; nameEl.style.display = 'none'; }
     const catEl = document.getElementById('mr-category');
-    if (catEl) { catEl.value = category || _MR_CATEGORIES[_MR_CATEGORIES.length - 1].name; catEl.style.display = 'none'; }
+    if (catEl) { catEl.value = category || _getMRCategories().slice(-1)[0]?.name || ''; catEl.style.display = 'none'; }
     document.getElementById('mr-sets').value   = sets;
     document.getElementById('mr-reps').value   = reps != null ? reps : '';
     document.getElementById('mr-weight').value = weight;
@@ -794,7 +802,7 @@ const MuscuPage = (() => {
     const nameEl = document.getElementById('mr-name');
     if (nameEl) { nameEl.value = exerciseName; nameEl.style.display = 'none'; }
     const catEl = document.getElementById('mr-category');
-    if (catEl) { catEl.value = category || _MR_CATEGORIES[0].name; catEl.style.display = 'none'; }
+    if (catEl) { catEl.value = category || _getMRCategories()[0]?.name || ''; catEl.style.display = 'none'; }
     document.getElementById('mr-sets').value   = '';
     document.getElementById('mr-reps').value   = '';
     document.getElementById('mr-weight').value = '';
@@ -952,7 +960,7 @@ const MuscuPage = (() => {
     if (!input) return;
     const name = input.value.trim();
     if (!name) { input.focus(); return; }
-    const session = _MUSCU_SESSIONS[sessionIdx];
+    const session = _muscuSessions[sessionIdx];
     if (!session) return;
     const existing = _getSessionExercises(session).map(e => e.toLowerCase());
     if (existing.includes(name.toLowerCase())) {
@@ -966,7 +974,7 @@ const MuscuPage = (() => {
   }
 
   function removeExerciseFromSession(sessionIdx, exName) {
-    const session = _MUSCU_SESSIONS[sessionIdx];
+    const session = _muscuSessions[sessionIdx];
     if (!session) return;
     const customs = _customSessionExercises[session.name];
     if (!customs) return;

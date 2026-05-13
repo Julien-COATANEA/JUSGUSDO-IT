@@ -79,7 +79,7 @@ const Router = (() => {
   // Bootstrap
   function start() {
     if (isLoggedIn()) {
-      navigate('app');
+      navigate('home');
     } else {
       navigate('login');
     }

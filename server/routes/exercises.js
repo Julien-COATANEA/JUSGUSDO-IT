@@ -325,4 +325,30 @@ router.get('/stats', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/exercises/gym-sessions-all
+// Returns all gym sessions from the DB with their active exercises (no schedule filtering).
+// Used by the Records tab to show dynamic session sections.
+router.get('/gym-sessions-all', requireAuth, async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT gs.name, gs.icon, gs.color, gs.order_index,
+              COALESCE(
+                json_agg(
+                  json_build_object('id', e.id, 'name', e.name, 'emoji', e.emoji, 'sets', e.sets, 'reps', e.reps)
+                  ORDER BY e.order_index, e.id
+                ) FILTER (WHERE e.id IS NOT NULL),
+                '[]'::json
+              ) AS exercises
+       FROM gym_sessions gs
+       LEFT JOIN exercises e ON e.gym_session = gs.name AND e.is_active = TRUE AND e.type = 'gym'
+       GROUP BY gs.name, gs.icon, gs.color, gs.order_index
+       ORDER BY gs.order_index`
+    );
+    res.json({ sessions: result.rows });
+  } catch (err) {
+    console.error('[exercises] gym-sessions-all', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;
