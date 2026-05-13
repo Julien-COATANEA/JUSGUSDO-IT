@@ -308,6 +308,7 @@ function _applyDevMock() {
     return { completed: newCompleted, xp: DEV_FAKE_USER.xp, xpDelta, sessionDone: doneNow, sessionTotal: sessionEntries.length };
   };
   API.getGymStats = async (userId) => {
+    const today = new Date().toISOString().split('T')[0];
     const calendar = [];
     const startD = new Date();
     startD.setDate(startD.getDate() - 27);
@@ -317,13 +318,138 @@ function _applyDevMock() {
       const d = new Date(startD);
       d.setDate(startD.getDate() + i);
       const date = d.toISOString().split('T')[0];
-      const dayEntries = _devGymEntries.filter(e => e.entry_date === date);
-      calendar.push({ date, done: dayEntries.filter(e => e.completed).length, total: dayEntries.length });
+      const exercises_done = _devGymEntries.filter(e => e.entry_date === date && e.completed).length;
+      const zones_done    = _devGymZoneEntries.filter(z => z.entry_date === date).length;
+      const is_rest       = _devGymRestDays.has(date);
+      calendar.push({ date, exercises_done, zones_done, is_rest, is_active: exercises_done > 0 || zones_done > 0 });
     }
-    return { stats: { calendar, total_completed: _devGymEntries.filter(e => e.completed).length, active_days: 2, full_days: 1, best_streak: 2, current_streak: 1, today_done: _devGymEntries.filter(e => e.entry_date === new Date().toISOString().split('T')[0] && e.completed).length, today_total: _devGymEntries.filter(e => e.entry_date === new Date().toISOString().split('T')[0]).length } };
+    const todayInfo = calendar.find(c => c.date === today) || { exercises_done: 0, zones_done: 0, is_rest: false, is_active: false };
+    const activeDays = new Set([
+      ..._devGymEntries.filter(e => e.completed).map(e => e.entry_date),
+      ..._devGymZoneEntries.map(z => z.entry_date),
+    ]).size;
+    return { stats: {
+      calendar,
+      total_exercises: _devGymEntries.filter(e => e.completed).length,
+      total_zones: _devGymZoneEntries.length,
+      total_rest_days: _devGymRestDays.size,
+      active_days: activeDays,
+      full_days: activeDays,
+      best_streak: 2,
+      current_streak: todayInfo.is_active || todayInfo.is_rest ? 1 : 0,
+      today_exercises_done: todayInfo.exercises_done,
+      today_zones_done: todayInfo.zones_done,
+      today_is_rest: todayInfo.is_rest,
+      today_is_active: todayInfo.is_active,
+      total_completed: _devGymEntries.filter(e => e.completed).length,
+      today_done: todayInfo.exercises_done,
+      today_total: 0,
+    } };
   };
 
-  // Gym assigned exercises (for Séance tab)
+  // Gym work zones (groups + sub-zones)
+  let _devGymZones = [
+    { id: 1, parent_id: null, name: 'PECS',           icon: '💪', color: '#e94560', order_index: 1 },
+    { id: 2, parent_id: null, name: 'DOS / Lombaire', icon: '🏋️', color: '#7c5cbf', order_index: 2 },
+    { id: 3, parent_id: null, name: 'ÉPAULES',        icon: '🤸', color: '#3b82f6', order_index: 3 },
+    { id: 4, parent_id: null, name: 'BRAS',           icon: '💪', color: '#fbbf24', order_index: 4 },
+    { id: 5, parent_id: null, name: 'JAMBES',         icon: '🦵', color: '#22d18b', order_index: 5 },
+    { id: 6, parent_id: 4, name: 'Biceps',     icon: '💪', color: '#fbbf24', order_index: 1 },
+    { id: 7, parent_id: 4, name: 'Triceps',    icon: '💪', color: '#fbbf24', order_index: 2 },
+    { id: 8, parent_id: 4, name: 'Avant-bras', icon: '💪', color: '#fbbf24', order_index: 3 },
+    { id: 9,  parent_id: 5, name: 'Ischio',     icon: '🦵', color: '#22d18b', order_index: 1 },
+    { id: 10, parent_id: 5, name: 'Quadriceps', icon: '🦵', color: '#22d18b', order_index: 2 },
+    { id: 11, parent_id: 5, name: 'Adducteur',  icon: '🦵', color: '#22d18b', order_index: 3 },
+    { id: 12, parent_id: 5, name: 'Abducteur',  icon: '🦵', color: '#22d18b', order_index: 4 },
+    { id: 13, parent_id: 5, name: 'Fesses',     icon: '🍑', color: '#22d18b', order_index: 5 },
+    { id: 14, parent_id: 5, name: 'Mollets',    icon: '🦵', color: '#22d18b', order_index: 6 },
+  ];
+  let _devGymZoneEntries = []; // { id, entry_date, zone_id }
+  let _devGymRestDays = new Set();
+  let _devNextZoneId = 100;
+  let _devNextZoneEntryId = 1;
+
+  API.getGymZones = async () => ({ zones: _devGymZones.slice() });
+
+  API.getGymZoneEntries = async (start, end) => ({
+    entries: _devGymZoneEntries.filter(e => e.entry_date >= start && e.entry_date <= end),
+  });
+
+  API.toggleGymZone = async (zone_id, entry_date) => {
+    const today = new Date().toISOString().split('T')[0];
+    if (entry_date > today) throw new Error('Impossible de cocher une date future');
+    const zid = parseInt(zone_id, 10);
+    if (!_devGymZones.some(z => z.id === zid)) throw new Error('Zone introuvable');
+    const idx = _devGymZoneEntries.findIndex(e => e.entry_date === entry_date && e.zone_id === zid);
+    let active, xpDelta;
+    if (idx >= 0) {
+      _devGymZoneEntries.splice(idx, 1);
+      active = false; xpDelta = -30;
+    } else {
+      _devGymZoneEntries.push({ id: _devNextZoneEntryId++, entry_date, zone_id: zid });
+      active = true; xpDelta = 30;
+    }
+    DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
+    return { active, xp: DEV_FAKE_USER.xp, xpDelta };
+  };
+
+  API.getGymRestDays = async (start, end) => ({
+    dates: Array.from(_devGymRestDays).filter(d => d >= start && d <= end).sort(),
+  });
+
+  API.toggleGymRestDay = async (entry_date) => {
+    const today = new Date().toISOString().split('T')[0];
+    if (entry_date > today) throw new Error('Impossible de cocher une date future');
+    if (_devGymRestDays.has(entry_date)) {
+      _devGymRestDays.delete(entry_date);
+      return { active: false };
+    }
+    _devGymRestDays.add(entry_date);
+    return { active: true };
+  };
+
+  // Admin gym zones CRUD
+  API.adminGetGymZones = async () => ({ zones: _devGymZones.slice() });
+  API.adminCreateGymZone = async (data) => {
+    const name = (data.name || '').trim();
+    if (!name) throw new Error('Nom requis');
+    const parentId = data.parent_id ? parseInt(data.parent_id, 10) : null;
+    if (_devGymZones.some(z => (z.parent_id || 0) === (parentId || 0) && z.name === name)) {
+      throw new Error('Une zone avec ce nom existe déjà à ce niveau');
+    }
+    const orderIndex = data.order_index != null
+      ? parseInt(data.order_index, 10)
+      : Math.max(0, ..._devGymZones.filter(z => (z.parent_id || 0) === (parentId || 0)).map(z => z.order_index)) + 1;
+    const zone = { id: _devNextZoneId++, parent_id: parentId, name, icon: data.icon || '💪', color: data.color || '#e94560', order_index: orderIndex };
+    _devGymZones.push(zone);
+    return { zone };
+  };
+  API.adminUpdateGymZone = async (id, data) => {
+    const z = _devGymZones.find(x => x.id === parseInt(id, 10));
+    if (!z) throw new Error('Zone introuvable');
+    if (data.name != null)        z.name = String(data.name).trim() || z.name;
+    if (data.icon != null)        z.icon = data.icon;
+    if (data.color != null)       z.color = data.color;
+    if (data.order_index != null) z.order_index = parseInt(data.order_index, 10);
+    if (data.parent_id !== undefined) z.parent_id = data.parent_id ? parseInt(data.parent_id, 10) : null;
+    return { zone: z };
+  };
+  API.adminDeleteGymZone = async (id) => {
+    const numId = parseInt(id, 10);
+    const collect = (rootId) => {
+      const ids = [rootId];
+      _devGymZones.filter(z => z.parent_id === rootId).forEach(c => ids.push(...collect(c.id)));
+      return ids;
+    };
+    const idsToDelete = new Set(collect(numId));
+    _devGymZones = _devGymZones.filter(z => !idsToDelete.has(z.id));
+    _devGymZoneEntries = _devGymZoneEntries.filter(e => !idsToDelete.has(e.zone_id));
+    return { ok: true };
+  };
+
+  // Gym session catalogue (used by Records tab + Salle day-actions sheet).
+  // No more day-of-week assignment per user: every session is available
+  // every day, the user picks what they actually did.
   const _DEV_GYM_SESSION_META = {
     'Pecs Triceps': { icon: '💪', color: '#e94560' },
     'Dos Biceps':   { icon: '🏋️', color: '#7c5cbf' },
@@ -331,38 +457,6 @@ function _applyDevMock() {
     'Full':         { icon: '⚡', color: '#fbbf24' },
   };
   let _DEV_GYM_SESSION_ORDER = ['Pecs Triceps', 'Dos Biceps', 'Jambes', 'Full'];
-
-  let _devGymSessionAssignments = [
-    { user_id: 1, session_name: 'Pecs Triceps', schedule: [1, 4] },
-    { user_id: 2, session_name: 'Pecs Triceps', schedule: [1, 4] },
-    { user_id: 1, session_name: 'Dos Biceps',   schedule: [2, 5] },
-  ];
-
-  API.getGymExercises = async (date) => {
-    const dow = new Date(date + 'T12:00:00').getDay();
-    const gymExs = DEV_FAKE_EXERCISES.filter(e => e.type === 'gym' && e.is_active);
-
-    // Filter by session-level assignments
-    const assignedSessions = _devGymSessionAssignments
-      .filter(a => a.user_id === DEV_FAKE_USER.id && (a.schedule.length === 0 || a.schedule.includes(dow)))
-      .map(a => a.session_name);
-
-    const assigned = gymExs.filter(ex => assignedSessions.includes(ex.gym_session));
-
-    // Group by gym_session
-    const sessionMap = {};
-    assigned.forEach(ex => {
-      const key = ex.gym_session || 'Autre';
-      if (!sessionMap[key]) sessionMap[key] = [];
-      sessionMap[key].push({ id: ex.id, name: ex.name, emoji: ex.emoji, sets: ex.sets, reps: ex.reps, unit: ex.unit });
-    });
-
-    const sessions = _DEV_GYM_SESSION_ORDER
-      .filter(s => sessionMap[s])
-      .map(s => ({ name: s, ...(_DEV_GYM_SESSION_META[s] || { icon: '🏋️', color: '#888' }), exercises: sessionMap[s] }));
-
-    return { sessions };
-  };
 
   API.adminGetGymSessions = async () => {
     const gymExs = DEV_FAKE_EXERCISES.filter(e => e.type === 'gym' && e.is_active);
@@ -372,17 +466,12 @@ function _applyDevMock() {
       if (!exBySession[key]) exBySession[key] = [];
       exBySession[key].push({ id: ex.id, name: ex.name, emoji: ex.emoji, sets: ex.sets, reps: ex.reps, unit: ex.unit, gym_session: ex.gym_session, order_index: ex.order_index });
     });
-    const assignBySession = {};
-    _devGymSessionAssignments.forEach(a => {
-      if (!assignBySession[a.session_name]) assignBySession[a.session_name] = [];
-      assignBySession[a.session_name].push({ user_id: a.user_id, schedule: a.schedule });
-    });
     const sessions = _DEV_GYM_SESSION_ORDER.map(name => ({
       name,
       ...(_DEV_GYM_SESSION_META[name] || { icon: '🏋️', color: '#888' }),
       exercises: exBySession[name] || [],
-      assignments: assignBySession[name] || [],
-      assigned_users: (assignBySession[name] || []).map(a => a.user_id),
+      assignments: [],
+      assigned_users: [],
     }));
     return { sessions };
   };
@@ -393,14 +482,6 @@ function _applyDevMock() {
     const n = name.trim();
     _DEV_GYM_SESSION_META[n] = { icon: icon || '💪', color: color || '#e94560' };
     _DEV_GYM_SESSION_ORDER.push(n);
-    return { ok: true };
-  };
-
-  API.adminAssignGymSession = async (name, assignments) => {
-    _devGymSessionAssignments = _devGymSessionAssignments.filter(a => a.session_name !== name);
-    (assignments || []).forEach(a => {
-      if (a.user_id) _devGymSessionAssignments.push({ user_id: a.user_id, session_name: name, schedule: a.schedule || [] });
-    });
     return { ok: true };
   };
 
@@ -420,7 +501,6 @@ function _applyDevMock() {
       const idx = _DEV_GYM_SESSION_ORDER.indexOf(name);
       if (idx >= 0) _DEV_GYM_SESSION_ORDER[idx] = newName;
       DEV_FAKE_EXERCISES.forEach(ex => { if (ex.gym_session === name) ex.gym_session = newName; });
-      _devGymSessionAssignments.forEach(a => { if (a.session_name === name) a.session_name = newName; });
     } else {
       _DEV_GYM_SESSION_META[name] = meta;
     }
@@ -431,7 +511,6 @@ function _applyDevMock() {
     if (!_DEV_GYM_SESSION_ORDER.includes(name)) throw new Error('Séance introuvable');
     _DEV_GYM_SESSION_ORDER = _DEV_GYM_SESSION_ORDER.filter(n => n !== name);
     delete _DEV_GYM_SESSION_META[name];
-    _devGymSessionAssignments = _devGymSessionAssignments.filter(a => a.session_name !== name);
     DEV_FAKE_EXERCISES.forEach(ex => {
       if (ex.gym_session === name) { ex.gym_session = null; ex.is_active = false; }
     });

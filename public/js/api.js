@@ -63,7 +63,11 @@ const API = (() => {
     adminCreateGymSession: (data) => request('POST', '/admin/gym-sessions', data),
     adminUpdateGymSession: (name, data) => request('PUT', `/admin/gym-sessions/${encodeURIComponent(name)}`, data),
     adminDeleteGymSession: (name) => request('DELETE', `/admin/gym-sessions/${encodeURIComponent(name)}`),
-    adminAssignGymSession: (name, assignments) => request('POST', `/admin/gym-sessions/${encodeURIComponent(name)}/assign`, { assignments }),
+    // Gym zones (admin CRUD on the zone tree)
+    adminGetGymZones: () => request('GET', '/admin/gym-zones'),
+    adminCreateGymZone: (data) => request('POST', '/admin/gym-zones', data),
+    adminUpdateGymZone: (id, data) => request('PUT', `/admin/gym-zones/${id}`, data),
+    adminDeleteGymZone: (id) => request('DELETE', `/admin/gym-zones/${id}`),
 
     // Muscle records
     getMuscleRecords: (userId) => request('GET', `/users/${userId}/muscle-records`),
@@ -86,9 +90,16 @@ const API = (() => {
     toggleGymChecklist: (exercise_name, session_name, entry_date) =>
       request('POST', '/gym-checklist/toggle', { exercise_name, session_name, entry_date }),
     getGymStats: (userId) => request('GET', `/gym-checklist/stats/${userId}`),
-    // Gym assigned exercises (for Séance tab)
-    getGymExercises: (date) => request('GET', `/exercises/gym-assigned?date=${date}`),
-    // All gym sessions with exercises (for Records tab)
+    // All gym sessions with exercises (for Records tab + day actions sheet)
     getGymSessionsAll: () => request('GET', '/exercises/gym-sessions-all'),
+    // Gym work zones (groups + sub-zones, read-only for users)
+    getGymZones: () => request('GET', '/gym-checklist/zones'),
+    getGymZoneEntries: (start, end) => request('GET', `/gym-checklist/zones/entries?start=${start}&end=${end}`),
+    toggleGymZone: (zone_id, entry_date) =>
+      request('POST', '/gym-checklist/zones/toggle', { zone_id, entry_date }),
+    // Gym rest days (Salle only)
+    getGymRestDays: (start, end) => request('GET', `/gym-checklist/rest-days?start=${start}&end=${end}`),
+    toggleGymRestDay: (entry_date) =>
+      request('POST', '/gym-checklist/rest-day/toggle', { entry_date }),
   };
 })();

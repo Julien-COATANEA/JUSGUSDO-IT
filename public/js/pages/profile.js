@@ -120,12 +120,13 @@ const ProfilePage = (() => {
 
   // ── Gym (salle) stats renderer ─────────────────────────────
   function _renderGymStats(gymStats) {
+    const totalActivities = (gymStats.total_exercises || gymStats.total_completed || 0) + (gymStats.total_zones || 0);
     const simpleCards = [
-      { label: 'Exercices cochés', value: gymStats.total_completed,            icon: '✅' },
-      { label: 'Jours complets',   value: gymStats.full_days,                  icon: '🔥' },
-      { label: 'Meilleure série',  value: gymStats.best_streak + '\u202fj',    icon: '🏆' },
-      { label: 'Série actuelle',   value: gymStats.current_streak + '\u202fj', icon: '⚡' },
-      { label: 'Jours actifs',     value: gymStats.active_days,                icon: '📅' },
+      { label: 'Activités salle',  value: totalActivities,                     icon: '✅' },
+      { label: 'Jours actifs',     value: gymStats.active_days || 0,           icon: '🔥' },
+      { label: 'Jours de repos',   value: gymStats.total_rest_days || 0,       icon: '🛌' },
+      { label: 'Meilleure série',  value: (gymStats.best_streak || 0) + ' j',  icon: '🏆' },
+      { label: 'Série actuelle',   value: (gymStats.current_streak || 0) + ' j', icon: '⚡' },
     ];
 
     const statsGridHtml = `<div class="profile-stats-grid" style="animation:fadeIn 0.3s ease 0.02s both">
@@ -137,19 +138,27 @@ const ProfilePage = (() => {
         </div>`).join('')}
     </div>`;
 
-    // Today badge for gym
-    const { today_done: done, today_total: total } = gymStats;
     let todayBadge = '';
-    if (total > 0) {
-      let cls, icon, msg;
-      if (done >= total)  { cls = 'done';    icon = '✅'; msg = `Séance complète ! (${done}/${total})`; }
-      else if (done > 0)  { cls = 'partial'; icon = '💪'; msg = `${done}\u202f/\u202f${total} exercices salle aujourd'hui`; }
-      else                { cls = 'empty';   icon = '😴'; msg = `Pas de séance salle aujourd'hui`; }
-      todayBadge = `<div class="profile-today-badge ${cls}" style="animation:fadeIn 0.3s ease 0.05s both">
-        <span class="profile-today-icon">${icon}</span>
-        <span class="profile-today-msg">${msg}</span>
-      </div>`;
+    const todayEx     = gymStats.today_exercises_done || 0;
+    const todayZones  = gymStats.today_zones_done || 0;
+    const todayRest   = gymStats.today_is_rest;
+    const todayActive = gymStats.today_is_active || (todayEx + todayZones > 0);
+    let cls, icon, msg;
+    if (todayActive) {
+      cls = 'done'; icon = '✅';
+      const bits = [];
+      if (todayEx)    bits.push(`${todayEx} exercice${todayEx !== 1 ? 's' : ''}`);
+      if (todayZones) bits.push(`${todayZones} zone${todayZones !== 1 ? 's' : ''}`);
+      msg = `Jour actif · ${bits.join(' + ') || 'activité enregistrée'}`;
+    } else if (todayRest) {
+      cls = 'partial'; icon = '🛌'; msg = `Jour de repos déclaré`;
+    } else {
+      cls = 'empty'; icon = '😴'; msg = `Pas encore d'activité salle aujourd'hui`;
     }
+    todayBadge = `<div class="profile-today-badge ${cls}" style="animation:fadeIn 0.3s ease 0.05s both">
+      <span class="profile-today-icon">${icon}</span>
+      <span class="profile-today-msg">${msg}</span>
+    </div>`;
 
     return `
       ${statsGridHtml}
@@ -265,10 +274,9 @@ const ProfilePage = (() => {
           </div>
         </div>
         <div class="cal-legend">
-          <div class="cal-cell full"  style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Séance complète</span>
-          <div class="cal-cell partial" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>En cours</span>
-          <div class="cal-cell empty" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Manquée</span>
+          <div class="cal-cell active" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Jour actif</span>
           <div class="cal-cell rest" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Repos</span>
+          <div class="cal-cell empty" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Inactif</span>
         </div>
       </div>`;
   }
@@ -284,13 +292,19 @@ const ProfilePage = (() => {
         monthLabel = d.toLocaleDateString('fr-FR', { month: 'short' });
       }
       const cells = week.map(day => {
-        const pct = day.total > 0 ? day.done / day.total : 0;
-        const cls = day.date > today  ? 'future'
-                  : day.total === 0   ? 'rest'
-                  : pct >= 1          ? 'full'
-                  : pct > 0           ? 'partial'
-                  :                     'empty';
-        const tip = day.total === 0 ? `${day.date} · Jour de repos` : `${day.date} · ${day.done}/${day.total}`;
+        const exDone = day.exercises_done || 0;
+        const zDone  = day.zones_done || 0;
+        const isRest = !!day.is_rest;
+        const isAct  = !!day.is_active || (exDone + zDone > 0);
+        const cls = day.date > today ? 'future'
+                  : isAct  ? 'active'
+                  : isRest ? 'rest'
+                  : 'empty';
+        const tip = isAct
+          ? `${day.date} · ${exDone} ex, ${zDone} zone${zDone !== 1 ? 's' : ''}`
+          : isRest
+            ? `${day.date} · Jour de repos`
+            : `${day.date} · Inactif`;
         return `<div class="cal-cell ${cls}${day.date === today ? ' cal-today' : ''}" title="${tip}"></div>`;
       }).join('');
       return `<div class="cal-week-col"><div class="cal-month-label">${monthLabel}</div>${cells}</div>`;

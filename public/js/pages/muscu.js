@@ -5,7 +5,11 @@ const MuscuPage = (() => {
   let _activeTab = 'seance';  // 'records' | 'seance'
   let _gymWeekOffset = 0;          // week offset (0 = current week)
   let _gymEntries = {};            // 'YYYY-MM-DD_exnamelower' → { completed, session_name }
-  let _gymWeekExercises = {};      // 'YYYY-MM-DD' → [{ name, icon, color, exercises }]
+  let _gymSessionsCatalog = [];    // [{ name, icon, color, exercises: [{id,name,emoji,sets,reps,unit}] }]
+  let _gymZones = [];              // [{ id, parent_id, name, icon, color, order_index }]
+  let _gymZoneEntriesByDate = {};  // 'YYYY-MM-DD' → Set<zone_id>
+  let _gymRestDays = new Set();    // Set<'YYYY-MM-DD'>
+  let _activeSheetDate = null;     // 'YYYY-MM-DD' currently shown in day-actions sheet
 
   const _DAYS_FR = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
   const _MONTHS_FR = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
@@ -174,29 +178,52 @@ const MuscuPage = (() => {
     const end   = _gymDateKey(dates[6]);
 
     try {
-      const [checklistRes, ...exerciseResults] = await Promise.all([
+      const [checklistRes, sessionsRes, zonesRes, zoneEntriesRes, restDaysRes] = await Promise.all([
         API.getGymChecklist(start, end),
-        ...dates.map(d => API.getGymExercises(_gymDateKey(d)).catch(() => ({ sessions: [] }))),
+        API.getGymSessionsAll().catch(() => ({ sessions: [] })),
+        API.getGymZones().catch(() => ({ zones: [] })),
+        API.getGymZoneEntries(start, end).catch(() => ({ entries: [] })),
+        API.getGymRestDays(start, end).catch(() => ({ dates: [] })),
       ]);
 
-      // Build entry map: 'YYYY-MM-DD_exnamelower' → { completed, session_name }
       _gymEntries = {};
       (checklistRes.entries || []).forEach(e => {
         const dk = typeof e.entry_date === 'string' ? e.entry_date.split('T')[0] : new Date(e.entry_date).toISOString().split('T')[0];
         _gymEntries[`${dk}_${e.exercise_name.toLowerCase()}`] = { completed: e.completed, session_name: e.session_name };
       });
 
-      // Build week exercises map: 'YYYY-MM-DD' → [sessions]
-      _gymWeekExercises = {};
-      dates.forEach((d, i) => {
-        _gymWeekExercises[_gymDateKey(d)] = exerciseResults[i].sessions || [];
+      _gymSessionsCatalog = sessionsRes.sessions || [];
+      _gymZones = zonesRes.zones || [];
+
+      _gymZoneEntriesByDate = {};
+      (zoneEntriesRes.entries || []).forEach(e => {
+        const dk = typeof e.entry_date === 'string' ? e.entry_date.split('T')[0] : new Date(e.entry_date).toISOString().split('T')[0];
+        if (!_gymZoneEntriesByDate[dk]) _gymZoneEntriesByDate[dk] = new Set();
+        _gymZoneEntriesByDate[dk].add(e.zone_id);
       });
+
+      _gymRestDays = new Set(restDaysRes.dates || []);
 
       _renderGymWeekPage(container, dates);
     } catch (err) {
       console.error('[Gym Week]', err);
       container.innerHTML = `<p style="color:var(--text3);text-align:center;padding:40px 16px">Erreur de chargement</p>`;
     }
+  }
+
+  // Helpers for the new state model
+  function _isDayActive(dateStr) {
+    const exercisesDone = Object.entries(_gymEntries)
+      .some(([k, v]) => v.completed && k.startsWith(`${dateStr}_`));
+    const zonesDone = (_gymZoneEntriesByDate[dateStr] && _gymZoneEntriesByDate[dateStr].size > 0);
+    return exercisesDone || zonesDone;
+  }
+  function _isDayRest(dateStr) { return _gymRestDays.has(dateStr); }
+  function _dayCounts(dateStr) {
+    const exDone = Object.entries(_gymEntries)
+      .filter(([k, v]) => v.completed && k.startsWith(`${dateStr}_`)).length;
+    const zonesDone = _gymZoneEntriesByDate[dateStr] ? _gymZoneEntriesByDate[dateStr].size : 0;
+    return { exDone, zonesDone };
   }
 
   function _renderGymWeekPage(container, dates) {
@@ -215,44 +242,31 @@ const MuscuPage = (() => {
       const key = _gymDateKey(date);
       const isToday  = date.getTime() === today.getTime();
       const isFuture = date > today;
-      const sessions  = _gymWeekExercises[key] || [];
-      const allExs    = sessions.flatMap(s => s.exercises || []);
-      const doneCount = allExs.filter(ex => {
-        const n = typeof ex === 'string' ? ex : ex.name;
-        return !!(_gymEntries[`${key}_${n.toLowerCase()}`]?.completed);
-      }).length;
-      const total  = allExs.length;
-      const allDone = total > 0 && doneCount === total;
-      const pct    = total > 0 ? Math.round(doneCount / total * 100) : 0;
-      const ringC  = allDone ? '#22d18b'
-                  : doneCount > 0 ? '#fbbf24'
+      const active   = _isDayActive(key);
+      const rest     = _isDayRest(key);
+      const { exDone, zonesDone } = _dayCounts(key);
+      const totalDone = exDone + zonesDone;
+      const state = isFuture ? 'future' : active ? 'done' : rest ? 'rest' : 'idle';
+      const ringC = active ? '#22d18b'
+                  : rest ? '#3b82f6'
                   : isFuture ? 'rgba(255,255,255,0.07)'
-                  : total === 0 ? '#3b82f6'
-                  : '#ef4444';
-      const state  = total === 0 ? 'rest' : isFuture ? 'future' : allDone ? 'done' : doneCount > 0 ? 'partial' : 'missed';
+                  : 'rgba(255,255,255,0.18)';
+      const inner = active ? totalDone : rest ? '🛌' : '·';
       return `
         <div class="wsd ${state}${isToday ? ' today-dot' : ''}" onclick="document.getElementById('gday-${key}')?.scrollIntoView({behavior:'smooth',block:'center'})">
-          <div class="wsd-ring" style="--ring-p:${total === 0 ? 100 : pct};--ring-c:${ringC}">
-            <span class="wsd-inner">${total > 0 ? doneCount : '·'}</span>
+          <div class="wsd-ring" style="--ring-p:100;--ring-c:${ringC}">
+            <span class="wsd-inner">${inner}</span>
           </div>
           <span class="wsd-lbl">${_DAY_LETTERS[date.getDay()]}</span>
         </div>`;
     }).join('');
 
-    let weekDone = 0, weekTotal = 0;
+    let activeCount = 0, restCount = 0;
     dates.forEach(date => {
       const key = _gymDateKey(date);
       if (date <= today) {
-        const sessions = _gymWeekExercises[key] || [];
-        const allExs   = sessions.flatMap(s => s.exercises || []);
-        if (allExs.length > 0) {
-          weekTotal++;
-          const done = allExs.filter(ex => {
-            const n = typeof ex === 'string' ? ex : ex.name;
-            return !!(_gymEntries[`${key}_${n.toLowerCase()}`]?.completed);
-          }).length;
-          if (done === allExs.length) weekDone++;
-        }
+        if (_isDayActive(key)) activeCount++;
+        else if (_isDayRest(key)) restCount++;
       }
     });
 
@@ -266,7 +280,8 @@ const MuscuPage = (() => {
         <button class="week-btn" onclick="MuscuPage.gymChangeWeek(1)" ${_gymWeekOffset >= 0 ? 'disabled' : ''}>›</button>
       </div>
       <div class="today-stats-bar">
-        <span class="tsb-pill">📅&nbsp;<b>${weekDone}/${weekTotal}</b>&nbsp;séances cette sem.</span>
+        <span class="tsb-pill">🏋️&nbsp;<b>${activeCount}</b>&nbsp;jour${activeCount !== 1 ? 's' : ''} actif${activeCount !== 1 ? 's' : ''}</span>
+        <span class="tsb-pill">🛌&nbsp;<b>${restCount}</b>&nbsp;repos</span>
       </div>
       <main class="calendar-container" id="gym-calendar-container"></main>
     `;
@@ -289,42 +304,119 @@ const MuscuPage = (() => {
     const isFuture = date > today;
     const isPast   = !isToday && !isFuture;
 
-    const sessions  = _gymWeekExercises[key] || [];
-    const allExs    = sessions.flatMap(s => (s.exercises || []).map(ex => ({ ...ex, _sessionName: s.name, _sessionIcon: s.icon, _sessionColor: s.color })));
-    const doneCount = allExs.filter(ex => !!(_gymEntries[`${key}_${(ex.name || ex).toLowerCase()}`]?.completed)).length;
-    const allDone   = allExs.length > 0 && doneCount === allExs.length;
-    const isRest    = allExs.length === 0 && !isFuture;
-    const ringPct   = allExs.length > 0 ? Math.round(doneCount / allExs.length * 100) : (isRest ? 100 : 0);
-    const ringColor = allDone ? '#22d18b'
-                    : doneCount > 0 ? '#fbbf24'
-                    : isFuture ? 'rgba(255,255,255,0.07)'
-                    : isRest ? '#3b82f6'
-                    : allExs.length === 0 ? 'rgba(255,255,255,0.18)'
-                    : '#ef4444';
+    const active = _isDayActive(key);
+    const rest   = _isDayRest(key);
+    const { exDone, zonesDone } = _dayCounts(key);
 
-    let exercisesHTML;
-    if (allExs.length === 0) {
-      exercisesHTML = `<p class="gym-rest-day-msg">🛌 Jour de repos — aucune séance programmée</p>`;
+    const ringPct   = (active || rest) ? 100 : 0;
+    const ringColor = active ? '#22d18b'
+                    : rest ? '#3b82f6'
+                    : isFuture ? 'rgba(255,255,255,0.07)'
+                    : 'rgba(255,255,255,0.18)';
+    const ringInner = active ? `${exDone + zonesDone}` : rest ? '🛌' : '·';
+
+    let summaryHtml;
+    if (isFuture) {
+      summaryHtml = `<p class="gym-rest-day-msg">⏳ À venir — reviens ce jour pour enregistrer ton activité</p>`;
+    } else if (active) {
+      const bits = [];
+      if (exDone)    bits.push(`<span class="gym-day-pill">🏋️ ${exDone} exercice${exDone !== 1 ? 's' : ''}</span>`);
+      if (zonesDone) bits.push(`<span class="gym-day-pill">🎯 ${zonesDone} zone${zonesDone !== 1 ? 's' : ''}</span>`);
+      summaryHtml = `<div class="gym-day-summary">${bits.join('')}</div>`;
+    } else if (rest) {
+      summaryHtml = `<p class="gym-rest-day-msg">🛌 Jour de repos déclaré</p>`;
     } else {
-      exercisesHTML = sessions.map(session => {
-        const sessionExs = session.exercises || [];
-        return `<div class="gym-seance-session-group">
-          <div class="gym-seance-session-label" style="color:${session.color}">${session.icon} ${_escape(session.name)}</div>
-          ${sessionExs.map(ex => {
-            const exName  = typeof ex === 'string' ? ex : (ex.name || '');
-            const exEmoji = (typeof ex === 'object' && ex.emoji) ? ex.emoji : '💪';
-            const exSets  = (typeof ex === 'object' && ex.sets)  ? ex.sets  : null;
-            const exReps  = (typeof ex === 'object' && ex.reps)  ? ex.reps  : null;
-            const checked = !!(_gymEntries[`${key}_${exName.toLowerCase()}`]?.completed);
+      summaryHtml = `<p class="gym-rest-day-msg">${isToday ? 'Pas encore d’activité' : 'Aucune activité ce jour'}</p>`;
+    }
+
+    const ctaLabel = isFuture ? '' : (active || rest ? 'Modifier' : 'Enregistrer mon activité');
+    const cta = isFuture ? '' : `
+      <button type="button" class="submit-btn gym-day-cta" onclick="event.stopPropagation();MuscuPage.openDayActionsSheet('${key}')">${ctaLabel}</button>`;
+
+    const card = document.createElement('div');
+    card.className = `day-card${active ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${(isHero || isToday) ? ' open' : ''}${isHero ? ' hero' : ''}${rest ? ' gym-rest-day' : ''}`;
+    card.dataset.key = key;
+    card.id = `gday-${key}`;
+    card.innerHTML = `
+      <div class="day-header" onclick="${isFuture ? '' : `MuscuPage.openDayActionsSheet('${key}')`}">
+        <div class="day-check">${active ? '✓' : rest ? '🛌' : ''}</div>
+        <div class="day-name-block">
+          <div class="day-name">${_DAYS_FR[date.getDay()]}</div>
+          <div class="day-date">${date.getDate()} ${_MONTHS_FR[date.getMonth()]}</div>
+          <div class="day-badges">
+            ${isToday ? "<span class=\"today-badge\">Aujourd'hui</span>" : ''}
+            ${isFuture ? '<span class="preview-badge">À venir</span>' : ''}
+            ${rest && !isFuture ? '<span class="rest-badge">Repos</span>' : ''}
+          </div>
+        </div>
+        <div class="day-ring" style="--ring-p:${ringPct};--ring-c:${ringColor}">
+          <span class="day-ring-val">${ringInner}</span>
+        </div>
+      </div>
+      <div class="exercises-list">
+        ${summaryHtml}
+        ${cta}
+      </div>
+    `;
+    return card;
+  }
+
+  // ─── Day-actions sheet (Salle: rest / sessions / zones) ────────────────────
+
+  function openDayActionsSheet(dateStr) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (new Date(y, m - 1, d) > today) return;
+    _activeSheetDate = dateStr;
+    let sheet = document.getElementById('gym-day-sheet');
+    if (!sheet) {
+      sheet = document.createElement('div');
+      sheet.id = 'gym-day-sheet';
+      sheet.className = 'gym-day-sheet-backdrop';
+      sheet.addEventListener('click', e => {
+        if (e.target === sheet) closeDayActionsSheet();
+      });
+      document.body.appendChild(sheet);
+    }
+    _renderDayActionsSheet();
+    sheet.classList.add('open');
+  }
+
+  function closeDayActionsSheet() {
+    _activeSheetDate = null;
+    const sheet = document.getElementById('gym-day-sheet');
+    if (sheet) sheet.classList.remove('open');
+  }
+
+  function _renderDayActionsSheet() {
+    const sheet = document.getElementById('gym-day-sheet');
+    if (!sheet || !_activeSheetDate) return;
+    const dateStr = _activeSheetDate;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    const title = `${_DAYS_FR[dateObj.getDay()]} ${dateObj.getDate()} ${_MONTHS_FR[dateObj.getMonth()]}`;
+
+    const isRest = _isDayRest(dateStr);
+
+    const sessionsHtml = (_gymSessionsCatalog && _gymSessionsCatalog.length)
+      ? _gymSessionsCatalog.map(session => {
+          const safeSes = _escape(session.name).replace(/'/g, "\\'");
+          const exs = session.exercises || [];
+          const doneInSession = exs.filter(ex => !!_gymEntries[`${dateStr}_${(ex.name || '').toLowerCase()}`]?.completed).length;
+          const itemsHtml = exs.map(ex => {
+            const exName  = ex.name || '';
+            const exEmoji = ex.emoji || '💪';
+            const exSets  = ex.sets || null;
+            const exReps  = ex.reps || null;
+            const checked = !!_gymEntries[`${dateStr}_${exName.toLowerCase()}`]?.completed;
             const metaTags = exSets
               ? `<span class="exercise-tag"><span class="exercise-tag-val">${exSets}</span> série${exSets > 1 ? 's' : ''}</span>
                  <span class="exercise-tag"><span class="exercise-tag-val">${exReps}</span> rép.</span>`
               : '';
             const safeEx  = _escape(exName).replace(/'/g, "\\'");
-            const safeSes = _escape(session.name).replace(/'/g, "\\'");
             return `
-              <div class="exercise-item${checked ? ' checked' : ''}${isPast ? ' disabled' : ''}${isFuture ? ' future-day' : ''}"
-                   onclick="MuscuPage.toggleGymExercise('${safeEx}','${safeSes}','${key}',this)">
+              <div class="exercise-item${checked ? ' checked' : ''}"
+                   onclick="MuscuPage.toggleGymExercise('${safeEx}','${safeSes}','${dateStr}',this)">
                 <div class="exercise-icon">${exEmoji}</div>
                 <div class="exercise-info">
                   <div class="exercise-name">${_escape(exName)}</div>
@@ -332,39 +424,77 @@ const MuscuPage = (() => {
                 </div>
                 <div class="exercise-checkbox">${checked ? '✓' : ''}</div>
               </div>`;
-          }).join('')}
-        </div>`;
-      }).join('');
-    }
+          }).join('') || '<p class="exercise-inline-help" style="padding:8px 12px">Aucun exercice dans cette séance</p>';
+          return `
+            <details class="sheet-accordion"${doneInSession > 0 ? ' open' : ''}>
+              <summary style="--session-color:${session.color || '#888'}">
+                <span class="sheet-acc-icon">${session.icon || '🏋️'}</span>
+                <span class="sheet-acc-title">${_escape(session.name)}</span>
+                <span class="sheet-acc-count">${doneInSession}/${exs.length}</span>
+              </summary>
+              <div class="sheet-acc-body">${itemsHtml}</div>
+            </details>`;
+        }).join('')
+      : '<p class="exercise-inline-help" style="padding:8px 12px">Aucune séance disponible</p>';
 
-    const card = document.createElement('div');
-    card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${(isHero || isToday) ? ' open' : ''}${isHero ? ' hero' : ''}${isRest ? ' gym-rest-day' : ''}`;
-    card.dataset.key = key;
-    card.id = `gday-${key}`;
-    card.innerHTML = `
-      <div class="day-header" onclick="this.closest('.day-card').classList.toggle('open')">
-        <div class="day-check">${allDone ? '✓' : isRest ? '🛌' : ''}</div>
-        <div class="day-name-block">
-          <div class="day-name">${_DAYS_FR[date.getDay()]}</div>
-          <div class="day-date">${date.getDate()} ${_MONTHS_FR[date.getMonth()]}</div>
-          ${isToday || isFuture || (isRest && !isFuture) ? `
-          <div class="day-badges">
-            ${isToday ? "<span class=\"today-badge\">Aujourd'hui</span>" : ''}
-            ${isFuture ? '<span class="preview-badge">\u00c0 venir</span>' : ''}
-            ${isRest && !isFuture ? '<span class="rest-badge">Repos</span>' : ''}
-          </div>` : ''}
+    const parents = _gymZones.filter(z => !z.parent_id).sort((a,b) => a.order_index - b.order_index);
+    const zonesActive = _gymZoneEntriesByDate[dateStr] || new Set();
+    const zonesHtml = parents.length
+      ? parents.map(p => {
+          const children = _gymZones.filter(z => z.parent_id === p.id).sort((a,b) => a.order_index - b.order_index);
+          const targets = children.length ? children : [p];
+          const chips = targets.map(z => {
+            const on = zonesActive.has(z.id);
+            return `<button type="button" class="zone-chip${on ? ' on' : ''}" style="--zone-color:${z.color || '#888'}"
+              onclick="MuscuPage.toggleGymZone(${z.id}, '${dateStr}')">
+              <span class="zone-chip-emoji">${_escape(z.icon || '💪')}</span>
+              <span class="zone-chip-name">${_escape(z.name)}</span>
+              ${on ? '<span class="zone-chip-check">✓</span>' : ''}
+            </button>`;
+          }).join('');
+          return `<div class="zone-group" style="--zone-color:${p.color || '#888'}">
+            <div class="zone-group-head">
+              <span class="zone-group-emoji">${_escape(p.icon || '💪')}</span>
+              <span class="zone-group-name">${_escape(p.name)}</span>
+            </div>
+            <div class="zone-chips">${chips}</div>
+          </div>`;
+        }).join('')
+      : '<p class="exercise-inline-help" style="padding:8px 12px">Aucune zone définie</p>';
+
+    sheet.innerHTML = `
+      <div class="gym-day-sheet">
+        <div class="sheet-handle"></div>
+        <header class="sheet-header">
+          <div>
+            <h3>${title}</h3>
+            <p class="sheet-subtitle">Que veux-tu enregistrer pour ce jour ?</p>
+          </div>
+          <button type="button" class="sheet-close" onclick="MuscuPage.closeDayActionsSheet()" aria-label="Fermer">✕</button>
+        </header>
+        <div class="sheet-body">
+          <section class="sheet-section">
+            <button type="button" class="rest-toggle-btn${isRest ? ' on' : ''}" onclick="MuscuPage.toggleGymRestDay('${dateStr}')">
+              <span class="rest-toggle-icon">🛌</span>
+              <span class="rest-toggle-text">
+                <strong>${isRest ? 'Jour de repos déclaré' : 'Marquer comme jour de repos'}</strong>
+                <small>${isRest ? 'Cliquer pour annuler' : 'Compte pour la régularité, sans XP'}</small>
+              </span>
+              <span class="rest-toggle-state">${isRest ? '✓' : ''}</span>
+            </button>
+          </section>
+          <section class="sheet-section">
+            <h4 class="sheet-section-title">🏋️ Séances pré-faites</h4>
+            ${sessionsHtml}
+          </section>
+          <section class="sheet-section">
+            <h4 class="sheet-section-title">🎯 Zones de travail libres</h4>
+            <p class="sheet-section-help">+30 XP par zone validée (cumulables)</p>
+            ${zonesHtml}
+          </section>
         </div>
-        <div class="day-ring" style="--ring-p:${ringPct};--ring-c:${ringColor}">
-          <span class="day-ring-val">${isRest ? '·' : `${doneCount}/${allExs.length}`}</span>
-        </div>
-        ${!isHero ? '<div class="day-toggle">▼</div>' : ''}
-      </div>
-      <div class="exercises-list">
-        ${exercisesHTML}
-        <div class="all-done-badge">🎉 Séance complète ! Bravo !</div>
       </div>
     `;
-    return card;
   }
 
   // ── Main renderer ─────────────────────────────────────────
@@ -554,7 +684,6 @@ const MuscuPage = (() => {
 
     const entryKey = `${dateStr}_${exerciseName.toLowerCase()}`;
     const wasChecked = _gymEntries[entryKey]?.completed || false;
-    const card = el?.closest('.day-card');
 
     // Optimistic DOM update
     if (!_gymEntries[entryKey]) _gymEntries[entryKey] = { session_name: sessionName, completed: false };
@@ -562,15 +691,10 @@ const MuscuPage = (() => {
     el?.classList.toggle('checked', !wasChecked);
     const cbEl = el?.querySelector('.exercise-checkbox');
     if (cbEl) cbEl.textContent = !wasChecked ? '✓' : '';
-    _syncGymCardStats(card, dateStr);
 
     try {
       const result = await API.toggleGymChecklist(exerciseName, sessionName, dateStr);
-      // Sync with server state
       _gymEntries[entryKey].completed = result.completed;
-      el?.classList.toggle('checked', result.completed);
-      if (cbEl) cbEl.textContent = result.completed ? '✓' : '';
-      _syncGymCardStats(card, dateStr);
 
       if (result.xp !== undefined) {
         const stored = JSON.parse(localStorage.getItem('user') || '{}');
@@ -580,48 +704,89 @@ const MuscuPage = (() => {
       if (result.xpDelta && result.xpDelta !== 0) {
         Gamification.spawnXPPopup(el, `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
       }
-      // Celebrate full session
-      const sessions = _gymWeekExercises[dateStr] || [];
-      const allExs   = sessions.flatMap(s => s.exercises || []);
-      const doneNow  = allExs.filter(ex => {
-        const n = typeof ex === 'string' ? ex : ex.name;
-        return !!(_gymEntries[`${dateStr}_${n.toLowerCase()}`]?.completed);
-      }).length;
-      if (doneNow === allExs.length && allExs.length > 0 && result.completed) {
-        App.showToast('🎉 Séance complète ! Bien joué !');
-        Gamification.launchConfetti();
-        const ringEl = card?.querySelector('.day-ring');
-        if (ringEl) { ringEl.classList.remove('ring-bounce'); void ringEl.offsetWidth; ringEl.classList.add('ring-bounce'); }
-      }
+      _refreshDayUI(dateStr);
     } catch (err) {
-      // Revert optimistic update
       _gymEntries[entryKey].completed = wasChecked;
-      el?.classList.toggle('checked', wasChecked);
-      if (cbEl) cbEl.textContent = wasChecked ? '✓' : '';
-      _syncGymCardStats(card, dateStr);
+      _refreshDayUI(dateStr);
       if (typeof App !== 'undefined') App.showToast('Erreur : ' + err.message);
     }
   }
 
-  function _syncGymCardStats(card, dateStr) {
-    if (!card) return;
-    const sessions = _gymWeekExercises[dateStr] || [];
-    const allExs   = sessions.flatMap(s => s.exercises || []);
-    const doneNow  = allExs.filter(ex => {
-      const n = typeof ex === 'string' ? ex : ex.name;
-      return !!(_gymEntries[`${dateStr}_${n.toLowerCase()}`]?.completed);
-    }).length;
-    const allDone  = allExs.length > 0 && doneNow === allExs.length;
-    card.classList.toggle('completed', allDone);
-    const dc = card.querySelector('.day-check');
-    if (dc) dc.textContent = allDone ? '✓' : '';
-    const ringEl = card.querySelector('.day-ring');
-    if (ringEl) {
-      const pct = allExs.length > 0 ? Math.round(doneNow / allExs.length * 100) : 0;
-      ringEl.style.setProperty('--ring-p', pct);
-      const rv = ringEl.querySelector('.day-ring-val');
-      if (rv) rv.textContent = `${doneNow}/${allExs.length}`;
+  async function toggleGymZone(zoneId, dateStr) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (new Date(y, m - 1, d) > today) return;
+
+    const wasOn = _gymZoneEntriesByDate[dateStr] && _gymZoneEntriesByDate[dateStr].has(zoneId);
+    if (!_gymZoneEntriesByDate[dateStr]) _gymZoneEntriesByDate[dateStr] = new Set();
+    if (wasOn) _gymZoneEntriesByDate[dateStr].delete(zoneId);
+    else _gymZoneEntriesByDate[dateStr].add(zoneId);
+    _refreshDayUI(dateStr);
+
+    try {
+      const result = await API.toggleGymZone(zoneId, dateStr);
+      // Sync (in case of mismatch)
+      if (result.active && !_gymZoneEntriesByDate[dateStr].has(zoneId)) _gymZoneEntriesByDate[dateStr].add(zoneId);
+      if (!result.active && _gymZoneEntriesByDate[dateStr].has(zoneId)) _gymZoneEntriesByDate[dateStr].delete(zoneId);
+      if (result.xp !== undefined) {
+        const stored = JSON.parse(localStorage.getItem('user') || '{}');
+        stored.xp = result.xp;
+        localStorage.setItem('user', JSON.stringify(stored));
+      }
+      if (result.xpDelta) {
+        const anchor = document.querySelector(`.zone-chip.on, .zone-chip`);
+        Gamification.spawnXPPopup(anchor, `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
+      }
+      _refreshDayUI(dateStr);
+    } catch (err) {
+      // Revert
+      if (wasOn) _gymZoneEntriesByDate[dateStr].add(zoneId);
+      else _gymZoneEntriesByDate[dateStr].delete(zoneId);
+      _refreshDayUI(dateStr);
+      if (typeof App !== 'undefined') App.showToast('Erreur : ' + err.message);
     }
+  }
+
+  async function toggleGymRestDay(dateStr) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (new Date(y, m - 1, d) > today) return;
+
+    const wasRest = _gymRestDays.has(dateStr);
+    if (wasRest) _gymRestDays.delete(dateStr);
+    else _gymRestDays.add(dateStr);
+    _refreshDayUI(dateStr);
+
+    try {
+      const result = await API.toggleGymRestDay(dateStr);
+      if (result.active && !_gymRestDays.has(dateStr)) _gymRestDays.add(dateStr);
+      if (!result.active && _gymRestDays.has(dateStr)) _gymRestDays.delete(dateStr);
+      _refreshDayUI(dateStr);
+    } catch (err) {
+      if (wasRest) _gymRestDays.add(dateStr); else _gymRestDays.delete(dateStr);
+      _refreshDayUI(dateStr);
+      if (typeof App !== 'undefined') App.showToast('Erreur : ' + err.message);
+    }
+  }
+
+  function _refreshDayUI(dateStr) {
+    // 1) Re-render the day card in the week view
+    const oldCard = document.getElementById(`gday-${dateStr}`);
+    if (oldCard) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      const isHero = oldCard.classList.contains('hero');
+      const newCard = _buildGymDayCard(date, isHero, today);
+      oldCard.replaceWith(newCard);
+    }
+    // 2) Re-render the open sheet
+    if (_activeSheetDate === dateStr) _renderDayActionsSheet();
+  }
+
+  function _syncGymCardStats(card, dateStr) {
+    // Legacy alias kept for safety; redirects to new model.
+    if (dateStr) _refreshDayUI(dateStr);
   }
 
   // ── Custom exercises section ──────────────────────────────
@@ -982,5 +1147,5 @@ const MuscuPage = (() => {
     _refresh();
   }
 
-  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise };
+  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, toggleGymZone, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
 })();

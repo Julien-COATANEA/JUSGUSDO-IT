@@ -14,12 +14,15 @@ const AdminPage = (() => {
   let exercises = [];
   let users = [];
   let gymSessions = [];      // from API.adminGetGymSessions()
+  let gymZones = [];         // from API.adminGetGymZones()
   let editingId = null;
-  let editingSession = null; // session name string when editing session assignments
+  let editingSession = null; // session name string when editing session metadata
   let pendingGymSession = null; // pre-fill gym_session when creating a new gym exercise
   let currentView = 'catalog';
   let creatingSession = false;  // true when showing session creation form
   let currentExTab = 'home'; // 'home' | 'gym'
+  let editingZoneId = null;     // id of zone being inline-edited
+  let creatingZoneParent = null; // parent_id when inline-creating a child zone (or 'root')
 
   function isCurrentUserAdmin() {
     const u = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
@@ -47,14 +50,16 @@ const AdminPage = (() => {
   async function refreshData() {
     renderLoadingState();
     try {
-      const [exerciseData, userData, gymSessionData] = await Promise.all([
+      const [exerciseData, userData, gymSessionData, gymZoneData] = await Promise.all([
         API.adminGetExercises(),
         API.adminGetUsers(),
         API.adminGetGymSessions().catch(() => ({ sessions: [] })),
+        API.adminGetGymZones().catch(() => ({ zones: [] })),
       ]);
       exercises = (exerciseData.exercises || []).map(normalizeExercise);
       users = (userData.users || []).map(normalizeUser);
       gymSessions = gymSessionData.sessions || [];
+      gymZones = gymZoneData.zones || [];
       renderCurrentView();
     } catch (err) {
       renderShell(renderErrorState(err));
@@ -70,10 +75,6 @@ const AdminPage = (() => {
       renderShell(renderEditorPage(), { editor: true });
       toggleRunningFields();
       toggleAudienceMode();
-      return;
-    }
-    if (currentView === 'session-editor') {
-      renderShell(renderSessionEditorPage(), { editor: true, sessionEditor: true });
       return;
     }
     if (currentView === 'session-creator') {
@@ -92,21 +93,15 @@ const AdminPage = (() => {
     if (!shell) return;
 
     const anyEditor = editor || sessionEditor || sessionCreator;
-    const title = sessionEditor
-      ? `Assigner — ${editingSession || ''}`
-      : sessionCreator
-        ? 'Nouvelle séance'
-        : (editor ? (editingId ? 'Modifier exercice' : 'Nouvel exercice') : 'Exercices');
-    const subtitle = sessionEditor
-      ? 'Séance Salle'
-      : sessionCreator
-        ? 'Salle de sport'
-        : (editor ? 'Édition plein écran' : (isCurrentUserAdmin() ? 'Catalogue admin' : 'Lecture seule'));
-    const backFn = sessionEditor
-      ? 'AdminPage.closeSessionEditor()'
-      : sessionCreator
-        ? 'AdminPage.closeSessionCreator()'
-        : 'AdminPage.closeExModal()';
+    const title = sessionCreator
+      ? (editingSession ? 'Modifier la séance' : 'Nouvelle séance')
+      : (editor ? (editingId ? 'Modifier exercice' : 'Nouvel exercice') : 'Exercices');
+    const subtitle = sessionCreator
+      ? 'Salle de sport'
+      : (editor ? 'Édition plein écran' : (isCurrentUserAdmin() ? 'Catalogue admin' : 'Lecture seule'));
+    const backFn = sessionCreator
+      ? 'AdminPage.closeSessionCreator()'
+      : 'AdminPage.closeExModal()';
     const actionHtml = anyEditor
       ? `<button type="button" class="admin-secondary-btn ex-top-action" onclick="${backFn}">Retour au catalogue</button>`
       : ``;
@@ -243,7 +238,7 @@ const AdminPage = (() => {
           <div class="ex-admin-copy">
             <span class="ex-admin-eyebrow">Pilotage</span>
             <h1 class="ex-admin-title">Séances Salle de sport</h1>
-            <p class="ex-admin-subtitle">Associez des séances à un jour et une personne</p>
+            <p class="ex-admin-subtitle">Séances pré-faites + zones de travail libres pour la Salle</p>
           </div>
           ${isCurrentUserAdmin() ? `<button type="button" class="submit-btn ex-admin-primary" onclick="AdminPage.openSessionCreator()">+ Nouvelle séance</button>` : ''}
         </div>
@@ -260,18 +255,73 @@ const AdminPage = (() => {
           ? gymSessions.map(renderGymSessionCard).join('')
           : '<div class="exercise-empty"><strong>Aucune séance chargée</strong></div>'}
       </section>
+
+      ${renderGymZonesSection()}
+    `;
+  }
+
+  function renderGymZonesSection() {
+    const tops = gymZones.filter(z => !z.parent_id);
+    return `
+      <section class="ex-admin-list gym-zones-section">
+        <div class="ex-admin-list-header">
+          <div>
+            <h2>Zones de travail</h2>
+            <p>Groupes &amp; sous-zones — cliquables par les utilisateurs en Salle (+30 XP par zone)</p>
+          </div>
+          ${isCurrentUserAdmin() ? `<button type="button" class="submit-btn ex-admin-primary" onclick="AdminPage.startCreateZone(null)">+ Nouveau groupe</button>` : ''}
+        </div>
+        ${creatingZoneParent === 'root' ? renderZoneInlineForm(null) : ''}
+        ${tops.length
+          ? `<div class="gym-zones-tree">${tops.map(renderZoneNode).join('')}</div>`
+          : '<div class="exercise-empty"><strong>Aucune zone définie</strong></div>'}
+      </section>
+    `;
+  }
+
+  function renderZoneNode(zone) {
+    const children = gymZones.filter(z => z.parent_id === zone.id).sort((a,b) => a.order_index - b.order_index);
+    const isEditing = editingZoneId === zone.id;
+    const isAddingChild = creatingZoneParent === zone.id;
+    return `
+      <div class="gym-zone-node" style="--zone-color:${zone.color || '#888'}">
+        ${isEditing ? renderZoneInlineForm(zone) : `
+          <div class="gym-zone-row">
+            <span class="gym-zone-emoji">${escapeHtml(zone.icon || '💪')}</span>
+            <span class="gym-zone-name">${escapeHtml(zone.name)}</span>
+            <span class="gym-zone-tag">#${zone.order_index}</span>
+            ${isCurrentUserAdmin() ? `
+              <div class="gym-zone-actions">
+                ${!zone.parent_id ? `<button type="button" class="admin-secondary-btn" onclick="AdminPage.startCreateZone(${zone.id})" title="Ajouter une sous-zone">+ Sous-zone</button>` : ''}
+                <button type="button" class="admin-secondary-btn" onclick="AdminPage.startEditZone(${zone.id})" title="Modifier">✏️</button>
+                <button type="button" class="admin-secondary-btn" onclick="AdminPage.deleteGymZone(${zone.id})" title="Supprimer">🗑️</button>
+              </div>` : ''}
+          </div>`}
+        ${isAddingChild ? renderZoneInlineForm(null, zone.id) : ''}
+        ${children.length ? `<div class="gym-zone-children">${children.map(renderZoneNode).join('')}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function renderZoneInlineForm(zone, parentId = null) {
+    const z = zone || { name: '', icon: '💪', color: '#e94560', order_index: '' };
+    const isNew = !zone;
+    const formId = isNew ? `zone-form-new-${parentId || 'root'}` : `zone-form-${zone.id}`;
+    return `
+      <form class="gym-zone-inline-form" id="${formId}" onsubmit="AdminPage.submitZoneForm(event, ${zone ? zone.id : 'null'}, ${parentId === null ? 'null' : parentId})">
+        <input type="text" name="name" value="${escapeHtml(z.name)}" placeholder="Nom de la zone" required maxlength="60" />
+        <input type="text" name="icon" value="${escapeHtml(z.icon || '💪')}" placeholder="💪" maxlength="4" class="gym-zone-icon-input" />
+        <input type="color" name="color" value="${escapeHtml(z.color || '#e94560')}" />
+        <input type="number" name="order_index" value="${z.order_index === '' ? '' : z.order_index}" placeholder="#" min="0" class="gym-zone-order-input" />
+        <div class="gym-zone-form-actions">
+          <button type="submit" class="submit-btn">${isNew ? 'Créer' : 'Enregistrer'}</button>
+          <button type="button" class="admin-secondary-btn" onclick="AdminPage.cancelZoneForm()">Annuler</button>
+        </div>
+      </form>
     `;
   }
 
   function renderGymSessionCard(session) {
-    const assignSummary = session.assignments && session.assignments.length
-      ? session.assignments.map(a => {
-          const name = escapeHtml(getUserName(a.user_id));
-          const sched = formatSchedule(a.schedule);
-          return `${name}: ${sched}`;
-        }).join(' · ')
-      : 'Aucune assignation';
-
     const exListItems = (session.exercises || []).map(ex =>
       `<li class="gym-admin-session-ex-item">
         <span>${escapeHtml(ex.emoji || '💪')} ${escapeHtml(ex.name)}</span>
@@ -286,12 +336,9 @@ const AdminPage = (() => {
           <div class="gym-admin-session-info">
             <h3>${escapeHtml(session.name)}</h3>
             <p class="gym-admin-session-exercises">${(session.exercises || []).length} exercice${(session.exercises || []).length !== 1 ? 's' : ''}</p>
-            <p class="gym-admin-session-assign-summary">${assignSummary}</p>
           </div>
           ${isCurrentUserAdmin() ? `
           <div class="gym-admin-session-card-actions">
-            <button type="button" class="submit-btn gym-admin-session-assign-btn"
-              onclick="AdminPage.openSessionEditor('${escapeHtml(session.name)}')">Assigner</button>
             <button type="button" class="admin-secondary-btn gym-admin-session-edit-btn"
               onclick="AdminPage.openSessionMetaEditor('${escapeHtml(session.name)}')" title="Modifier la séance">✏️</button>
             <button type="button" class="admin-secondary-btn gym-admin-session-delete-btn"
@@ -591,77 +638,6 @@ const AdminPage = (() => {
         </form>
       </section>
     `;
-  }
-
-  function renderSessionEditorPage() {
-    const session = gymSessions.find(s => s.name === editingSession);
-    if (!session) return '<p class="exercise-empty">Séance introuvable.</p>';
-
-    const exPreview = (session.exercises || []).slice(0, 5).map(e => escapeHtml(e.name)).join(', ');
-    const extraCount = Math.max(0, (session.exercises || []).length - 5);
-
-    return `
-      <section class="ex-editor">
-        <div class="ex-editor-top">
-          <span class="ex-editor-top-emoji">${session.icon}</span>
-          <div class="ex-editor-top-info">
-            <h1>Assigner — ${escapeHtml(session.name)}</h1>
-            <div class="ex-editor-top-chips">
-              <span class="ex-editor-top-chip">${(session.exercises || []).length} exercices</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="ex-impact-banner ex-impact-banner--global">
-          📋 ${escapeHtml(exPreview)}${extraCount ? ` +${extraCount} autres` : ''}
-        </div>
-
-        <form id="session-assign-form" onsubmit="AdminPage.saveSessionAssignments(event)">
-          <section class="ex-editor-section">
-            <h2 class="ex-editor-section-title">Assignation — par personne</h2>
-            <div id="session-assign-users" class="exercise-users-list">
-              ${renderSessionAssignmentRowsMarkup(session.assignments || [])}
-            </div>
-          </section>
-
-          <div class="ex-editor-footer">
-            <p class="form-error" id="session-assign-error"></p>
-            <div class="ex-editor-footer-actions">
-              <button type="button" class="admin-secondary-btn" onclick="AdminPage.closeSessionEditor()">Annuler</button>
-              <button type="submit" class="submit-btn">Enregistrer l'assignation</button>
-            </div>
-          </div>
-        </form>
-      </section>
-    `;
-  }
-
-  function renderSessionAssignmentRowsMarkup(assignments) {
-    const assignmentMap = new Map(assignments.map(a => [a.user_id, a.schedule || []]));
-    if (!users.length) {
-      return '<span class="exercise-inline-help">Aucun utilisateur chargé.</span>';
-    }
-    return users.map(user => {
-      const checked = assignmentMap.has(user.id);
-      const schedule = assignmentMap.get(user.id) || [];
-      return `
-        <div class="exercise-user-row">
-          <label class="exercise-user-main">
-            <input type="checkbox" value="${user.id}" ${checked ? 'checked' : ''}
-              onchange="AdminPage.toggleSessionUserRow(${user.id}, this.checked)" />
-            <span class="exercise-user-avatar">${Gamification.getRank(user.xp).emoji}</span>
-            <span class="exercise-user-meta">
-              <strong>${escapeHtml(user.username)}</strong>
-              <small>${user.is_admin ? 'Admin' : 'Joueur'}</small>
-            </span>
-          </label>
-          <div class="exercise-user-schedule" id="ssp-${user.id}" style="${checked ? '' : 'display:none;'}">
-            <div class="schedule-picker exercise-day-row">${renderDayButtons(schedule)}</div>
-            <p class="exercise-inline-help">Aucun jour = tous les jours pour ${escapeHtml(user.username)}.</p>
-          </div>
-        </div>
-      `;
-    }).join('');
   }
 
   function renderKpiCard(value, label) {
@@ -1136,10 +1112,9 @@ const AdminPage = (() => {
     if (!isCurrentUserAdmin() || !sessionName) return;
     const session = gymSessions.find(s => s.name === sessionName);
     const exCount = session ? (session.exercises || []).length : 0;
-    const assignCount = session ? (session.assignments || []).length : 0;
     App.showConfirm(
       'Supprimer la séance',
-      `Supprimer la séance « ${escapeHtml(sessionName)} » ? ${exCount} exercice${exCount !== 1 ? 's seront archivés' : ' sera archivé'} et ${assignCount} assignation${assignCount !== 1 ? 's seront retirées' : ' sera retirée'}. L'historique des coches passées et les stats sont conservés.`,
+      `Supprimer la séance « ${escapeHtml(sessionName)} » ? ${exCount} exercice${exCount !== 1 ? 's seront archivés' : ' sera archivé'}. L'historique des coches passées et les stats sont conservés.`,
       async ok => {
         if (!ok) return;
         try {
@@ -1155,38 +1130,80 @@ const AdminPage = (() => {
     );
   }
 
-  function closeSessionEditor() {
-    editingSession = null;
-    currentView = 'catalog';
+  // ─── Gym zones inline CRUD ────────────────────────────────────────────
+
+  function startCreateZone(parentId) {
+    if (!isCurrentUserAdmin()) return;
+    creatingZoneParent = parentId === null ? 'root' : parentId;
+    editingZoneId = null;
     renderCurrentView();
   }
 
-  function toggleSessionUserRow(userId, checked) {
-    const picker = document.getElementById(`ssp-${userId}`);
-    if (picker) picker.style.display = checked ? '' : 'none';
+  function startEditZone(zoneId) {
+    if (!isCurrentUserAdmin()) return;
+    editingZoneId = zoneId;
+    creatingZoneParent = null;
+    renderCurrentView();
   }
 
-  async function saveSessionAssignments(event) {
+  function cancelZoneForm() {
+    editingZoneId = null;
+    creatingZoneParent = null;
+    renderCurrentView();
+  }
+
+  async function submitZoneForm(event, zoneId, parentId) {
     event.preventDefault();
-    const errorEl = document.getElementById('session-assign-error');
-    const submitBtn = event.target.querySelector('[type="submit"]');
-
-    const assignmentsData = [...document.querySelectorAll('#session-assign-users input[type="checkbox"]:checked')].map(input => {
-      const userId = parseInt(input.value, 10);
-      const picker = document.getElementById(`ssp-${userId}`);
-      return { user_id: userId, schedule: getActiveDaysFrom(picker) };
-    });
-
-    if (submitBtn) submitBtn.disabled = true;
+    const form = event.target;
+    const data = {
+      name:        form.name.value.trim(),
+      icon:        form.icon.value.trim() || '💪',
+      color:       form.color.value || '#e94560',
+      order_index: form.order_index.value === '' ? undefined : parseInt(form.order_index.value, 10),
+    };
+    if (!data.name) return;
     try {
-      await API.adminAssignGymSession(editingSession, assignmentsData);
-      App.showToast('✅ Assignation enregistrée');
-      closeSessionEditor();
+      if (zoneId) {
+        await API.adminUpdateGymZone(zoneId, data);
+        App.showToast('✅ Zone mise à jour');
+      } else {
+        await API.adminCreateGymZone({ ...data, parent_id: parentId || null });
+        App.showToast('✅ Zone créée');
+      }
+      editingZoneId = null;
+      creatingZoneParent = null;
       await refreshData();
     } catch (err) {
-      if (errorEl) errorEl.textContent = err.message || 'Erreur serveur';
-      if (submitBtn) submitBtn.disabled = false;
+      App.showToast(err.message || 'Erreur serveur');
     }
+  }
+
+  function deleteGymZone(zoneId) {
+    if (!isCurrentUserAdmin() || !zoneId) return;
+    const zone = gymZones.find(z => z.id === zoneId);
+    if (!zone) return;
+    const childCount = gymZones.filter(z => z.parent_id === zoneId).length;
+    App.showConfirm(
+      'Supprimer la zone',
+      `Supprimer la zone « ${escapeHtml(zone.name)} » ?${childCount ? ` ${childCount} sous-zone${childCount !== 1 ? 's seront supprimées' : ' sera supprimée'} aussi.` : ''} L'historique des activités passées sur cette zone sera également effacé.`,
+      async ok => {
+        if (!ok) return;
+        try {
+          await API.adminDeleteGymZone(zoneId);
+          App.showToast('Zone supprimée');
+          await refreshData();
+        } catch (err) {
+          App.showToast(err.message || 'Erreur serveur');
+        }
+      }
+    );
+  }
+
+  function closeSessionEditor() {
+    // Kept as alias for any stale onclick attribute; behaves like cancel.
+    editingSession = null;
+    currentView = 'catalog';
+    renderCurrentView();
   }
 
   function setQuery(query) {
@@ -1341,10 +1358,7 @@ const AdminPage = (() => {
     toggleExerciseState,
     deleteCurrentExercise,
     setCardioActivity,
-    openSessionEditor,
     closeSessionEditor,
-    toggleSessionUserRow,
-    saveSessionAssignments,
     openNewGymExercise,
     openSessionCreator,
     closeSessionCreator,
@@ -1353,6 +1367,11 @@ const AdminPage = (() => {
     closeSessionMetaEditor,
     saveSessionMeta,
     deleteGymSession,
+    startCreateZone,
+    startEditZone,
+    cancelZoneForm,
+    submitZoneForm,
+    deleteGymZone,
   };
 })();
 

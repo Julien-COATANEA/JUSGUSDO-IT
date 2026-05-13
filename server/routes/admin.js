@@ -188,18 +188,16 @@ router.delete('/exercises/:id/assign/:userId', requireAdmin, async (req, res) =>
 
 // ── Gym session assignments ────────────────────────────────
 
-// GET /api/admin/gym-sessions — all gym sessions with their exercises and per-user assignments
+// GET /api/admin/gym-sessions — all gym sessions with their exercises
+// (assignment system removed — sessions are no longer scheduled per user)
 router.get('/gym-sessions', requireAdmin, async (req, res) => {
   try {
-    const [sessionDefs, exResult, assignResult] = await Promise.all([
+    const [sessionDefs, exResult] = await Promise.all([
       db.query(`SELECT name, icon, color FROM gym_sessions ORDER BY order_index, name`),
       db.query(
         `SELECT id, name, emoji, sets, reps, unit, gym_session, order_index
          FROM exercises WHERE type = 'gym' AND is_active = TRUE
          ORDER BY gym_session, order_index, id`
-      ),
-      db.query(
-        `SELECT user_id, session_name, schedule FROM gym_session_assignments ORDER BY session_name, user_id`
       ),
     ]);
 
@@ -210,19 +208,13 @@ router.get('/gym-sessions', requireAdmin, async (req, res) => {
       exBySession[key].push(ex);
     });
 
-    const assignBySession = {};
-    assignResult.rows.forEach(a => {
-      if (!assignBySession[a.session_name]) assignBySession[a.session_name] = [];
-      assignBySession[a.session_name].push({ user_id: a.user_id, schedule: a.schedule || [] });
-    });
-
     const sessions = sessionDefs.rows.map(def => ({
       name: def.name,
       icon: def.icon,
       color: def.color,
       exercises: exBySession[def.name] || [],
-      assignments: assignBySession[def.name] || [],
-      assigned_users: (assignBySession[def.name] || []).map(a => a.user_id),
+      assignments: [],
+      assigned_users: [],
     }));
 
     res.json({ sessions });
@@ -300,10 +292,6 @@ router.put('/gym-sessions/:name', requireAdmin, async (req, res) => {
         [newName, name]
       );
       await client.query(
-        `UPDATE gym_session_assignments SET session_name = $1 WHERE session_name = $2`,
-        [newName, name]
-      );
-      await client.query(
         `UPDATE gym_checklist_entries SET session_name = $1 WHERE session_name = $2`,
         [newName, name]
       );
@@ -347,11 +335,6 @@ router.delete('/gym-sessions/:name', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Séance introuvable' });
     }
 
-    // Drop session-level assignments (no longer scheduled for anyone).
-    await client.query(
-      'DELETE FROM gym_session_assignments WHERE session_name = $1',
-      [name]
-    );
     // Detach exercises that belonged to this session: keep them in the
     // catalogue but unassigned from any session and archived so they no
     // longer appear in the gym scheduler. We do NOT delete them, so any
@@ -375,28 +358,113 @@ router.delete('/gym-sessions/:name', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/admin/gym-sessions/:name/assign — replace assignments for a session
-// Body: { assignments: [{ user_id, schedule }] }
-router.post('/gym-sessions/:name/assign', requireAdmin, async (req, res) => {
-  const { name } = req.params;
-  const { assignments } = req.body;
-  if (!Array.isArray(assignments)) {
-    return res.status(400).json({ error: 'assignments requis (tableau)' });
-  }
-  const assigns = assignments
-    .map(a => ({ user_id: Number(a.user_id), schedule: Array.isArray(a.schedule) ? a.schedule.map(Number) : [] }))
-    .filter(a => a.user_id > 0);
+// ─── Gym work zones (groups + sub-zones) ──────────────────────────────────
+
+// GET /api/admin/gym-zones — flat list ordered for tree rendering
+router.get('/gym-zones', requireAdmin, async (req, res) => {
   try {
-    await db.query('DELETE FROM gym_session_assignments WHERE session_name = $1', [name]);
-    for (const a of assigns) {
-      await db.query(
-        `INSERT INTO gym_session_assignments (user_id, session_name, schedule) VALUES ($1, $2, $3)`,
-        [a.user_id, name, a.schedule]
-      );
+    const result = await db.query(
+      `SELECT id, parent_id, name, icon, color, order_index
+       FROM gym_zones
+       ORDER BY parent_id NULLS FIRST, order_index, id`
+    );
+    res.json({ zones: result.rows });
+  } catch (err) {
+    console.error('[admin] list zones', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/admin/gym-zones  body: { parent_id?, name, icon?, color?, order_index? }
+router.post('/gym-zones', requireAdmin, async (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Le nom de la zone est requis' });
+  const parentId = req.body.parent_id ? parseInt(req.body.parent_id, 10) : null;
+  const icon = req.body.icon || '💪';
+  const color = req.body.color || '#e94560';
+  const orderIndex = req.body.order_index != null ? parseInt(req.body.order_index, 10) : null;
+  try {
+    if (parentId) {
+      const parentRes = await db.query('SELECT id FROM gym_zones WHERE id = $1', [parentId]);
+      if (!parentRes.rows[0]) return res.status(400).json({ error: 'Zone parent introuvable' });
     }
+    const finalOrder = orderIndex != null
+      ? orderIndex
+      : (await db.query(
+          `SELECT COALESCE(MAX(order_index), 0) + 1 AS n FROM gym_zones WHERE COALESCE(parent_id, 0) = $1`,
+          [parentId || 0]
+        )).rows[0].n;
+    const result = await db.query(
+      `INSERT INTO gym_zones (parent_id, name, icon, color, order_index)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, parent_id, name, icon, color, order_index`,
+      [parentId, name, icon, color, finalOrder]
+    );
+    res.status(201).json({ zone: result.rows[0] });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Une zone avec ce nom existe déjà à ce niveau' });
+    }
+    console.error('[admin] create zone', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// PUT /api/admin/gym-zones/:id  body: { name?, icon?, color?, order_index?, parent_id? }
+router.put('/gym-zones/:id', requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: 'ID invalide' });
+  const { name, icon, color, order_index, parent_id } = req.body || {};
+  const cleanName = typeof name === 'string' ? name.trim() : null;
+  const newParent = parent_id !== undefined ? (parent_id ? parseInt(parent_id, 10) : null) : undefined;
+  try {
+    if (newParent !== undefined && newParent === id) {
+      return res.status(400).json({ error: 'Une zone ne peut pas être son propre parent' });
+    }
+    if (newParent) {
+      const parentRes = await db.query('SELECT id FROM gym_zones WHERE id = $1', [newParent]);
+      if (!parentRes.rows[0]) return res.status(400).json({ error: 'Zone parent introuvable' });
+    }
+    const result = await db.query(
+      `UPDATE gym_zones SET
+         name        = COALESCE($1, name),
+         icon        = COALESCE($2, icon),
+         color       = COALESCE($3, color),
+         order_index = COALESCE($4, order_index),
+         parent_id   = CASE WHEN $5::boolean THEN $6 ELSE parent_id END
+       WHERE id = $7
+       RETURNING id, parent_id, name, icon, color, order_index`,
+      [
+        cleanName || null,
+        icon || null,
+        color || null,
+        order_index != null ? parseInt(order_index, 10) : null,
+        newParent !== undefined,
+        newParent !== undefined ? newParent : null,
+        id,
+      ]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Zone introuvable' });
+    res.json({ zone: result.rows[0] });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Une zone avec ce nom existe déjà à ce niveau' });
+    }
+    console.error('[admin] update zone', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// DELETE /api/admin/gym-zones/:id — cascades to children + entries via FK
+router.delete('/gym-zones/:id', requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: 'ID invalide' });
+  try {
+    const result = await db.query('DELETE FROM gym_zones WHERE id = $1 RETURNING id', [id]);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Zone introuvable' });
     res.json({ ok: true });
   } catch (err) {
-    console.error(err);
+    console.error('[admin] delete zone', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });

@@ -233,3 +233,87 @@ CREATE TABLE IF NOT EXISTS gym_session_assignments (
   PRIMARY KEY (user_id, session_name)
 );
 CREATE INDEX IF NOT EXISTS idx_gym_session_assignments_user ON gym_session_assignments(user_id);
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- Gym refactor (May 2026): drop session-level day assignments, introduce
+-- "zones de travail" hierarchy + per-day "rest day" toggle. The Salle tab is
+-- no longer a planning ("today you must do X") but a logbook ("today I worked
+-- on these zones / these sessions"). XP rules:
+--   • Each exercise of a session: 30 XP / N (existing per-session split)
+--   • Each zone toggled active: +30 XP (cumulable, independent budget)
+--   • Rest day: 0 XP, but counts as activity in the calendar
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- Drop the session-level assignment table (no longer used).
+DROP TABLE IF EXISTS gym_session_assignments CASCADE;
+
+-- Hierarchical work zones (groups + sub-zones). parent_id NULL = top-level group.
+CREATE TABLE IF NOT EXISTS gym_zones (
+  id          SERIAL PRIMARY KEY,
+  parent_id   INTEGER REFERENCES gym_zones(id) ON DELETE CASCADE,
+  name        VARCHAR(60) NOT NULL,
+  icon        VARCHAR(10) DEFAULT '💪',
+  color       VARCHAR(20) DEFAULT '#e94560',
+  order_index INTEGER DEFAULT 0,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_gym_zones_parent_name
+  ON gym_zones(COALESCE(parent_id, 0), name);
+CREATE INDEX IF NOT EXISTS idx_gym_zones_parent ON gym_zones(parent_id);
+
+-- Per-user / per-day toggled zones. Each row = "user worked this zone on this date".
+CREATE TABLE IF NOT EXISTS gym_zone_entries (
+  id           SERIAL PRIMARY KEY,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  entry_date   DATE NOT NULL,
+  zone_id      INTEGER NOT NULL REFERENCES gym_zones(id) ON DELETE CASCADE,
+  completed_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, entry_date, zone_id)
+);
+CREATE INDEX IF NOT EXISTS idx_gym_zone_entries_user_date ON gym_zone_entries(user_id, entry_date);
+
+-- Per-user / per-day "rest day" flag (Salle only).
+CREATE TABLE IF NOT EXISTS gym_rest_days (
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  entry_date DATE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, entry_date)
+);
+
+-- Seed default zones (5 top-level groups + sub-zones for BRAS / JAMBES).
+DO $$
+DECLARE
+  v_bras_id    INTEGER;
+  v_jambes_id  INTEGER;
+BEGIN
+  -- Top-level groups (idempotent on parent_id NULL + name)
+  INSERT INTO gym_zones (parent_id, name, icon, color, order_index) VALUES
+    (NULL, 'PECS',          '💪', '#e94560', 1),
+    (NULL, 'DOS / Lombaire','🏋️', '#7c5cbf', 2),
+    (NULL, 'ÉPAULES',       '🤸', '#3b82f6', 3),
+    (NULL, 'BRAS',          '💪', '#fbbf24', 4),
+    (NULL, 'JAMBES',        '🦵', '#22d18b', 5)
+  ON CONFLICT DO NOTHING;
+
+  SELECT id INTO v_bras_id   FROM gym_zones WHERE parent_id IS NULL AND name = 'BRAS';
+  SELECT id INTO v_jambes_id FROM gym_zones WHERE parent_id IS NULL AND name = 'JAMBES';
+
+  IF v_bras_id IS NOT NULL THEN
+    INSERT INTO gym_zones (parent_id, name, icon, color, order_index) VALUES
+      (v_bras_id, 'Biceps',     '💪', '#fbbf24', 1),
+      (v_bras_id, 'Triceps',    '💪', '#fbbf24', 2),
+      (v_bras_id, 'Avant-bras', '💪', '#fbbf24', 3)
+    ON CONFLICT DO NOTHING;
+  END IF;
+
+  IF v_jambes_id IS NOT NULL THEN
+    INSERT INTO gym_zones (parent_id, name, icon, color, order_index) VALUES
+      (v_jambes_id, 'Ischio',     '🦵', '#22d18b', 1),
+      (v_jambes_id, 'Quadriceps', '🦵', '#22d18b', 2),
+      (v_jambes_id, 'Adducteur',  '🦵', '#22d18b', 3),
+      (v_jambes_id, 'Abducteur',  '🦵', '#22d18b', 4),
+      (v_jambes_id, 'Fesses',     '🍑', '#22d18b', 5),
+      (v_jambes_id, 'Mollets',    '🦵', '#22d18b', 6)
+    ON CONFLICT DO NOTHING;
+  END IF;
+END$$;

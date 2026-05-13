@@ -75,72 +75,10 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// Static session metadata for gym-assigned grouping
-const GYM_SESSION_META = {
-  'Pecs Triceps': { icon: '💪', color: '#e94560' },
-  'Dos Biceps':   { icon: '🍋️', color: '#7c5cbf' },
-  'Jambes':       { icon: '🦵', color: '#22d18b' },
-  'Full':         { icon: '⚡', color: '#fbbf24' },
-};
-const GYM_SESSION_ORDER = ['Pecs Triceps', 'Dos Biceps', 'Jambes', 'Full'];
-
-// GET /api/exercises/gym-assigned?date=YYYY-MM-DD
-// Returns gym exercises assigned to the current user for the given date's day-of-week,
-// grouped by gym_session (using gym_session_assignments table). Returns empty if no assignments.
-router.get('/gym-assigned', requireAuth, async (req, res) => {
-  const { date } = req.query;
-  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!date || !dateRegex.test(date)) {
-    return res.status(400).json({ error: 'Paramètre date requis (YYYY-MM-DD)' });
-  }
-
-  try {
-    const result = await db.query(
-      `SELECT e.id, e.name, e.emoji, e.sets, e.reps, e.unit,
-              e.gym_session, e.order_index
-       FROM exercises e
-       WHERE e.is_active = TRUE
-         AND e.type = 'gym'
-         AND e.gym_session IN (
-           SELECT session_name FROM gym_session_assignments
-           WHERE user_id = $1
-             AND (
-               COALESCE(array_length(schedule, 1), 0) = 0
-               OR EXTRACT(DOW FROM $2::date)::int = ANY(schedule)
-             )
-         )
-       ORDER BY e.gym_session, e.order_index ASC, e.id ASC`,
-      [req.user.id, date]
-    );
-
-    // Group by gym_session
-    const sessionMap = {};
-    result.rows.forEach(ex => {
-      const key = ex.gym_session || 'Autre';
-      if (!sessionMap[key]) sessionMap[key] = [];
-      sessionMap[key].push({ id: ex.id, name: ex.name, emoji: ex.emoji, sets: ex.sets, reps: ex.reps, unit: ex.unit });
-    });
-
-    const sessions = GYM_SESSION_ORDER
-      .filter(s => sessionMap[s])
-      .map(s => ({
-        name: s,
-        icon: (GYM_SESSION_META[s] || {}).icon || '🍋️',
-        color: (GYM_SESSION_META[s] || {}).color || '#888',
-        exercises: sessionMap[s],
-      }));
-
-    // Append sessions not in known order
-    Object.keys(sessionMap)
-      .filter(k => !GYM_SESSION_ORDER.includes(k))
-      .forEach(k => sessions.push({ name: k, icon: '🍋️', color: '#888', exercises: sessionMap[k] }));
-
-    res.json({ sessions });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Erreur serveur' });
-  }
-});
+// NOTE: GET /exercises/gym-assigned was removed in the May 2026 Salle refactor.
+// Day-of-week assignment of sessions is gone; the Salle UI now reads
+// /exercises/gym-sessions-all for the full session catalogue and lets the
+// user pick what they did on a given day (no scheduled "todo" anymore).
 
 // GET /api/checklist?start=YYYY-MM-DD&end=YYYY-MM-DD
 // Returns checklist entries for the authenticated user in a date range
