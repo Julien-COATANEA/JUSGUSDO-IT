@@ -444,7 +444,6 @@ const MuscuPage = (() => {
     });
 
     return `
-      <div class="muscu-sessions-label">📋 Programme des séances</div>
       <div class="muscu-sessions">
         ${_muscuSessions.map((session, idx) => {
           const allExercises = _getSessionExercises(session);
