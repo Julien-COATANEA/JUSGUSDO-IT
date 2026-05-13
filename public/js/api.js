@@ -90,6 +90,7 @@ const API = (() => {
     toggleGymChecklist: (exercise_name, session_name, entry_date) =>
       request('POST', '/gym-checklist/toggle', { exercise_name, session_name, entry_date }),
     getGymStats: (userId) => request('GET', `/gym-checklist/stats/${userId}`),
+    getGymDayDetail: (userId, date) => request('GET', `/gym-checklist/day/${userId}/${date}`),
     // All gym sessions with exercises (for Records tab + day actions sheet)
     getGymSessionsAll: () => request('GET', '/exercises/gym-sessions-all'),
     // Gym work zones (groups + sub-zones, read-only for users)

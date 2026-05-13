@@ -353,6 +353,25 @@ function _applyDevMock() {
     } };
   };
 
+  API.getGymDayDetail = async (_userId, date) => {
+    const exercises = _devGymEntries
+      .filter(e => e.entry_date === date && e.completed)
+      .map(e => ({ exercise_name: e.exercise_name, session_name: e.session_name, completed_at: e.completed_at || null }));
+    const zones = _devGymZoneEntries
+      .filter(z => z.entry_date === date)
+      .map(z => {
+        const zone = _devGymZones.find(g => g.id === z.zone_id);
+        const parent = zone && zone.parent_id ? _devGymZones.find(g => g.id === zone.parent_id) : null;
+        return zone ? {
+          id: zone.id, name: zone.name, icon: zone.icon, color: zone.color,
+          parent_name: parent ? parent.name : null,
+          parent_icon: parent ? parent.icon : null,
+        } : null;
+      })
+      .filter(Boolean);
+    return { date, is_rest: _devGymRestDays.has(date), exercises, zones };
+  };
+
   // Gym work zones (groups + sub-zones)
   let _devGymZones = [
     { id: 1, parent_id: null, name: 'PECS',           icon: '💪', color: '#e94560', order_index: 1 },

@@ -278,6 +278,7 @@ const ProfilePage = (() => {
           <div class="cal-cell rest" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Repos</span>
           <div class="cal-cell empty" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Inactif</span>
         </div>
+        <div id="gym-day-detail" class="gym-day-detail" aria-live="polite"></div>
       </div>`;
   }
 
@@ -296,7 +297,8 @@ const ProfilePage = (() => {
         const zDone  = day.zones_done || 0;
         const isRest = !!day.is_rest;
         const isAct  = !!day.is_active || (exDone + zDone > 0);
-        const cls = day.date > today ? 'future'
+        const isFuture = day.date > today;
+        const cls = isFuture ? 'future'
                   : isAct  ? 'active'
                   : isRest ? 'rest'
                   : 'empty';
@@ -305,7 +307,11 @@ const ProfilePage = (() => {
           : isRest
             ? `${day.date} · Jour de repos`
             : `${day.date} · Inactif`;
-        return `<div class="cal-cell ${cls}${day.date === today ? ' cal-today' : ''}" title="${tip}"></div>`;
+        const clickable = !isFuture;
+        const attrs = clickable
+          ? `role="button" tabindex="0" onclick="ProfilePage.openGymDay('${day.date}', this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ProfilePage.openGymDay('${day.date}', this);}"`
+          : '';
+        return `<div class="cal-cell ${cls}${day.date === today ? ' cal-today' : ''}${clickable ? ' clickable' : ''}" data-date="${day.date}" title="${tip}" ${attrs}></div>`;
       }).join('');
       return `<div class="cal-week-col"><div class="cal-month-label">${monthLabel}</div>${cells}</div>`;
     }).join('');
@@ -365,6 +371,112 @@ const ProfilePage = (() => {
     const nextBtn = document.getElementById('gym-cal-next');
     if (prevBtn) prevBtn.disabled = _gymCalPage >= maxPage;
     if (nextBtn) nextBtn.disabled = _gymCalPage <= 0;
+  }
+
+  // ── Gym day detail (click on a calendar cell) ───────────────
+  let _gymDayOpen = null; // currently open date, or null
+  async function openGymDay(date, cellEl) {
+    const panel = document.getElementById('gym-day-detail');
+    if (!panel) return;
+
+    // Toggle off if clicking the same day
+    if (_gymDayOpen === date) {
+      panel.innerHTML = '';
+      panel.classList.remove('open');
+      _gymDayOpen = null;
+      document.querySelectorAll('.cal-cell.cal-selected').forEach(el => el.classList.remove('cal-selected'));
+      return;
+    }
+    _gymDayOpen = date;
+
+    // Highlight the selected cell
+    document.querySelectorAll('.cal-cell.cal-selected').forEach(el => el.classList.remove('cal-selected'));
+    if (cellEl) cellEl.classList.add('cal-selected');
+
+    const niceDate = new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    });
+    panel.classList.add('open');
+    panel.innerHTML = `
+      <div class="gym-day-detail-head">
+        <div class="gym-day-detail-title">${niceDate.charAt(0).toUpperCase() + niceDate.slice(1)}</div>
+        <button class="gym-day-detail-close" onclick="ProfilePage.openGymDay('${date}')" title="Fermer">✕</button>
+      </div>
+      <div class="gym-day-detail-body"><p style="color:var(--text3);text-align:center;padding:12px 0">Chargement…</p></div>`;
+
+    try {
+      const data = await API.getGymDayDetail(_profileUserId, date);
+      const ex   = data.exercises || [];
+      const zns  = data.zones || [];
+      const isRest = !!data.is_rest;
+
+      // Group exercises by session_name
+      const bySession = {};
+      ex.forEach(e => {
+        const k = e.session_name || 'Autre';
+        if (!bySession[k]) bySession[k] = [];
+        bySession[k].push(e);
+      });
+      // Group zones by parent
+      const byParent = {};
+      zns.forEach(z => {
+        const k = z.parent_name || z.name;
+        if (!byParent[k]) byParent[k] = { icon: z.parent_icon || z.icon, items: [] };
+        if (z.parent_name) byParent[k].items.push(z);
+      });
+
+      let bodyHtml = '';
+
+      if (!ex.length && !zns.length && !isRest) {
+        bodyHtml = `<p class="gym-day-empty">😴 Aucune activité enregistrée ce jour-là.</p>`;
+      } else {
+        if (isRest) {
+          bodyHtml += `<div class="gym-day-rest-badge">🛌 Jour de repos déclaré</div>`;
+        }
+        if (ex.length) {
+          bodyHtml += `<div class="gym-day-section-title">🏋️ Exercices (${ex.length})</div>`;
+          bodyHtml += Object.entries(bySession).map(([sess, items]) => `
+            <div class="gym-day-group">
+              <div class="gym-day-group-label">${_escape(sess)}</div>
+              <ul class="gym-day-list">
+                ${items.map(e => `<li>${_escape(e.exercise_name)}</li>`).join('')}
+              </ul>
+            </div>`).join('');
+        }
+        if (zns.length) {
+          bodyHtml += `<div class="gym-day-section-title">🎯 Zones travaillées (${zns.length})</div>`;
+          // Solo zones (no parent) shown as chips first
+          const solo = zns.filter(z => !z.parent_name);
+          if (solo.length) {
+            bodyHtml += `<div class="gym-day-zone-chips">${solo.map(z => `
+              <span class="gym-day-zone-chip" style="--zc:${z.color || '#888'}">
+                <span>${z.icon || '•'}</span>${_escape(z.name)}
+              </span>`).join('')}</div>`;
+          }
+          // Grouped sub-zones
+          Object.entries(byParent).forEach(([parent, info]) => {
+            if (!info.items.length) return;
+            bodyHtml += `
+              <div class="gym-day-group">
+                <div class="gym-day-group-label">${info.icon || '•'} ${_escape(parent)}</div>
+                <div class="gym-day-zone-chips">
+                  ${info.items.map(z => `
+                    <span class="gym-day-zone-chip" style="--zc:${z.color || '#888'}">
+                      <span>${z.icon || '•'}</span>${_escape(z.name)}
+                    </span>`).join('')}
+                </div>
+              </div>`;
+          });
+        }
+      }
+
+      const body = panel.querySelector('.gym-day-detail-body');
+      if (body) body.innerHTML = bodyHtml;
+    } catch (err) {
+      const body = panel.querySelector('.gym-day-detail-body');
+      if (body) body.innerHTML = `<p style="color:#ef4444;text-align:center;padding:12px 0">⚠️ Erreur de chargement</p>`;
+      console.error('[Profile] getGymDayDetail failed:', err);
+    }
   }
 
   // ── 1. Hero card ────────────────────────────────────────────
@@ -934,6 +1046,6 @@ const ProfilePage = (() => {
     }
   }
 
-  return { render, init, switchStatsTab, calPage, gymCalPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar };
+  return { render, init, switchStatsTab, calPage, gymCalPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar, openGymDay };
 })();
 

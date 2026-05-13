@@ -459,4 +459,48 @@ router.get('/stats/:id', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/gym-checklist/day/:userId/:date
+// Detailed activity for a single day: exercises completed, zones toggled, rest flag.
+router.get('/day/:userId/:date', requireAuth, async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  const date   = String(req.params.date || '').trim();
+  if (!userId || isNaN(userId)) return res.status(400).json({ error: 'ID invalide' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'Date invalide' });
+
+  try {
+    const [exRes, zRes, restRes] = await Promise.all([
+      db.query(
+        `SELECT exercise_name, session_name, completed_at
+           FROM gym_checklist_entries
+          WHERE user_id = $1 AND entry_date = $2 AND completed = TRUE
+          ORDER BY completed_at NULLS LAST, exercise_name`,
+        [userId, date]
+      ),
+      db.query(
+        `SELECT z.id, z.name, z.icon, z.color, p.name AS parent_name, p.icon AS parent_icon, e.created_at
+           FROM gym_zone_entries e
+           JOIN gym_zones z ON z.id = e.zone_id
+      LEFT JOIN gym_zones p ON p.id = z.parent_id
+          WHERE e.user_id = $1 AND e.entry_date = $2
+          ORDER BY p.name NULLS FIRST, z.name`,
+        [userId, date]
+      ),
+      db.query(
+        `SELECT 1 FROM gym_rest_days WHERE user_id = $1 AND entry_date = $2 LIMIT 1`,
+        [userId, date]
+      ),
+    ]);
+
+    res.json({
+      date,
+      is_rest: restRes.rowCount > 0,
+      exercises: exRes.rows,
+      zones: zRes.rows,
+    });
+  } catch (err) {
+    console.error('[gym] day detail', err);
+    res.status(500).json({ error: 'Erreur serveur', detail: err.message });
+  }
+});
+
 module.exports = router;
