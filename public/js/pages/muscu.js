@@ -2,7 +2,7 @@
 const MuscuPage = (() => {
   let _userId = null;
   let _customSessionExercises = {}; // { [sessionName]: string[] } – stored in localStorage
-  let _activeTab = 'seance';  // 'records' | 'seance'
+  let _activeTab = 'planning';  // 'records' | 'planning'
   let _gymWeekOffset = 0;          // week offset (0 = current week)
   let _gymEntries = {};            // 'YYYY-MM-DD_exnamelower' → { completed, session_name }
   let _gymSessionsCatalog = [];    // [{ name, icon, color, exercises: [{id,name,emoji,sets,reps,unit}] }]
@@ -80,7 +80,7 @@ const MuscuPage = (() => {
         </header>
         <div class="muscu-tab-bar">
           <button class="muscu-tab${_activeTab === 'records' ? ' active' : ''}" onclick="MuscuPage.switchMuscuTab('records')">📊 Records</button>
-          <button class="muscu-tab${_activeTab === 'seance' ? ' active' : ''}" onclick="MuscuPage.switchMuscuTab('seance')">🏋️ Séance</button>
+          <button class="muscu-tab${_activeTab === 'planning' ? ' active' : ''}" onclick="MuscuPage.switchMuscuTab('planning')">📅 Planning</button>
         </div>
         <div id="muscu-content" style="padding:0 0 100px">
           <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
@@ -106,7 +106,7 @@ const MuscuPage = (() => {
     const container = document.getElementById('muscu-content');
     if (!container) return;
 
-    if (_activeTab === 'seance') {
+    if (_activeTab === 'planning') {
       await _initSeanceTab(container);
     } else {
       await _initRecordsTab(container);
@@ -772,7 +772,7 @@ const MuscuPage = (() => {
     // Update tab buttons
     document.querySelectorAll('.muscu-tab').forEach(btn => {
       const isActive = (btn.textContent.includes('Records') && tab === 'records') ||
-                       (btn.textContent.includes('Séance')  && tab === 'seance');
+                       (btn.textContent.includes('Planning') && tab === 'planning');
       btn.classList.toggle('active', isActive);
     });
     init();
@@ -1146,7 +1146,7 @@ const MuscuPage = (() => {
   async function _refresh() {
     const container = document.getElementById('muscu-content');
     if (!container) return;
-    if (_activeTab === 'seance') {
+    if (_activeTab === 'planning') {
       await _initSeanceTab(container);
       return;
     }
