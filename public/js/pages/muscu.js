@@ -786,8 +786,9 @@ const MuscuPage = (() => {
         localStorage.setItem('user', JSON.stringify(stored));
       }
       if (result.xpDelta) {
-        const anchor = document.querySelector(`.zone-chip.on, .zone-chip`);
-        Gamification.spawnXPPopup(anchor, `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
+        const anchor = document.querySelector(`.zone-tile.on, .zone-card.on, .zone-tile, .zone-card`)
+                    || document.querySelector('.gym-day-sheet');
+        if (anchor) Gamification.spawnXPPopup(anchor, `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
       }
       _refreshDayUI(dateStr);
     } catch (err) {
