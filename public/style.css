@@ -342,7 +342,9 @@ html, body {
 .wsd.rest      .wsd-inner { color: var(--text3); }
 .wsd.rest      .wsd-ring  { opacity: 0.3; }
 .wsd.today-dot .wsd-ring  { box-shadow: 0 0 0 2.5px var(--accent3); }
-.wsd.future    .wsd-ring  { opacity: 0.3; }
+.wsd.future    .wsd-ring  { opacity: 0.22; }
+.wsd.idle      .wsd-ring  { background: conic-gradient(rgba(255,255,255,0.14) 100%, rgba(255,255,255,0.05) 0%); }
+.wsd.idle      .wsd-inner { color: rgba(255,255,255,0.35); }
 .wsd-lbl { font-size: 9px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; }
 .wsd.today-dot .wsd-lbl { color: var(--accent3); }
 .wsd.done      .wsd-lbl { color: var(--green); }
@@ -399,6 +401,7 @@ html, body {
 }
 .day-card.completed { border-color: rgba(34,209,139,0.35); box-shadow: 0 2px 20px rgba(34,209,139,0.08); }
 .day-card.missed-day { border-color: rgba(239,68,68,0.2); }
+.day-card.past:not(.completed):not(.gym-rest-day) { opacity: 0.55; }
 .day-header {
   padding: 14px 14px;
   display: flex;
