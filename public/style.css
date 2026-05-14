@@ -1031,6 +1031,13 @@ html, body {
 .ex-admin-primary {
   align-self: flex-start;
   white-space: nowrap;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  box-shadow: none;
+}
+.ex-admin-primary:hover {
+  background: var(--bg3);
 }
 
 .ex-admin-kpis {
@@ -4430,13 +4437,25 @@ html, body {
   line-height: 1;
   border-radius: 10px;
   min-width: 36px;
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text2);
+  box-shadow: none;
+  opacity: 0.75;
+}
+.gym-admin-session-edit-btn:hover {
+  background: var(--bg3);
+  opacity: 1;
+  color: var(--text);
 }
 .gym-admin-session-delete-btn {
-  color: var(--accent);
-  border-color: rgba(233, 69, 96, 0.35);
+  color: var(--text3);
+  border-color: var(--border);
 }
 .gym-admin-session-delete-btn:hover {
-  background: rgba(233, 69, 96, 0.12);
+  background: rgba(233, 69, 96, 0.1);
+  color: var(--accent);
+  opacity: 1;
 }
 @media (max-width: 480px) {
   .gym-admin-session-card-actions {
