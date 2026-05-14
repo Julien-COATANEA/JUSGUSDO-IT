@@ -28,7 +28,6 @@ const HomePage = (() => {
         </header>
 
         <div id="activity-container">
-          <div id="wizz-notif-banner" class="wizz-notif-banner" style="display:none" onclick="Router.navigate('profile',{userId: JSON.parse(localStorage.getItem('user')||sessionStorage.getItem('user')||'{}').id})"></div>
           <p class="home-title">Chacun à son rythme 🌱</p>
           <div class="players-grid" id="players-grid">
             <div class="skeleton-card" style="height:220px"></div>
@@ -60,10 +59,8 @@ const HomePage = (() => {
         total: _scheduledExIds.size,
       };
       renderActivity(users);
-      // Check for unread wizz
-      const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
-      _checkUnreadWizz(me);
       // Mini-game levels badge
+      const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
       _updateMinigameBadge(me);
     } catch (err) {
       document.getElementById('activity-container').innerHTML =
@@ -89,8 +86,6 @@ const HomePage = (() => {
           total: _scheduledExIds.size,
         };
         renderActivity(users);
-        const me = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
-        _checkUnreadWizz(me);
       } catch (_) {}
     }, 60_000);
   }
@@ -148,19 +143,6 @@ const HomePage = (() => {
         </div>
       `;
     }).join('');
-  }
-
-  // ── Wizz notification ───────────────────────────────────────
-  async function _checkUnreadWizz(me) {
-    if (!me?.id) return;
-    try {
-      const { unread } = await API.getWizz(me.id);
-      const banner = document.getElementById('wizz-notif-banner');
-      if (banner && unread > 0) {
-        banner.style.display = 'flex';
-        banner.innerHTML = `<span class="wizz-notif-icon">⚡</span> Tu as <strong>${unread}</strong> wizz non lu${unread > 1 ? 's' : ''} ! Tap pour voir`;
-      }
-    } catch (_) {}
   }
 
   async function _updateMinigameBadge(me) {
