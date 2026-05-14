@@ -4471,6 +4471,36 @@ html, body {
   font-size: 13px;
   color: var(--text2);
 }
+/* Inline exercise items inside session creator */
+.gym-admin-session-ex-list-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.gym-admin-session-ex-inline-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--card2);
+  font-size: 13px;
+  color: var(--text);
+}
+.gym-admin-ex-remove-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text3);
+  padding: 0 4px;
+  line-height: 1;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+.gym-admin-ex-remove-btn:hover { color: #ef4444; }
 .gym-admin-session-ex-item {
   display: flex;
   align-items: center;

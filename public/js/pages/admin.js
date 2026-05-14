@@ -531,7 +531,7 @@ const AdminPage = (() => {
         <div class="ex-editor-top">
           <span class="ex-editor-top-emoji" id="new-session-icon-preview">💪</span>
           <div class="ex-editor-top-info">
-            <h1>Nouvelle séance</h1>
+            <h1 id="new-session-name-preview">Nouvelle séance</h1>
             <div class="ex-editor-top-chips"><span class="ex-editor-top-chip">Salle de sport</span></div>
           </div>
         </div>
@@ -546,7 +546,8 @@ const AdminPage = (() => {
               </div>
               <div class="form-group" style="flex:3">
                 <label>Nom de la séance *</label>
-                <input type="text" id="new-session-name" placeholder="Ex: Épaules Cardio" required />
+                <input type="text" id="new-session-name" placeholder="Ex: Épaules Cardio" required
+                  oninput="const h=document.getElementById('new-session-name-preview');if(h)h.textContent=this.value||'Nouvelle séance'" />
               </div>
             </div>
             <div class="form-group" style="margin-top:12px">
@@ -558,10 +559,21 @@ const AdminPage = (() => {
             <div class="form-group" style="margin-top:12px">
               <label>Couleur</label>
               <div class="gym-session-color-swatches">
-                ${PRESET_COLORS.map(c => `<button type="button" class="gym-swatch-color" style="background:${c}" data-color="${c}" onclick="this.closest('.gym-session-color-swatches').querySelectorAll('.gym-swatch-color').forEach(b=>b.classList.remove('active'));this.classList.add('active');document.getElementById('new-session-color').value='${c}'"></button>`).join('')}
+                ${PRESET_COLORS.map((c, i) => `<button type="button" class="gym-swatch-color${i === 0 ? ' active' : ''}" style="background:${c}" data-color="${c}" onclick="this.closest('.gym-session-color-swatches').querySelectorAll('.gym-swatch-color').forEach(b=>b.classList.remove('active'));this.classList.add('active');document.getElementById('new-session-color').value='${c}'"></button>`).join('')}
               </div>
               <input type="hidden" id="new-session-color" value="${PRESET_COLORS[0]}" />
             </div>
+          </section>
+          <section class="ex-editor-section" id="new-session-exercises-section">
+            <h2 class="ex-editor-section-title">Exercices <span id="new-session-ex-count" style="font-weight:500;color:var(--text3)"></span></h2>
+            <div id="new-session-ex-list" class="gym-admin-session-ex-list-inline"></div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+              <input type="text" id="new-session-ex-input" placeholder="Nom de l'exercice" maxlength="80"
+                style="flex:1;min-width:140px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:var(--text);font:inherit"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();AdminPage._addPendingExercise();}" />
+              <button type="button" class="submit-btn" style="padding:8px 16px" onclick="AdminPage._addPendingExercise()">+ Ajouter</button>
+            </div>
+            <p style="font-size:11px;color:var(--text3);margin-top:6px">Tu pourras toujours en ajouter plus tard depuis le catalogue.</p>
           </section>
           <div class="ex-editor-footer">
             <p class="form-error" id="new-session-error"></p>
@@ -573,6 +585,34 @@ const AdminPage = (() => {
         </form>
       </section>
     `;
+  }
+
+  // pending exercises list for session creation
+  let _pendingExercises = [];
+  function _addPendingExercise() {
+    const input = document.getElementById('new-session-ex-input');
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) return;
+    _pendingExercises.push({ name, emoji: '💪' });
+    input.value = '';
+    _renderPendingExercises();
+    input.focus();
+  }
+  function _removePendingExercise(idx) {
+    _pendingExercises.splice(idx, 1);
+    _renderPendingExercises();
+  }
+  function _renderPendingExercises() {
+    const list = document.getElementById('new-session-ex-list');
+    const count = document.getElementById('new-session-ex-count');
+    if (!list) return;
+    if (count) count.textContent = _pendingExercises.length ? `(${_pendingExercises.length})` : '';
+    list.innerHTML = _pendingExercises.map((ex, i) => `
+      <div class="gym-admin-session-ex-inline-item">
+        <span>💪 ${escapeHtml(ex.name)}</span>
+        <button type="button" class="gym-admin-ex-remove-btn" onclick="AdminPage._removePendingExercise(${i})" title="Retirer">✕</button>
+      </div>`).join('');
   }
 
   function renderGymSessionMetaEditorPage() {
@@ -1037,6 +1077,7 @@ const AdminPage = (() => {
 
   function openSessionCreator() {
     if (!isCurrentUserAdmin()) return;
+    _pendingExercises = [];
     currentView = 'session-creator';
     renderCurrentView();
   }
@@ -1057,7 +1098,23 @@ const AdminPage = (() => {
     if (submitBtn) submitBtn.disabled = true;
     try {
       await API.adminCreateGymSession({ name, icon, color });
-      App.showToast('✅ Séance créée');
+      const exCount = _pendingExercises.length;
+      if (exCount > 0) {
+        await Promise.all(_pendingExercises.map((ex, i) =>
+          API.adminCreateExercise({
+            emoji: ex.emoji || '💪',
+            name: ex.name,
+            sets: 3, reps: 10, unit: 'répétitions',
+            order_index: i,
+            schedule: [],
+            is_running: false,
+            type: 'gym',
+            gym_session: name,
+          }).catch(() => {})
+        ));
+      }
+      _pendingExercises = [];
+      App.showToast('✅ Séance créée' + (exCount > 0 ? ` + ${exCount} exercice(s)` : ''));
       closeSessionCreator();
       await refreshData();
     } catch (err) {
@@ -1364,6 +1421,8 @@ const AdminPage = (() => {
     openSessionCreator,
     closeSessionCreator,
     saveNewSession,
+    _addPendingExercise,
+    _removePendingExercise,
     openSessionMetaEditor,
     closeSessionMetaEditor,
     saveSessionMeta,
