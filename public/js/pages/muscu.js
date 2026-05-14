@@ -396,10 +396,14 @@ const MuscuPage = (() => {
     const THRESHOLD = 80; // px downward drag to trigger close
 
     function onStart(e) {
-      // Only start drag from the handle or sheet header
-      const handle = panel.querySelector('.sheet-handle, .sheet-header');
-      if (!handle) return;
+      // Only start drag if touch/click originates from the handle or header (not the scrollable body)
+      const handle = panel.querySelector('.sheet-handle');
+      const header = panel.querySelector('.sheet-header');
       const src = e.touches ? e.touches[0] : e;
+      const target = document.elementFromPoint(src.clientX, src.clientY);
+      const inHandle = handle && (handle === target || handle.contains(target));
+      const inHeader = header && (header === target || header.contains(target));
+      if (!inHandle && !inHeader) return;
       startY = src.clientY; startX = src.clientX; currentY = 0; dragging = true;
       panel.style.transition = 'none';
     }
