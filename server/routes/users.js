@@ -537,7 +537,7 @@ router.post('/:id/send-wizz', requireAuth, async (req, res) => {
       await pushModule.sendNotificationToUser(receiverId, {
         title: `⚡ Wizz de ${sender.username || 'quelqu’un'}`,
         body: `${msg.emoji} ${msg.text}`,
-        url: '/',
+        url: `/?wizz=1&from=${encodeURIComponent(sender.username || '')}`,
         tag: `wizz-${receiverId}`,
         renotify: true,
         vibrate: [250, 120, 250, 120, 250],

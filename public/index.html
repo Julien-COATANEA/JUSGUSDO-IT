@@ -73,5 +73,37 @@
   <script src="/js/pages/profile.js"></script>
   <script src="/js/pages/muscu.js"></script>
   <script src="/js/router.js"></script>
+
+  <!-- ── Wizz notification splash ──────────────────────────── -->
+  <div id="wizz-splash" style="display:none" onclick="this.style.display='none'">
+    <div class="wizz-splash-inner" onclick="event.stopPropagation()">
+      <div class="wizz-splash-label">⚡ T'AS REÇU UN WIZZ</div>
+      <div class="wizz-splash-from" id="wizz-splash-from"></div>
+      <div class="wizz-splash-gif-wrap">
+        <img class="wizz-splash-gif" id="wizz-splash-img"
+          src="https://media.giphy.com/media/OUwzqE4ZOk5Bm/giphy.gif"
+          alt="miam miam"
+          onerror="this.src='https://media.giphy.com/media/xT9DPJVjlYHwWsZRxm/giphy.gif'" />
+      </div>
+      <div class="wizz-splash-msg">t'as intérêt à aller t'entraîner 😏</div>
+      <button class="wizz-splash-close" onclick="document.getElementById('wizz-splash').style.display='none'">OK j'y vais 💪</button>
+    </div>
+  </div>
+  <script>
+    (function() {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('wizz') === '1') {
+        window.history.replaceState({}, '', '/');
+        const from = p.get('from') ? decodeURIComponent(p.get('from')) : '';
+        setTimeout(function() {
+          const splash = document.getElementById('wizz-splash');
+          if (!splash) return;
+          const fromEl = document.getElementById('wizz-splash-from');
+          if (fromEl) fromEl.textContent = from ? 'De la part de ' + from + ' \ud83d\ude0f' : '\u26a1 Quelqu\u2019un pense \u00e0 toi';
+          splash.style.display = 'flex';
+        }, 350);
+      }
+    })();
+  </script>
 </body>
 </html>
