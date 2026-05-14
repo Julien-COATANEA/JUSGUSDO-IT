@@ -249,6 +249,16 @@ const ProfilePage = (() => {
     for (let i = 0; i < calendar.length; i += 7) {
       _gymCalendarWeeks.push(calendar.slice(i, i + 7));
     }
+    // Pad to at least 4 weeks for visual balance
+    while (_gymCalendarWeeks.length < 4) {
+      const firstDate = new Date(_gymCalendarWeeks[0][0].date + 'T12:00:00');
+      const padWeek = Array.from({length: 7}, (_, i) => {
+        const d = new Date(firstDate);
+        d.setDate(firstDate.getDate() - 7 + i);
+        return { date: d.toISOString().split('T')[0], done: 0, total: 0 };
+      });
+      _gymCalendarWeeks.unshift(padWeek);
+    }
     _gymCalPage = 0;
 
     const weeksSlice = _gymCalendarWeeks;
@@ -552,6 +562,16 @@ const ProfilePage = (() => {
     for (let i = 0; i < calendar.length; i += 7) {
       _calendarWeeks.push(calendar.slice(i, i + 7));
     }
+    // Pad to at least 4 weeks for visual balance
+    while (_calendarWeeks.length < 4) {
+      const firstDate = new Date(_calendarWeeks[0][0].date + 'T12:00:00');
+      const padWeek = Array.from({length: 7}, (_, i) => {
+        const d = new Date(firstDate);
+        d.setDate(firstDate.getDate() - 7 + i);
+        return { date: d.toISOString().split('T')[0], done: 0, total: 0 };
+      });
+      _calendarWeeks.unshift(padWeek);
+    }
     _calPage = 0; // reset to most recent page
 
     // Initial render with all weeks; _autoSizeCalendar() will trim to fit after paint
@@ -697,6 +717,16 @@ const ProfilePage = (() => {
     xpHistory.forEach(r => { xpMap[r.date] = r.xp_earned; });
     const values = days.map(d => xpMap[d] || 0);
     const maxVal = Math.max(...values, 1);
+
+    // If fewer than 3 days with XP, show a placeholder instead of near-empty chart
+    const nonZeroCount = values.filter(v => v > 0).length;
+    if (nonZeroCount < 3) {
+      return `
+      <div class="profile-section" style="animation:fadeIn 0.3s ease 0.13s both">
+        <div class="profile-section-title">XP — 30 derniers jours</div>
+        <p style="font-size:13px;color:var(--text3);margin:10px 0 6px;text-align:center">Pas encore assez de données 📊</p>
+      </div>`;
+    }
 
     const W = 320, H = 80, PAD = 4;
     const barW = (W - PAD * 2) / 30 - 1;
@@ -865,12 +895,12 @@ const ProfilePage = (() => {
         <div class="profile-section-title">🔔 Notifications</div>
         <div class="notif-row" id="notif-row" style="display:flex;align-items:center;gap:12px;margin-top:8px">
           <span class="notif-status-text" id="notif-status-text" style="flex:1;font-size:13px;color:var(--text2)">Vérification…</span>
-          <button class="notif-toggle-btn" id="notif-toggle-btn" onclick="ProfilePage.toggleNotif()" style="display:none;padding:6px 14px;border-radius:20px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:var(--accent3);color:#fff">—</button>
+          <button class="notif-toggle-btn" id="notif-toggle-btn" onclick="ProfilePage.toggleNotif()" style="display:none">—</button>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px">
           <label for="notif-time-input" style="font-size:13px;color:var(--text2);font-weight:600">Heure :</label>
           <input type="time" id="notif-time-input" value="${reminderTime}" onchange="ProfilePage.saveNotifTime(this.value)" style="padding:7px 10px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:var(--text);font:inherit">
-          <button id="notif-test-btn" onclick="ProfilePage.testNotif()" style="padding:7px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:13px;font-weight:600;cursor:pointer">Tester</button>
+          <button id="notif-test-btn" class="notif-test-btn" onclick="ProfilePage.testNotif()">Tester</button>
         </div>
         <p id="notif-help-text" style="font-size:12px;color:var(--text3);margin-top:6px;line-height:1.4">Active les notifications pour recevoir le rappel quotidien et les Wizz.</p>
       </div>`;

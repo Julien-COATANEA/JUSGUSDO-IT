@@ -2405,6 +2405,35 @@ html, body {
   margin-bottom: 16px;
 }
 .profile-section-title { font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
+/* Notification buttons */
+.notif-toggle-btn {
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.notif-toggle-btn:hover { background: var(--bg3); }
+.notif-test-btn {
+  padding: 7px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.notif-test-btn:hover:not(:disabled) { background: var(--bg3); }
+.notif-test-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .profile-top-ex {
   display: flex;
   align-items: center;
@@ -3902,16 +3931,16 @@ html, body {
   font-weight: 800;
   padding: 5px 11px;
   border-radius: 100px;
-  border: none;
-  background: linear-gradient(135deg, var(--accent3), var(--accent));
-  color: #07070f;
+  border: 1px solid var(--border);
+  background: var(--card2);
+  color: var(--text);
   cursor: pointer;
   font-family: inherit;
   letter-spacing: 0.2px;
-  transition: opacity 0.15s, transform 0.15s;
+  transition: background 0.15s, transform 0.15s;
   flex-shrink: 0;
 }
-.home-minigame-btn:hover { opacity: 0.85; transform: scale(1.04); }
+.home-minigame-btn:hover { background: var(--bg3); transform: scale(1.04); }
 .home-minigame-btn { position: relative; }
 .mg-btn-badge {
   position: absolute;
@@ -4154,7 +4183,7 @@ html, body {
   display: flex;
   gap: 4px;
   margin: 14px 16px 6px;
-  background: var(--card2);
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 4px;
@@ -4177,7 +4206,7 @@ html, body {
   background: rgba(255,255,255,0.04);
 }
 .muscu-tab.active {
-  background: var(--card);
+  background: var(--card2);
   color: var(--text);
   box-shadow: 0 1px 6px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06);
 }
