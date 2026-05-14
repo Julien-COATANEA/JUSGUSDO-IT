@@ -383,6 +383,9 @@ const MuscuPage = (() => {
     }
     _renderDayActionsSheet();
     sheet.classList.add('open');
+    // Lock background page scroll while the sheet is open
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
     // Attach swipe-down-to-close after render (inner panel is recreated on each render)
     requestAnimationFrame(() => _attachSheetSwipe(sheet));
   }
@@ -443,6 +446,9 @@ const MuscuPage = (() => {
     _activeSheetDate = null;
     const sheet = document.getElementById('gym-day-sheet');
     if (sheet) sheet.classList.remove('open');
+    // Restore background page scroll
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
   }
 
   function _renderDayActionsSheet() {
