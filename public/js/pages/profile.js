@@ -155,9 +155,11 @@ const ProfilePage = (() => {
     } else {
       cls = 'empty'; icon = '😴'; msg = `Pas encore d'activité salle aujourd'hui`;
     }
+    const gymCta = cls === 'empty' ? `<button class="profile-today-cta" onclick="Router.navigate('muscu')">Go Salle →</button>` : '';
     todayBadge = `<div class="profile-today-badge ${cls}" style="animation:fadeIn 0.3s ease 0.05s both">
       <span class="profile-today-icon">${icon}</span>
       <span class="profile-today-msg">${msg}</span>
+      ${gymCta}
     </div>`;
 
     return `
@@ -492,6 +494,7 @@ const ProfilePage = (() => {
         <div class="player-xp-bar" style="margin-top:12px;width:100%;max-width:280px;">
           <div class="player-xp-bar-track">
             <div class="player-xp-bar-fill" style="width:${progress.pct}%"></div>
+            <span class="player-xp-bar-pct">${Math.round(progress.pct)}%</span>
           </div>
           <div class="player-xp-labels">
             <span>${progress.inRank} XP</span>
@@ -507,8 +510,8 @@ const ProfilePage = (() => {
       { label: 'Exercices',       value: stats.total_completed,            icon: '✅' },
       { label: 'Jours complets',  value: stats.full_days,                  icon: '🔥' },
       { label: 'Meilleure série', value: stats.best_streak + '\u202fj',    icon: '🏆' },
-      { label: 'Série actuelle',  value: stats.current_streak + '\u202fj', icon: '⚡' },
       { label: 'Jours actifs',    value: stats.active_days,                icon: '📅' },
+      { label: 'Série actuelle',  value: stats.current_streak + '\u202fj', icon: '⚡' },
     ];
     return `<div class="profile-stats-grid" style="animation:fadeIn 0.3s ease 0.02s both">
       ${cards.map(c => `
@@ -528,10 +531,12 @@ const ProfilePage = (() => {
     if (done >= total)      { cls = 'done';    icon = '✅'; msg = `Journée complète ! (${done}/${total})`; }
     else if (done > 0)      { cls = 'partial'; icon = '💪'; msg = `${done}\u202f/\u202f${total} exercices aujourd'hui`; }
     else                    { cls = 'empty';   icon = '😴'; msg = `Pas encore commencé aujourd'hui`; }
+    const cta = cls === 'empty' ? `<button class="profile-today-cta" onclick="Router.navigate('app')">Go Maison →</button>` : '';
     return `
       <div class="profile-today-badge ${cls}" style="animation:fadeIn 0.3s ease 0.07s both">
         <span class="profile-today-icon">${icon}</span>
         <span class="profile-today-msg">${msg}</span>
+        ${cta}
       </div>`;
   }
 
@@ -756,13 +761,17 @@ const ProfilePage = (() => {
     const items = challenges.map(c => {
       const done = c.current >= c.target;
       const pct  = Math.round((c.current / c.target) * 100);
+      const barColor = done      ? 'var(--green)'
+                     : pct >= 70 ? 'var(--green)'
+                     : pct >= 30 ? 'var(--gold)'
+                     : '#ef4444';
       return `
         <div class="challenge-item${done ? ' done' : ''}">
           <span class="challenge-icon">${done ? '✅' : c.icon}</span>
           <div class="challenge-body">
             <div class="challenge-title">${c.title}</div>
             <div class="challenge-bar-track">
-              <div class="challenge-bar-fill" style="width:${pct}%"></div>
+              <div class="challenge-bar-fill" style="width:${pct}%;background:${barColor}"></div>
             </div>
             <div class="challenge-progress">${c.current}\u202f/\u202f${c.target}</div>
           </div>
