@@ -595,15 +595,12 @@ const ProfilePage = (() => {
 
   // ── 2. Statut du jour ───────────────────────────────────────
   function _renderTodayBadge(stats) {
-    const { today_done: done, today_total: total } = stats;
-    if (!total || done <= 0) return '';
-    let cls, icon, msg;
-    if (done >= total)      { cls = 'done';    icon = '✅'; msg = `Journée complète ! (${done}/${total})`; }
-    else if (done > 0)      { cls = 'partial'; icon = '💪'; msg = `${done}\u202f/\u202f${total} exercices aujourd'hui`; }
+    const isActive = !!stats.today_is_active || (stats.today_done || 0) > 0;
+    if (!isActive) return '';
     return `
-      <div class="profile-today-badge ${cls}" style="animation:fadeIn 0.3s ease 0.07s both">
-        <span class="profile-today-icon">${icon}</span>
-        <span class="profile-today-msg">${msg}</span>
+      <div class="profile-today-badge done" style="animation:fadeIn 0.3s ease 0.07s both">
+        <span class="profile-today-icon">✅</span>
+        <span class="profile-today-msg">Activité sportive validée aujourd'hui</span>
       </div>`;
   }
 
@@ -837,12 +834,12 @@ const ProfilePage = (() => {
     const challenges = [
       {
         icon: '🔥', title: 'Série de 3 jours',
-        desc: 'Compléter 3 jours consécutifs',
+        desc: 'Valider 3 jours d\'activité consécutifs',
         current: Math.min(stats.current_streak, 3), target: 3,
       },
       {
         icon: '⚡', title: 'Série de 7 jours',
-        desc: '7 jours complets d\'affilée',
+        desc: '7 jours d\'activité d\'affilée',
         current: Math.min(stats.current_streak, 7), target: 7,
       },
       {

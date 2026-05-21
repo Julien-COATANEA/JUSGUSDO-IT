@@ -5432,9 +5432,219 @@ html, body {
 }
 /* === New zone selection UI (cards + tiles) ============================== */
 .zone-grid {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+}
+
+.zone-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zone-line {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.02);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+}
+
+.zone-group.some-on .zone-line {
+  border-color: color-mix(in srgb, var(--zc) 38%, rgba(255,255,255,0.08));
+}
+
+.zone-group.all-on .zone-line,
+.zone-line.zone-line-single.on {
+  border-color: var(--zc);
+  background: color-mix(in srgb, var(--zc) 14%, rgba(255,255,255,0.02));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zc) 24%, transparent) inset;
+}
+
+.zone-line.zone-line-single {
+  cursor: pointer;
+  transition: transform 0.08s, background 0.16s, border-color 0.16s;
+}
+
+.zone-line.zone-line-single:active {
+  transform: scale(0.985);
+}
+
+.zone-line-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.zone-line-emoji {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  background: color-mix(in srgb, var(--zc) 12%, rgba(255,255,255,0.04));
+  flex-shrink: 0;
+}
+
+.zone-line-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zone-line-copy strong {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.zone-line-copy small {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+}
+
+.zone-line-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.zone-line-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.05);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.zone-line-status.active {
+  color: #f8fafc;
+  background: color-mix(in srgb, var(--zc) 18%, rgba(255,255,255,0.04));
+  border-color: color-mix(in srgb, var(--zc) 36%, rgba(255,255,255,0.08));
+}
+
+.zone-line-status-toggle {
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.16s, background 0.16s, color 0.16s, transform 0.1s;
+}
+
+.zone-line-status-toggle:hover {
+  border-color: color-mix(in srgb, var(--zc) 28%, rgba(255,255,255,0.08));
+  color: var(--text);
+}
+
+.zone-line-status-toggle:active {
+  transform: scale(0.98);
+}
+
+.zone-line-quick {
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 7px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.16s, border-color 0.16s, color 0.16s;
+}
+
+.zone-line-quick:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+}
+
+.zone-line-quick[data-act="false"] {
+  color: var(--zc);
+  border-color: color-mix(in srgb, var(--zc) 28%, rgba(255,255,255,0.08));
+  background: color-mix(in srgb, var(--zc) 10%, rgba(255,255,255,0.03));
+}
+
+.zone-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.zone-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  color: var(--text2);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.16s, border-color 0.16s, color 0.16s, transform 0.08s;
+}
+
+.zone-chip:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+}
+
+.zone-chip:active {
+  transform: scale(0.98);
+}
+
+.zone-chip.on {
+  color: var(--text);
+  background: color-mix(in srgb, var(--zc) 16%, rgba(255,255,255,0.03));
+  border-color: color-mix(in srgb, var(--zc) 34%, rgba(255,255,255,0.08));
+}
+
+.zone-chip-emoji {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.zone-chip-name {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.zone-chip-check {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--zc);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.zone-chip:not(.on) .zone-chip-check {
+  display: none;
 }
 
 .zone-card {
@@ -5586,7 +5796,18 @@ html, body {
 
 /* Wider screens: 2-column zone grid */
 @media (min-width: 480px) {
-  .zone-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .zone-grid { gap: 10px; }
+}
+
+@media (max-width: 560px) {
+  .zone-line {
+    align-items: flex-start;
+  }
+
+  .zone-line-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 /* ── Profile / Salle: clickable calendar cells + day detail panel ── */
 .cal-cell.clickable { cursor: pointer; }

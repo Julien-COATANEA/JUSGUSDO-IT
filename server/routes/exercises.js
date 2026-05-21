@@ -4,6 +4,17 @@ const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 const DAILY_XP_TARGET = 30;
+const HOME_DAY_ACTIVE_SQL = `
+  SELECT EXISTS(
+    SELECT 1
+    FROM checklist_entries ce
+    JOIN exercises e ON e.id = ce.exercise_id
+    WHERE ce.user_id = $1
+      AND ce.entry_date = $2
+      AND ce.completed = TRUE
+      AND e.is_active = TRUE
+      AND COALESCE(e.type, 'home') = 'home'
+  ) AS is_active`;
 
 async function getDayProgress(userId, entryDate) {
   const result = await db.query(
@@ -25,15 +36,30 @@ async function getDayProgress(userId, entryDate) {
   };
 }
 
-function getDailyXpSplit(totalEx) {
-  if (!totalEx || totalEx <= 0) {
-    return { baseXP: 0, completionBonus: 0 };
+async function getHomeDayIsActive(userId, entryDate) {
+  const result = await db.query(HOME_DAY_ACTIVE_SQL, [userId, entryDate]);
+  return !!result.rows[0]?.is_active;
+}
+
+async function syncHomeDayXp(userId, entryDate, wasActive) {
+  const isActive = await getHomeDayIsActive(userId, entryDate);
+  const xpDelta = (isActive && !wasActive) ? DAILY_XP_TARGET
+                : (!isActive && wasActive) ? -DAILY_XP_TARGET
+                : 0;
+
+  if (xpDelta !== 0) {
+    await db.query(
+      'UPDATE users SET xp = GREATEST(0, xp + $1) WHERE id = $2',
+      [xpDelta, userId]
+    );
   }
 
-  const baseXP = Math.floor(DAILY_XP_TARGET / totalEx);
-  const completionBonus = DAILY_XP_TARGET - (baseXP * totalEx);
-
-  return { baseXP, completionBonus };
+  const userRes = await db.query('SELECT xp FROM users WHERE id = $1', [userId]);
+  return {
+    xp: userRes.rows[0]?.xp ?? 0,
+    xpDelta,
+    isActive,
+  };
 }
 
 // GET /api/exercises — list all active HOME exercises.
@@ -110,6 +136,8 @@ router.post('/checklist/toggle', requireAuth, async (req, res) => {
   }
 
   try {
+    const wasActive = await getHomeDayIsActive(req.user.id, entry_date);
+
     // Verify exercise exists and is active
     const exCheck = await db.query(
       `SELECT id FROM exercises
@@ -141,32 +169,18 @@ router.post('/checklist/toggle', requireAuth, async (req, res) => {
       );
     }
 
-    const { totalEx, doneCnt } = await getDayProgress(req.user.id, entry_date);
-    const prevDoneCnt = newCompleted ? doneCnt - 1 : doneCnt + 1;
-    const { baseXP, completionBonus } = getDailyXpSplit(totalEx);
-
-    // Split XP so a full day always equals 30 XP, regardless of exercise count
-    const xpDelta = newCompleted ? baseXP : -baseXP;
-
-    let bonusXP = 0;
-    if (totalEx > 0 && newCompleted && doneCnt === totalEx && prevDoneCnt < totalEx) {
-      bonusXP = completionBonus;
-    } else if (totalEx > 0 && !newCompleted && prevDoneCnt === totalEx && doneCnt < totalEx) {
-      bonusXP = -completionBonus;
-    }
-
-    const totalXpDelta = xpDelta + bonusXP;
-    const updatedUser = await db.query(
-      'UPDATE users SET xp = GREATEST(0, xp + $1) WHERE id = $2 RETURNING xp',
-      [totalXpDelta, req.user.id]
-    );
+    const [progress, xpResult] = await Promise.all([
+      getDayProgress(req.user.id, entry_date),
+      syncHomeDayXp(req.user.id, entry_date, wasActive),
+    ]);
 
     res.json({
       completed: newCompleted,
-      xp: updatedUser.rows[0].xp,
-      xpDelta: totalXpDelta,
-      dayComplete: totalEx > 0 && doneCnt === totalEx,
-      bonusXP,
+      xp: xpResult.xp,
+      xpDelta: xpResult.xpDelta,
+      dayActive: xpResult.isActive,
+      dayComplete: progress.totalEx > 0 && progress.doneCnt === progress.totalEx,
+      bonusXP: 0,
     });
   } catch (err) {
     console.error(err);
@@ -179,36 +193,21 @@ router.get('/stats', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Total completed days: all active home exercises were done for that day.
-    const totalDays = await db.query(
-      `WITH day_counts AS (
-         SELECT ce.entry_date,
-                COUNT(*) FILTER (WHERE ce.completed) AS done
-         FROM checklist_entries ce
-         JOIN exercises e ON e.id = ce.exercise_id
-         WHERE ce.user_id = $1
-           AND e.is_active = TRUE
-           AND COALESCE(e.type, 'home') = 'home'
-         GROUP BY ce.entry_date
-       ),
-       day_totals AS (
-         SELECT dc.entry_date,
-                dc.done,
-                (SELECT COUNT(*) FROM exercises e2
-                 WHERE e2.is_active = TRUE
-                   AND COALESCE(e2.type, 'home') = 'home') AS total_for_day
-         FROM day_counts dc
-       )
-       SELECT entry_date
-       FROM day_totals
-       WHERE total_for_day > 0 AND done >= total_for_day
-       ORDER BY entry_date DESC`,
+    const activeDaysRes = await db.query(
+      `SELECT DISTINCT ce.entry_date
+       FROM checklist_entries ce
+       JOIN exercises e ON e.id = ce.exercise_id
+       WHERE ce.user_id = $1
+         AND ce.completed = TRUE
+         AND e.is_active = TRUE
+         AND COALESCE(e.type, 'home') = 'home'
+       ORDER BY ce.entry_date DESC`,
       [userId]
     );
 
-    const completedDates = new Set(totalDays.rows.map(r => r.entry_date.toISOString().split('T')[0]));
+    const activeDates = new Set(activeDaysRes.rows.map(r => r.entry_date.toISOString().split('T')[0]));
 
-    // Streak
+    // Streak now follows days with at least one home activity.
     let streak = 0;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -216,7 +215,7 @@ router.get('/stats', requireAuth, async (req, res) => {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
       const key = d.toISOString().split('T')[0];
-      if (completedDates.has(key)) {
+      if (activeDates.has(key)) {
         streak++;
       } else if (i === 0) {
         continue; // today not done yet is ok
@@ -226,7 +225,7 @@ router.get('/stats', requireAuth, async (req, res) => {
     }
 
     res.json({
-      totalCompletedDays: completedDates.size,
+      totalCompletedDays: activeDates.size,
       streak,
     });
   } catch (err) {

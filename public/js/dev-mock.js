@@ -98,18 +98,25 @@ function _devHomeDoneCount(entryDate) {
   return _devHomeCompletedExerciseIds(entryDate).size;
 }
 
+function _devIsHomeActive(entryDate) {
+  return _devHomeDoneCount(entryDate) > 0;
+}
+
 function _devIsHomeComplete(entryDate) {
   const total = _devHomeTotalCount();
   return total > 0 && _devHomeDoneCount(entryDate) >= total;
 }
 
+function _devHomeActiveDates() {
+  return Array.from(new Set(_devChecklistEntries.filter(entry => entry.completed).map(entry => entry.entry_date))).sort();
+}
+
 function _devHomeFullDates() {
-  const dates = Array.from(new Set(_devChecklistEntries.filter(entry => entry.completed).map(entry => entry.entry_date))).sort();
-  return dates.filter(_devIsHomeComplete);
+  return _devHomeActiveDates().filter(_devIsHomeComplete);
 }
 
 function _devHomeStreaks() {
-  const dates = _devHomeFullDates();
+  const dates = _devHomeActiveDates();
   let bestStreak = 0;
   let currentStreak = 0;
 
@@ -182,17 +189,10 @@ function _devHomeCalendar() {
 }
 
 function _devHomeXpHistory() {
-  const total = _devHomeTotalCount();
-  const baseXP = total ? Math.floor(30 / total) : 0;
-  const completionBonus = total ? 30 - (baseXP * total) : 0;
   const history = [];
   for (let i = 29; i >= 0; i--) {
     const key = _devDateDaysAgo(i);
-    const done = _devHomeDoneCount(key);
-    const xpEarned = done === 0
-      ? 0
-      : (done * baseXP) + (_devIsHomeComplete(key) ? completionBonus : 0);
-    history.push({ date: key, xp_earned: xpEarned });
+    if (_devIsHomeActive(key)) history.push({ date: key, xp_earned: 30 });
   }
   return history;
 }
@@ -213,7 +213,8 @@ function _devHomeStatsSnapshot() {
     current_streak: currentStreak,
     active_days: activeDays,
     today_done: _devHomeDoneCount(today),
-    today_total: _devHomeTotalCount(),
+    today_total: 0,
+    today_is_active: _devIsHomeActive(today),
   };
 }
 
@@ -248,6 +249,7 @@ function _applyDevMock() {
         active_days: homeStats.active_days,
         today_done: homeStats.today_done,
         today_total: homeStats.today_total,
+        today_is_active: homeStats.today_is_active,
       },
     };
   };
@@ -266,9 +268,7 @@ function _applyDevMock() {
     const exercise = _devActiveHomeExercises().find(item => item.id === Number(exercise_id));
     if (!exercise) throw new Error('Exercice introuvable');
 
-    const totalEx = _devHomeTotalCount();
-    const doneBefore = _devHomeDoneCount(entry_date);
-    const wasComplete = _devIsHomeComplete(entry_date);
+    const wasActive = _devIsHomeActive(entry_date);
     const idx = _devChecklistEntries.findIndex(entry => entry.entry_date === entry_date && entry.exercise_id === Number(exercise_id));
 
     let completed;
@@ -287,13 +287,8 @@ function _applyDevMock() {
       });
     }
 
-    const doneAfter = _devHomeDoneCount(entry_date);
-    const isComplete = _devIsHomeComplete(entry_date);
-    const baseXP = totalEx ? Math.floor(30 / totalEx) : 0;
-    const completionBonus = totalEx ? 30 - (baseXP * totalEx) : 0;
-    let xpDelta = completed ? baseXP : -baseXP;
-    if (!wasComplete && isComplete) xpDelta += completionBonus;
-    if (wasComplete && !isComplete) xpDelta -= completionBonus;
+    const isActive = _devIsHomeActive(entry_date);
+    const xpDelta = (isActive && !wasActive) ? 30 : (!isActive && wasActive) ? -30 : 0;
 
     DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
 
@@ -301,17 +296,16 @@ function _applyDevMock() {
       completed,
       xp: DEV_FAKE_USER.xp,
       xpDelta,
-      dayComplete: isComplete,
-      bonusXP: (!wasComplete && isComplete) ? completionBonus : (wasComplete && !isComplete) ? -completionBonus : 0,
-      doneBefore,
-      doneAfter,
+      dayActive: isActive,
+      dayComplete: _devIsHomeComplete(entry_date),
+      bonusXP: 0,
     };
   };
   API.getStats = async () => {
     const homeStats = _devHomeStatsSnapshot();
     return {
       streak: homeStats.current_streak,
-      totalCompletedDays: homeStats.full_days,
+      totalCompletedDays: homeStats.active_days,
       this_week: 0,
       xp_total: DEV_FAKE_USER.xp,
     };

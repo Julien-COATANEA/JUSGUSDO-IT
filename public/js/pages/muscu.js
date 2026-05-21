@@ -11,6 +11,7 @@ const MuscuPage = (() => {
   let _gymRestDays = new Set();    // Set<'YYYY-MM-DD'>
   let _activeSheetDate = null;     // 'YYYY-MM-DD' currently shown in day-actions sheet
   let _activeGymRepsEditorKey = null;
+  let _openGymZoneGroupKeys = new Set();
 
   const _DAYS_FR = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
   const _MONTHS_FR = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
@@ -130,6 +131,10 @@ const MuscuPage = (() => {
 
   function _getGymEditorKey(dateStr, sessionName, exerciseName) {
     return `${dateStr}_${String(sessionName || '').toLowerCase()}_${String(exerciseName || '').toLowerCase()}`;
+  }
+
+  function _getGymZoneGroupKey(dateStr, parentId) {
+    return `${dateStr}_zone_${parentId}`;
   }
 
   function _syncGymXp(result, anchorEl) {
@@ -468,6 +473,7 @@ const MuscuPage = (() => {
     if (target > today || target < today) return; // only today allowed
     _activeSheetDate = dateStr;
     _activeGymRepsEditorKey = null;
+    _openGymZoneGroupKeys = new Set();
     let sheet = document.getElementById('gym-day-sheet');
     if (!sheet) {
       sheet = document.createElement('div');
@@ -542,6 +548,7 @@ const MuscuPage = (() => {
   function closeDayActionsSheet() {
     _activeSheetDate = null;
     _activeGymRepsEditorKey = null;
+    _openGymZoneGroupKeys = new Set();
     const sheet = document.getElementById('gym-day-sheet');
     if (sheet) sheet.classList.remove('open');
     // Restore background page scroll
@@ -667,54 +674,63 @@ const MuscuPage = (() => {
           const children = _gymZones.filter(z => z.parent_id === p.id).sort((a,b) => a.order_index - b.order_index);
           const color = p.color || '#888';
 
-          // Parent without children: card itself is the toggle
+          // Parent without children: single compact line toggle.
           if (!children.length) {
             const on = zonesActive.has(p.id);
-            return `<button type="button" class="zone-card single${on ? ' on' : ''}" style="--zc:${color}"
+            return `<button type="button" class="zone-line zone-line-single${on ? ' on' : ''}" style="--zc:${color}"
               onclick="MuscuPage.toggleGymZone(${p.id}, '${dateStr}')">
-              <span class="zone-card-emoji">${_escape(p.icon || '💪')}</span>
-              <div class="zone-card-text">
-                <h5>${_escape(p.name)}</h5>
-                <small>${on ? 'Travaillé ✓' : 'Toucher pour valider'}</small>
+              <div class="zone-line-main">
+                <span class="zone-line-emoji">${_escape(p.icon || '💪')}</span>
+                <div class="zone-line-copy">
+                  <strong>${_escape(p.name)}</strong>
+                  <small>${on ? 'Zone validée' : 'Zone libre'}</small>
+                </div>
               </div>
-              <span class="zone-card-state">${on ? '✓' : ''}</span>
+              <span class="zone-line-status${on ? ' active' : ''}">${on ? 'Actif' : 'Inactif'}</span>
             </button>`;
           }
 
-          // Parent with children: progress card + tiles
           const onCount = children.filter(c => zonesActive.has(c.id)).length;
           const total   = children.length;
-          const pct     = total ? Math.round((onCount / total) * 100) : 0;
           const allOn   = onCount === total;
           const someOn  = onCount > 0;
           const childIds = children.map(c => c.id).join(',');
-          const quickLabel = allOn ? '✕ Vider' : '✓ Tout';
+          const quickLabel = allOn ? 'Vider' : 'Tout';
           const quickAction = allOn ? 'false' : 'true';
+          const groupKey = _getGymZoneGroupKey(dateStr, p.id);
+          const isOpen = _openGymZoneGroupKeys.has(groupKey);
+          const summaryLabel = allOn ? 'Complet' : `${onCount}/${total} zone${total > 1 ? 's' : ''}`;
 
-          const tiles = children.map(z => {
+          const chips = children.map(z => {
             const on = zonesActive.has(z.id);
-            return `<button type="button" class="zone-tile${on ? ' on' : ''}" style="--zc:${z.color || color}"
+            return `<button type="button" class="zone-chip${on ? ' on' : ''}" style="--zc:${z.color || color}"
               onclick="MuscuPage.toggleGymZone(${z.id}, '${dateStr}')"
               aria-pressed="${on}">
-              <span class="zone-tile-emoji">${_escape(z.icon || '💪')}</span>
-              <span class="zone-tile-name">${_escape(z.name)}</span>
-              <span class="zone-tile-check" aria-hidden="true">${on ? '✓' : ''}</span>
+              <span class="zone-chip-emoji">${_escape(z.icon || '💪')}</span>
+              <span class="zone-chip-name">${_escape(z.name)}</span>
+              <span class="zone-chip-check" aria-hidden="true">${on ? '✓' : ''}</span>
             </button>`;
           }).join('');
 
-          return `<article class="zone-card group${allOn ? ' all-on' : someOn ? ' some-on' : ''}" style="--zc:${color}">
-            <header class="zone-card-head">
-              <span class="zone-card-emoji">${_escape(p.icon || '💪')}</span>
-              <div class="zone-card-text">
-                <h5>${_escape(p.name)}</h5>
-                <small>${onCount}/${total} muscle${total > 1 ? 's' : ''}</small>
+          return `<div class="zone-group${allOn ? ' all-on' : someOn ? ' some-on' : ''}" style="--zc:${color}">
+            <div class="zone-line">
+              <div class="zone-line-main">
+                <span class="zone-line-emoji">${_escape(p.icon || '💪')}</span>
+                <div class="zone-line-copy">
+                  <strong>${_escape(p.name)}</strong>
+                  <small>${someOn ? 'Zones sélectionnées' : 'Toucher le badge pour ouvrir'}</small>
+                </div>
               </div>
-              <button type="button" class="zone-card-quick" data-act="${quickAction}"
-                onclick="event.stopPropagation();MuscuPage.bulkToggleZones('${childIds}', '${dateStr}', ${quickAction})">${quickLabel}</button>
-            </header>
-            <div class="zone-card-progress" aria-hidden="true"><span style="width:${pct}%"></span></div>
-            <div class="zone-card-tiles">${tiles}</div>
-          </article>`;
+              <div class="zone-line-actions">
+                <button type="button" class="zone-line-status zone-line-status-toggle${isOpen ? ' active' : ''}"
+                  onclick="event.stopPropagation();MuscuPage.toggleGymZoneGroup('${dateStr}', ${p.id})"
+                  aria-pressed="${isOpen}">${summaryLabel}</button>
+                <button type="button" class="zone-line-quick" data-act="${quickAction}"
+                  onclick="event.stopPropagation();MuscuPage.bulkToggleZones('${childIds}', '${dateStr}', ${quickAction})">${quickLabel}</button>
+              </div>
+            </div>
+            ${isOpen ? `<div class="zone-chip-list">${chips}</div>` : ''}
+          </div>`;
         }).join('')}</div>`
       : '<p class="exercise-inline-help" style="padding:8px 12px">Aucune zone définie</p>';
 
@@ -1002,6 +1018,13 @@ const MuscuPage = (() => {
   function toggleGymRepsEditor(exerciseName, sessionName, dateStr) {
     const nextKey = _getGymEditorKey(dateStr, sessionName, exerciseName);
     _activeGymRepsEditorKey = _activeGymRepsEditorKey === nextKey ? null : nextKey;
+    if (_activeSheetDate === dateStr) _renderDayActionsSheet();
+  }
+
+  function toggleGymZoneGroup(dateStr, parentId) {
+    const key = _getGymZoneGroupKey(dateStr, parentId);
+    if (_openGymZoneGroupKeys.has(key)) _openGymZoneGroupKeys.delete(key);
+    else _openGymZoneGroupKeys.add(key);
     if (_activeSheetDate === dateStr) _renderDayActionsSheet();
   }
 
@@ -1501,5 +1524,5 @@ const MuscuPage = (() => {
     _refresh();
   }
 
-  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, toggleGymRepsEditor, changeGymExerciseSetCount, adjustGymExerciseSetReps, setGymExercisePerformance, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
+  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, toggleGymRepsEditor, toggleGymZoneGroup, changeGymExerciseSetCount, adjustGymExerciseSetReps, setGymExercisePerformance, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
 })();

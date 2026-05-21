@@ -49,9 +49,9 @@ const HomePage = (() => {
         API.getExercises(),
       ]);
       const _activeExIds = new Set(exercisesData.exercises.map(ex => ex.id));
+      const completedToday = checklistData.entries.filter(e => e.completed && _activeExIds.has(e.exercise_id)).length;
       _todayStatus = {
-        done:  checklistData.entries.filter(e => e.completed && _activeExIds.has(e.exercise_id)).length,
-        total: _activeExIds.size,
+        active: completedToday > 0,
       };
       renderActivity(users);
       // Mini-game levels badge
@@ -71,9 +71,9 @@ const HomePage = (() => {
           API.getExercises(),
         ]);
         const _activeExIds = new Set(exercisesData.exercises.map(ex => ex.id));
+        const completedToday = checklistData.entries.filter(e => e.completed && _activeExIds.has(e.exercise_id)).length;
         _todayStatus = {
-          done:  checklistData.entries.filter(e => e.completed && _activeExIds.has(e.exercise_id)).length,
-          total: _activeExIds.size,
+          active: completedToday > 0,
         };
         renderActivity(users);
       } catch (_) {}
@@ -98,13 +98,8 @@ const HomePage = (() => {
       const name     = escapeHtml(u.username.charAt(0).toUpperCase() + u.username.slice(1));
 
       let dayBadge = '';
-      if (isMe && _todayStatus && _todayStatus.total > 0) {
-        const { done, total } = _todayStatus;
-        if (done >= total) {
-          dayBadge = `<div class="player-day-badge done">&#x2705; Journée complète !</div>`;
-        } else if (done > 0) {
-          dayBadge = `<div class="player-day-badge partial">&#x1F4AA; ${done}&thinsp;/&thinsp;${total} aujourd'hui</div>`;
-        }
+      if (isMe && _todayStatus?.active) {
+        dayBadge = `<div class="player-day-badge done">&#x2705; Activité validée aujourd'hui</div>`;
       }
 
       const wizzBtn = !isMe

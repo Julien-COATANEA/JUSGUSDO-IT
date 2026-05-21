@@ -78,30 +78,15 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       [userId]
     );
 
-    // All fully-completed day dates (for streak calc)
+    // Days with at least one home activity (used for streaks and reward history)
     const datesRes = await db.query(
-      `WITH day_counts AS (
-         SELECT entry_date,
-                COUNT(*) FILTER (WHERE ce.completed) AS done
-         FROM checklist_entries ce
-         JOIN exercises e ON e.id = ce.exercise_id
-         WHERE ce.user_id = $1
-           AND e.is_active = TRUE
-           AND COALESCE(e.type, 'home') = 'home'
-         GROUP BY entry_date
-       ),
-       day_totals AS (
-         SELECT dc.entry_date,
-                dc.done,
-                (SELECT COUNT(*) FROM exercises e2
-                 WHERE e2.is_active = TRUE
-                   AND COALESCE(e2.type, 'home') = 'home'
-                ) AS total_for_day
-         FROM day_counts dc
-       )
-       SELECT entry_date
-       FROM day_totals
-       WHERE total_for_day > 0 AND done >= total_for_day
+      `SELECT DISTINCT ce.entry_date
+       FROM checklist_entries ce
+       JOIN exercises e ON e.id = ce.exercise_id
+       WHERE ce.user_id = $1
+         AND ce.completed = TRUE
+         AND e.is_active = TRUE
+         AND COALESCE(e.type, 'home') = 'home'
        ORDER BY entry_date`,
       [userId]
     );
@@ -120,25 +105,16 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
     );
 
     // Today's status
-    const [todayDoneRes, todayTotalRes] = await Promise.all([
-      db.query(
-        `SELECT COUNT(*) AS done
-         FROM checklist_entries ce
-         JOIN exercises e ON e.id = ce.exercise_id AND e.is_active = TRUE
-         WHERE ce.user_id = $1
-           AND ce.entry_date = CURRENT_DATE
-           AND ce.completed = TRUE
-           AND COALESCE(e.type, 'home') = 'home'`,
-        [userId]
-      ),
-      db.query(
-        `SELECT COUNT(*) AS total
-         FROM exercises e
-         WHERE e.is_active = TRUE
-           AND COALESCE(e.type, 'home') = 'home'`,
-        []
-      ),
-    ]);
+    const todayDoneRes = await db.query(
+      `SELECT COUNT(*) AS done
+       FROM checklist_entries ce
+       JOIN exercises e ON e.id = ce.exercise_id AND e.is_active = TRUE
+       WHERE ce.user_id = $1
+         AND ce.entry_date = CURRENT_DATE
+         AND ce.completed = TRUE
+         AND COALESCE(e.type, 'home') = 'home'`,
+      [userId]
+    );
 
     // 28-day calendar aligned to ISO weeks (Mon→Sun), 4 full weeks
     const calendarRes = await db.query(
@@ -182,47 +158,18 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       [userId]
     );
 
-    // Daily XP for last 30 days (capped to 30 XP/day and split across the day's exercises)
+    // Daily XP for last 30 days: a home day with at least one activity grants 30 XP.
     const xpHistoryRes = await db.query(
-      `WITH days AS (
-         SELECT generate_series(CURRENT_DATE - 29, CURRENT_DATE, '1 day'::interval)::date AS entry_date
-       ),
-       totals AS (
-         SELECT d.entry_date,
-                (SELECT COUNT(*) FROM exercises e
-                 WHERE e.is_active = TRUE
-                   AND COALESCE(e.type, 'home') = 'home'
-                ) AS total_ex
-         FROM days d
-       ),
-       done_days AS (
-         SELECT ce.entry_date,
-                COUNT(*) FILTER (WHERE ce.completed = TRUE) AS done_ex
-         FROM checklist_entries ce
-         JOIN exercises e ON e.id = ce.exercise_id
-         WHERE ce.user_id = $1
-           AND ce.completed = TRUE
-           AND e.is_active = TRUE
-           AND COALESCE(e.type, 'home') = 'home'
-           AND ce.entry_date >= CURRENT_DATE - 29
-         GROUP BY ce.entry_date
-       )
-       SELECT t.entry_date,
-              CASE
-                WHEN t.total_ex = 0 THEN 0
-                ELSE (
-                  COALESCE(dd.done_ex, 0) * FLOOR(30.0 / t.total_ex)::int
-                  + CASE
-                      WHEN COALESCE(dd.done_ex, 0) >= t.total_ex
-                        THEN 30 - (FLOOR(30.0 / t.total_ex)::int * t.total_ex)
-                      ELSE 0
-                    END
-                )
-              END AS xp_earned
-       FROM totals t
-       LEFT JOIN done_days dd ON dd.entry_date = t.entry_date
-       WHERE COALESCE(dd.done_ex, 0) > 0
-       ORDER BY t.entry_date`,
+      `SELECT DISTINCT ce.entry_date,
+              30 AS xp_earned
+       FROM checklist_entries ce
+       JOIN exercises e ON e.id = ce.exercise_id
+       WHERE ce.user_id = $1
+         AND ce.completed = TRUE
+         AND e.is_active = TRUE
+         AND COALESCE(e.type, 'home') = 'home'
+         AND ce.entry_date >= CURRENT_DATE - 29
+       ORDER BY ce.entry_date`,
       [userId]
     );
 
@@ -256,6 +203,8 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       }
     }
 
+    const todayDone = parseInt(todayDoneRes.rows[0].done, 10);
+
     res.json({
       user: userRes.rows[0],
       stats: {
@@ -265,8 +214,9 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
         best_streak:     bestStreak,
         current_streak:  currentStreak,
         top_exercises:   topExRes.rows,
-        today_done:      parseInt(todayDoneRes.rows[0].done),
-        today_total:     parseInt(todayTotalRes.rows[0].total),
+        today_done:      todayDone,
+        today_total:     0,
+        today_is_active: todayDone > 0,
         calendar:        calendarRes.rows.map(r => ({
           date:  typeof r.entry_date === 'string' ? r.entry_date : r.entry_date.toISOString().split('T')[0],
           done:  parseInt(r.done),
