@@ -10,6 +10,7 @@ const MuscuPage = (() => {
   let _gymZoneEntriesByDate = {};  // 'YYYY-MM-DD' → Set<zone_id>
   let _gymRestDays = new Set();    // Set<'YYYY-MM-DD'>
   let _activeSheetDate = null;     // 'YYYY-MM-DD' currently shown in day-actions sheet
+  let _activeGymRepsEditorKey = null;
 
   const _DAYS_FR = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
   const _MONTHS_FR = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
@@ -107,6 +108,10 @@ const MuscuPage = (() => {
           performed_reps: _normalizeGymReps(entry.performed_reps),
         }
       : null;
+  }
+
+  function _getGymEditorKey(dateStr, sessionName, exerciseName) {
+    return `${dateStr}_${String(sessionName || '').toLowerCase()}_${String(exerciseName || '').toLowerCase()}`;
   }
 
   function _syncGymXp(result, anchorEl) {
@@ -444,6 +449,7 @@ const MuscuPage = (() => {
     const target = new Date(y, m - 1, d);
     if (target > today || target < today) return; // only today allowed
     _activeSheetDate = dateStr;
+    _activeGymRepsEditorKey = null;
     let sheet = document.getElementById('gym-day-sheet');
     if (!sheet) {
       sheet = document.createElement('div');
@@ -517,6 +523,7 @@ const MuscuPage = (() => {
 
   function closeDayActionsSheet() {
     _activeSheetDate = null;
+    _activeGymRepsEditorKey = null;
     const sheet = document.getElementById('gym-day-sheet');
     if (sheet) sheet.classList.remove('open');
     // Restore background page scroll
@@ -558,61 +565,61 @@ const MuscuPage = (() => {
             const performedReps = _normalizeGymReps(entry?.performed_reps);
             const performance = _getGymPerformanceState(performedReps, exSets, exReps);
             const plannedPerformance = _formatGymPerformance([], exSets, exReps);
+            const editorKey = _getGymEditorKey(dateStr, session.name, exName);
+            const isEditorOpen = checked && _activeGymRepsEditorKey === editorKey;
             const setsRepsTag = exSets
               ? `<span class="exercise-tag sheet-tag-reps">${exSets}&nbsp;×&nbsp;${exReps}&nbsp;rép.</span>`
               : '';
-              const safeEx  = _escape(exName).replace(/'/g, "\\'");
-              const perfSummary = `${performance.sets} x ${performance.reps}`;
-            const repsEditor = checked ? `
+            const safeEx  = _escape(exName).replace(/'/g, "\\'");
+            const perfSummary = `${performance.sets} x ${performance.reps}`;
+            const repsBadge = checked
+              ? `<button type="button" class="exercise-tag sheet-tag-reps sheet-tag-reps-btn${isEditorOpen ? ' active' : ''}"
+                   onclick="event.stopPropagation();MuscuPage.toggleGymRepsEditor('${safeEx}','${safeSes}','${dateStr}')"
+                   aria-pressed="${isEditorOpen}">${perfSummary} rep</button>`
+              : setsRepsTag;
+            const repsEditor = isEditorOpen ? `
               <div class="sheet-reps-editor" onclick="event.stopPropagation()">
-                  <div class="sheet-reps-head">
-                    <div>
-                      <div class="sheet-reps-label">Format réalisé</div>
-                      <div class="sheet-reps-summary">${perfSummary}</div>
-                    </div>
-                    ${exSets && exReps ? `<button type="button" class="sheet-reps-preset${perfSummary === plannedPerformance ? ' active' : ''}"
-                      onclick="event.stopPropagation();MuscuPage.setGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},this)">
-                      Prévu ${plannedPerformance}
-                    </button>` : ''}
-                  </div>
-                  <div class="sheet-reps-grid">
-                    <div class="sheet-stepper-card">
-                      <span class="sheet-stepper-label">Séries</span>
-                      <div class="sheet-stepper-control">
-                        <button type="button" class="sheet-stepper-btn"
-                          onclick="event.stopPropagation();MuscuPage.adjustGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},'sets',-1,this)"
-                          aria-label="Retirer une série">−</button>
-                        <span class="sheet-stepper-value">${performance.sets}</span>
-                        <button type="button" class="sheet-stepper-btn"
-                          onclick="event.stopPropagation();MuscuPage.adjustGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},'sets',1,this)"
-                          aria-label="Ajouter une série">+</button>
-                      </div>
-                    </div>
-                    <div class="sheet-stepper-card accent">
-                      <span class="sheet-stepper-label">Répétitions</span>
-                      <div class="sheet-stepper-control">
-                        <button type="button" class="sheet-stepper-btn"
-                          onclick="event.stopPropagation();MuscuPage.adjustGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},'reps',-1,this)"
-                          aria-label="Retirer une répétition">−</button>
-                        <span class="sheet-stepper-value">${performance.reps}</span>
-                        <button type="button" class="sheet-stepper-btn"
-                          onclick="event.stopPropagation();MuscuPage.adjustGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},'reps',1,this)"
-                          aria-label="Ajouter une répétition">+</button>
-                      </div>
+                <div class="sheet-reps-inline">
+                  <div class="sheet-stepper-compact">
+                    <span class="sheet-stepper-mini-label">Séries</span>
+                    <div class="sheet-stepper-control compact">
+                      <button type="button" class="sheet-stepper-btn compact"
+                        onclick="event.stopPropagation();MuscuPage.adjustGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},'sets',-1,this)"
+                        aria-label="Retirer une série">−</button>
+                      <span class="sheet-stepper-value compact">${performance.sets}</span>
+                      <button type="button" class="sheet-stepper-btn compact"
+                        onclick="event.stopPropagation();MuscuPage.adjustGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},'sets',1,this)"
+                        aria-label="Ajouter une série">+</button>
                     </div>
                   </div>
-                  <div class="sheet-reps-help">Ajuste simplement le nombre de séries et de répétitions.</div>
-                  ${performance.isUniform ? '' : '<div class="sheet-reps-help">Ancien format détecté, il sera normalisé au prochain ajustement.</div>'}
+                  <div class="sheet-stepper-compact accent">
+                    <span class="sheet-stepper-mini-label">Rép.</span>
+                    <div class="sheet-stepper-control compact">
+                      <button type="button" class="sheet-stepper-btn compact"
+                        onclick="event.stopPropagation();MuscuPage.adjustGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},'reps',-1,this)"
+                        aria-label="Retirer une répétition">−</button>
+                      <span class="sheet-stepper-value compact">${performance.reps}</span>
+                      <button type="button" class="sheet-stepper-btn compact"
+                        onclick="event.stopPropagation();MuscuPage.adjustGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},'reps',1,this)"
+                        aria-label="Ajouter une répétition">+</button>
+                    </div>
+                  </div>
+                  ${exSets && exReps ? `<button type="button" class="sheet-reps-preset${perfSummary === plannedPerformance ? ' active' : ''}"
+                    onclick="event.stopPropagation();MuscuPage.setGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},this)">
+                    Prévu ${plannedPerformance}
+                  </button>` : ''}
+                </div>
+                ${performance.isUniform ? '' : '<div class="sheet-reps-help">Ancien format détecté</div>'}
               </div>` : '';
             return `
-              <div class="exercise-item sheet-exercise-row${checked ? ' checked has-reps-editor' : ''}"
+              <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}${isEditorOpen ? ' has-reps-editor' : ''}"
                      onclick="MuscuPage.toggleGymExercise('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},this,event)">
                 <div class="exercise-info">
                   <div class="exercise-name">${_escape(exName)}</div>
                   ${repsEditor}
                 </div>
                 <div class="sheet-ex-right">
-                  ${setsRepsTag}
+                  ${repsBadge}
                   <span class="sheet-ex-check${checked ? ' on' : ''}">✓</span>
                 </div>
               </div>`;
@@ -946,7 +953,7 @@ const MuscuPage = (() => {
   }
 
   async function toggleGymExercise(exerciseName, sessionName, dateStr, plannedSets, plannedReps, el, evt) {
-    if (evt?.target?.closest && evt.target.closest('.sheet-reps-editor')) return;
+    if (evt?.target?.closest && evt.target.closest('.sheet-reps-editor, .sheet-tag-reps-btn')) return;
 
     // Block future dates
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -961,7 +968,17 @@ const MuscuPage = (() => {
       ? _buildGymPerformedReps(currentPerformance.sets, currentPerformance.reps)
       : [];
 
+    if (wasChecked && _activeGymRepsEditorKey === _getGymEditorKey(dateStr, sessionName, exerciseName)) {
+      _activeGymRepsEditorKey = null;
+    }
+
     await _persistGymExercisePerformance(exerciseName, sessionName, dateStr, nextPerformedReps, el, previousEntry);
+  }
+
+  function toggleGymRepsEditor(exerciseName, sessionName, dateStr) {
+    const nextKey = _getGymEditorKey(dateStr, sessionName, exerciseName);
+    _activeGymRepsEditorKey = _activeGymRepsEditorKey === nextKey ? null : nextKey;
+    if (_activeSheetDate === dateStr) _renderDayActionsSheet();
   }
 
   async function adjustGymExercisePerformance(exerciseName, sessionName, dateStr, plannedSets, plannedReps, field, delta, anchorEl) {
@@ -1452,5 +1469,5 @@ const MuscuPage = (() => {
     _refresh();
   }
 
-  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, adjustGymExercisePerformance, setGymExercisePerformance, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
+  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, toggleGymRepsEditor, adjustGymExercisePerformance, setGymExercisePerformance, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
 })();

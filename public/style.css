@@ -5118,6 +5118,9 @@ html, body {
 .sheet-exercise-row.checked .sheet-tag-reps {
   opacity: 0.45;
 }
+.sheet-exercise-row.checked .sheet-tag-reps.sheet-tag-reps-btn {
+  opacity: 1;
+}
 .sheet-ex-check {
   width: 22px;
   height: 22px;
@@ -5224,41 +5227,47 @@ html, body {
   color: var(--text);
 }
 .sheet-reps-editor {
-  margin-top: 10px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(34,209,139,0.1), rgba(255,255,255,0.03));
-  border: 1px solid rgba(34,209,139,0.12);
-}
-.sheet-reps-head {
+  margin-top: 8px;
+  padding: 8px 10px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.08);
 }
-.sheet-reps-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text2);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.sheet-reps-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex: 1;
 }
-.sheet-reps-summary {
-  font-size: 24px;
-  font-weight: 800;
+.sheet-tag-reps-btn {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+  transition: opacity 0.16s, border-color 0.16s, background 0.16s, color 0.16s, transform 0.1s;
+}
+.sheet-tag-reps-btn:hover {
+  border-color: rgba(34,209,139,0.28);
+  color: var(--text);
+}
+.sheet-tag-reps-btn:active {
+  transform: scale(0.98);
+}
+.sheet-tag-reps-btn.active {
   color: #f8fafc;
-  line-height: 1;
+  background: rgba(34,209,139,0.14);
+  border-color: rgba(34,209,139,0.28);
 }
 .sheet-reps-preset {
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.05);
   color: var(--text2);
   border-radius: 999px;
-  padding: 7px 12px;
+  padding: 6px 10px;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -5276,25 +5285,20 @@ html, body {
   background: rgba(34,209,139,0.9);
   border-color: rgba(34,209,139,0.9);
 }
-.sheet-reps-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-.sheet-stepper-card {
+.sheet-stepper-compact {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 12px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 999px;
   border: 1px solid rgba(255,255,255,0.07);
-  background: rgba(8, 12, 22, 0.45);
+  background: rgba(8, 12, 22, 0.42);
 }
-.sheet-stepper-card.accent {
+.sheet-stepper-compact.accent {
   border-color: rgba(34,209,139,0.16);
   background: rgba(34,209,139,0.08);
 }
-.sheet-stepper-label {
+.sheet-stepper-mini-label {
   font-size: 12px;
   font-weight: 700;
   color: var(--text2);
@@ -5304,6 +5308,10 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+.sheet-stepper-control.compact {
+  justify-content: flex-start;
+  gap: 6px;
 }
 .sheet-stepper-btn {
   width: 34px;
@@ -5323,6 +5331,11 @@ html, body {
 .sheet-stepper-btn:active {
   transform: scale(0.94);
 }
+.sheet-stepper-btn.compact {
+  width: 28px;
+  height: 28px;
+  font-size: 17px;
+}
 .sheet-stepper-value {
   min-width: 44px;
   text-align: center;
@@ -5330,13 +5343,18 @@ html, body {
   font-weight: 800;
   color: #fff;
 }
+.sheet-stepper-value.compact {
+  min-width: 26px;
+  font-size: 17px;
+}
 .sheet-reps-help {
   font-size: 12px;
   color: var(--text3);
+  flex-basis: 100%;
 }
 @media (max-width: 560px) {
-  .sheet-reps-grid {
-    grid-template-columns: 1fr;
+  .sheet-reps-editor {
+    align-items: flex-start;
   }
 }
 /* === New zone selection UI (cards + tiles) ============================== */
