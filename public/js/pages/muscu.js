@@ -4,7 +4,7 @@ const MuscuPage = (() => {
   let _customSessionExercises = {}; // { [sessionName]: string[] } – stored in localStorage
   let _activeTab = 'planning';  // 'records' | 'planning'
   let _gymWeekOffset = 0;          // week offset (0 = current week)
-  let _gymEntries = {};            // 'YYYY-MM-DD_exnamelower' → { completed, session_name, performed_reps }
+  let _gymEntries = {};            // 'YYYY-MM-DD_exnamelower' → { exercise_name, completed, session_name, performed_reps }
   let _gymSessionsCatalog = [];    // [{ name, icon, color, exercises: [{id,name,emoji,sets,reps,unit}] }]
   let _gymZones = [];              // [{ id, parent_id, name, icon, color, order_index }]
   let _gymZoneEntriesByDate = {};  // 'YYYY-MM-DD' → Map<zone_id, set_count>
@@ -358,6 +358,7 @@ const MuscuPage = (() => {
       (checklistRes.entries || []).forEach(e => {
         const dk = typeof e.entry_date === 'string' ? e.entry_date.split('T')[0] : new Date(e.entry_date).toISOString().split('T')[0];
         _gymEntries[`${dk}_${e.exercise_name.toLowerCase()}`] = {
+          exercise_name: e.exercise_name,
           completed: !!e.completed,
           session_name: e.session_name,
           performed_reps: _normalizeGymReps(e.performed_reps),
@@ -396,6 +397,128 @@ const MuscuPage = (() => {
       .filter(([k, v]) => v.completed && k.startsWith(`${dateStr}_`)).length;
     const zonesDone = _gymZoneEntriesByDate[dateStr] ? _gymZoneEntriesByDate[dateStr].size : 0;
     return { exDone, zonesDone };
+  }
+
+  function _formatGymHistoryPerformance(performedReps) {
+    const normalized = _normalizeGymReps(performedReps);
+    if (!normalized.length) return 'Valide';
+    return normalized.every(value => value === normalized[0])
+      ? `${normalized.length} x ${normalized[0]}`
+      : normalized.join(' • ');
+  }
+
+  function _renderGymDaySheetShell(title, subtitle, bodyHtml) {
+    return `
+      <div class="gym-day-sheet">
+        <div class="sheet-handle"></div>
+        <header class="sheet-header">
+          <div>
+            <h3>${title}</h3>
+            <p class="sheet-subtitle">${subtitle}</p>
+          </div>
+          <button type="button" class="sheet-close" onclick="MuscuPage.closeDayActionsSheet()" aria-label="Fermer">✕</button>
+        </header>
+        <div class="sheet-body">
+          ${bodyHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  function _renderGymReadOnlySessions(exercises) {
+    if (!exercises || !exercises.length) {
+      return '<p class="exercise-inline-help" style="padding:8px 12px">Aucun exercice salle validé ce jour.</p>';
+    }
+
+    const sessionMetaByName = new Map(_gymSessionsCatalog.map(session => [session.name, session]));
+    const sessionOrder = new Map(_gymSessionsCatalog.map((session, index) => [session.name, index]));
+    const grouped = new Map();
+
+    exercises.forEach(entry => {
+      const sessionName = entry.session_name || 'Séance';
+      const sessionMeta = sessionMetaByName.get(sessionName) || null;
+
+      const group = grouped.get(sessionName) || {
+        sessionName,
+        sessionMeta,
+        items: [],
+      };
+
+      group.items.push({
+        name: entry.exercise_name || 'Exercice',
+        performance: _formatGymHistoryPerformance(entry.performed_reps),
+        completedAt: entry.completed_at || null,
+      });
+
+      grouped.set(sessionName, group);
+    });
+
+    return Array.from(grouped.values())
+      .sort((a, b) => {
+        const aOrder = sessionOrder.has(a.sessionName) ? sessionOrder.get(a.sessionName) : Number.MAX_SAFE_INTEGER;
+        const bOrder = sessionOrder.has(b.sessionName) ? sessionOrder.get(b.sessionName) : Number.MAX_SAFE_INTEGER;
+        return aOrder - bOrder || a.sessionName.localeCompare(b.sessionName, 'fr');
+      })
+      .map(group => {
+        const itemsHtml = group.items
+          .sort((a, b) => {
+            const aTime = a.completedAt ? Date.parse(a.completedAt) : NaN;
+            const bTime = b.completedAt ? Date.parse(b.completedAt) : NaN;
+            if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) return aTime - bTime;
+            if (Number.isFinite(aTime) !== Number.isFinite(bTime)) return Number.isFinite(aTime) ? -1 : 1;
+            return a.name.localeCompare(b.name, 'fr');
+          })
+          .map(item => `
+            <div class="exercise-item sheet-exercise-row checked readonly">
+              <div class="exercise-info">
+                <div class="exercise-name">${_escape(item.name)}</div>
+              </div>
+              <div class="sheet-ex-right">
+                <span class="exercise-tag sheet-tag-reps">${_escape(item.performance)}</span>
+                <span class="sheet-ex-check on">✓</span>
+              </div>
+            </div>`)
+          .join('');
+
+        return `
+          <details class="sheet-accordion" open>
+            <summary style="--session-color:${group.sessionMeta?.color || '#888'}">
+              <span class="sheet-acc-icon">${group.sessionMeta?.icon || '🏋️'}</span>
+              <span class="sheet-acc-title">${_escape(group.sessionName)}</span>
+              <span class="sheet-acc-count">${group.items.length}</span>
+            </summary>
+            <div class="sheet-acc-body">${itemsHtml}</div>
+          </details>`;
+      })
+      .join('');
+  }
+
+  function _renderGymReadOnlyZones(zones) {
+    if (!zones || !zones.length) {
+      return '<p class="exercise-inline-help" style="padding:8px 12px">Aucune zone libre validée ce jour.</p>';
+    }
+
+    const items = zones.slice()
+      .sort((a, b) => {
+        const parentCmp = String(a.parent_name || '').localeCompare(String(b.parent_name || ''), 'fr');
+        if (parentCmp !== 0) return parentCmp;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'fr');
+      });
+
+    return `<div class="zone-grid">${items.map(zone => {
+      const color = zone.color || '#888';
+      const hasSetCount = Number.isInteger(parseInt(zone.set_count, 10));
+      const setCount = hasSetCount ? _normalizeGymZoneSetCount(zone.set_count) : null;
+      return `
+        <div class="zone-card single on readonly" style="--zc:${color}">
+          <span class="zone-card-emoji">${_escape(zone.icon || '🎯')}</span>
+          <div class="zone-card-text">
+            <h5>${_escape(zone.name || 'Zone')}</h5>
+            <small>${setCount == null ? 'Zone validée' : `${setCount} série${setCount > 1 ? 's' : ''} réalisée${setCount > 1 ? 's' : ''}`}</small>
+          </div>
+          <span class="zone-card-state">✓</span>
+        </div>`;
+    }).join('')}</div>`;
   }
 
   function _renderGymWeekPage(container, dates) {
@@ -475,6 +598,7 @@ const MuscuPage = (() => {
     const isToday  = date.getTime() === today.getTime();
     const isFuture = date > today;
     const isPast   = !isToday && !isFuture;
+    const canOpenDetails = !isFuture;
 
     const active = _isDayActive(key);
     const rest   = _isDayRest(key);
@@ -501,9 +625,14 @@ const MuscuPage = (() => {
       summaryHtml = `<p class="gym-rest-day-msg">${isToday ? 'Pas encore d’activité' : 'Aucune activité ce jour'}</p>`;
     }
 
-    const ctaLabel = isToday ? (active || rest ? '✎&nbsp;Modifier' : '+&nbsp;Enregistrer mon activité') : '';
-    const ctaClass = `gym-day-cta${(active || rest) ? ' cta-edit' : ''}${isToday ? ' cta-today' : ''}`;
-    const cta = isToday ? `
+    const showHistoryCta = isPast && (active || rest);
+    const ctaLabel = isToday
+      ? (active || rest ? '✎&nbsp;Modifier' : '+&nbsp;Enregistrer mon activité')
+      : showHistoryCta
+        ? '👁️&nbsp;Voir le détail'
+        : '';
+    const ctaClass = `gym-day-cta${(active || rest) ? ' cta-edit' : ''}${isToday ? ' cta-today' : ''}${isPast ? ' cta-readonly' : ''}`;
+    const cta = (isToday || showHistoryCta) ? `
       <button type="button" class="${ctaClass}" onclick="event.stopPropagation();MuscuPage.openDayActionsSheet('${key}')">${ctaLabel}</button>` : '';
 
     const card = document.createElement('div');
@@ -511,7 +640,7 @@ const MuscuPage = (() => {
     card.dataset.key = key;
     card.id = `gday-${key}`;
     card.innerHTML = `
-      <div class="day-header" onclick="${isToday ? `MuscuPage.openDayActionsSheet('${key}')` : ''}">
+      <div class="day-header${canOpenDetails ? ' day-header-clickable' : ''}" ${canOpenDetails ? `onclick="MuscuPage.openDayActionsSheet('${key}')"` : ''}>
         <div class="day-check">${active ? '✓' : rest ? '🛌' : ''}</div>
         <div class="day-name-block">
           <div class="day-name">${_DAYS_FR[date.getDay()]}</div>
@@ -540,7 +669,7 @@ const MuscuPage = (() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const [y, m, d] = dateStr.split('-').map(Number);
     const target = new Date(y, m - 1, d);
-    if (target > today || target < today) return; // only today allowed
+    if (target > today) return;
     _activeSheetDate = dateStr;
     _activeGymRepsEditorKey = null;
     _activeGymZoneSeriesEditorKey = null;
@@ -626,7 +755,7 @@ const MuscuPage = (() => {
     document.documentElement.style.overflow = '';
   }
 
-  function _renderDayActionsSheet() {
+  async function _renderDayActionsSheet() {
     const sheet = document.getElementById('gym-day-sheet');
     if (!sheet || !_activeSheetDate) return;
 
@@ -642,8 +771,74 @@ const MuscuPage = (() => {
     const [y, m, d] = dateStr.split('-').map(Number);
     const dateObj = new Date(y, m - 1, d);
     const title = `${_DAYS_FR[dateObj.getDay()]} ${dateObj.getDate()} ${_MONTHS_FR[dateObj.getMonth()]}`;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isReadOnly = dateStr !== _gymDateKey(today);
 
     const isRest = _isDayRest(dateStr);
+    const renderReadOnlyNote = (dayIsRest) => `
+      <section class="sheet-section">
+        <div class="sheet-readonly-note${dayIsRest ? ' is-rest' : ''}">
+          <strong>${dayIsRest ? 'Jour de repos déclaré' : 'Historique de la journée'}</strong>
+          <small>${dayIsRest ? 'Cette journée a été marquée comme repos. Les jours passés sont consultables uniquement.' : 'Lecture seule : tu peux consulter les exercices et zones validés ce jour-là, sans les modifier.'}</small>
+        </div>
+      </section>`;
+
+    if (isReadOnly) {
+      sheet.innerHTML = _renderGymDaySheetShell(
+        title,
+        'Lecture seule — historique du jour',
+        `${renderReadOnlyNote(isRest)}
+          <section class="sheet-section">
+            <h4 class="sheet-section-title">🏋️ Séances pré-faites</h4>
+            <p class="exercise-inline-help" style="padding:8px 12px">Chargement de l'historique…</p>
+          </section>
+          <section class="sheet-section">
+            <h4 class="sheet-section-title">🎯 Zones de travail libres</h4>
+            <p class="exercise-inline-help" style="padding:8px 12px">Chargement de l'historique…</p>
+          </section>`
+      );
+
+      try {
+        const data = await API.getGymDayDetail(_userId, dateStr);
+        if (_activeSheetDate !== dateStr || !document.getElementById('gym-day-sheet')) return;
+
+        sheet.innerHTML = _renderGymDaySheetShell(
+          title,
+          'Lecture seule — historique du jour',
+          `${renderReadOnlyNote(!!data?.is_rest)}
+            <section class="sheet-section">
+              <h4 class="sheet-section-title">🏋️ Séances pré-faites</h4>
+              ${_renderGymReadOnlySessions(data?.exercises || [])}
+            </section>
+            <section class="sheet-section">
+              <h4 class="sheet-section-title">🎯 Zones de travail libres</h4>
+              ${_renderGymReadOnlyZones(data?.zones || [])}
+            </section>`
+        );
+      } catch (err) {
+        console.error('[Gym day detail]', err);
+        if (_activeSheetDate !== dateStr || !document.getElementById('gym-day-sheet')) return;
+
+        sheet.innerHTML = _renderGymDaySheetShell(
+          title,
+          'Lecture seule — historique du jour',
+          `${renderReadOnlyNote(isRest)}
+            <section class="sheet-section">
+              <h4 class="sheet-section-title">🏋️ Séances pré-faites</h4>
+              <p class="exercise-inline-help" style="padding:8px 12px">Impossible de charger l'historique salle.</p>
+            </section>
+            <section class="sheet-section">
+              <h4 class="sheet-section-title">🎯 Zones de travail libres</h4>
+              <p class="exercise-inline-help" style="padding:8px 12px">Impossible de charger l'historique salle.</p>
+            </section>`
+        );
+      }
+
+      const backdrop = document.getElementById('gym-day-sheet');
+      if (backdrop) requestAnimationFrame(() => _attachSheetSwipe(backdrop));
+      return;
+    }
 
     const sessionsHtml = (_gymSessionsCatalog && _gymSessionsCatalog.length)
       ? _gymSessionsCatalog.map(session => {
@@ -1043,6 +1238,7 @@ const MuscuPage = (() => {
     const entryKey = `${dateStr}_${exerciseName.toLowerCase()}`;
 
     _gymEntries[entryKey] = {
+      exercise_name: exerciseName,
       session_name: sessionName,
       completed: nextPerformedReps.length > 0,
       performed_reps: _normalizeGymReps(nextPerformedReps),
@@ -1057,6 +1253,7 @@ const MuscuPage = (() => {
         nextPerformedReps
       );
       _gymEntries[entryKey] = {
+        exercise_name: exerciseName,
         session_name: sessionName,
         completed: !!result.completed,
         performed_reps: _normalizeGymReps(result.performed_reps),

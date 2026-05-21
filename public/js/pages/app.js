@@ -158,6 +158,7 @@ const WorkoutPage = (() => {
     const isToday = date.getTime() === today.getTime();
     const isFuture = date > today;
     const isPast = !isToday && !isFuture;
+    const canOpenDetails = !isFuture;
 
     const { doneCount } = _dayCounts(key);
     const hasActivity = doneCount > 0;
@@ -182,9 +183,14 @@ const WorkoutPage = (() => {
       summaryHtml = `<p class="gym-rest-day-msg">${isToday ? 'Pas encore d\'activité' : 'Aucune activité ce jour'}</p>`;
     }
 
-    const ctaLabel = isToday ? (hasActivity || isRest ? '✎&nbsp;Modifier' : '+&nbsp;Enregistrer mon activité') : '';
-    const ctaClass = `gym-day-cta${(hasActivity || isRest) ? ' cta-edit' : ''}${isToday ? ' cta-today' : ''}`;
-    const cta = isToday ? `
+    const showHistoryCta = isPast && (hasActivity || isRest);
+    const ctaLabel = isToday
+      ? (hasActivity || isRest ? '✎&nbsp;Modifier' : '+&nbsp;Enregistrer mon activité')
+      : showHistoryCta
+        ? '👁️&nbsp;Voir le détail'
+        : '';
+    const ctaClass = `gym-day-cta${(hasActivity || isRest) ? ' cta-edit' : ''}${isToday ? ' cta-today' : ''}${isPast ? ' cta-readonly' : ''}`;
+    const cta = (isToday || showHistoryCta) ? `
       <button type="button" class="${ctaClass}" onclick="event.stopPropagation();WorkoutPage.openDayActionsSheet('${key}')">${ctaLabel}</button>` : '';
 
     const card = document.createElement('div');
@@ -193,7 +199,7 @@ const WorkoutPage = (() => {
     card.id = `day-${key}`;
 
     card.innerHTML = `
-      <div class="day-header" onclick="${isToday ? `WorkoutPage.openDayActionsSheet('${key}')` : ''}">
+      <div class="day-header${canOpenDetails ? ' day-header-clickable' : ''}" ${canOpenDetails ? `onclick="WorkoutPage.openDayActionsSheet('${key}')"` : ''}>
         <div class="day-check">${hasActivity ? '✓' : isRest ? '🛌' : ''}</div>
         <div class="day-name-block">
           <div class="day-name">${DAYS_FR[date.getDay()]}</div>
@@ -307,7 +313,7 @@ const WorkoutPage = (() => {
   function openDayActionsSheet(dateStr) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    if (dateStr !== dateKey(today)) return;
+    if (_dateFromKey(dateStr) > today) return;
 
     activeSheetDate = dateStr;
     let sheet = document.getElementById('home-day-sheet');
@@ -335,22 +341,114 @@ const WorkoutPage = (() => {
     document.documentElement.style.overflow = '';
   }
 
-  function _renderDayActionsSheet() {
+  function _renderHomeDaySheetShell(title, subtitle, bodyHtml) {
+    return `
+      <div class="gym-day-sheet">
+        <div class="sheet-handle"></div>
+        <header class="sheet-header">
+          <div>
+            <h3>${title}</h3>
+            <p class="sheet-subtitle">${subtitle}</p>
+          </div>
+          <button type="button" class="sheet-close" onclick="WorkoutPage.closeDayActionsSheet()" aria-label="Fermer">✕</button>
+        </header>
+        <div class="sheet-body">
+          ${bodyHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  function _renderHomeReadOnlyExercises(exercises) {
+    return exercises.map(exercise => {
+      let metaTag = '<span class="exercise-tag sheet-tag-reps">Valide</span>';
+      if (exercise.is_running && exercise.reps != null) {
+        metaTag = `<span class="exercise-tag running sheet-tag-reps">${exercise.reps}&nbsp;${escapeHtml(exercise.unit || 'min')}</span>`;
+      } else if (exercise.sets != null && exercise.reps != null) {
+        metaTag = `<span class="exercise-tag sheet-tag-reps">${exercise.sets}&nbsp;×&nbsp;${exercise.reps}&nbsp;rép.</span>`;
+      }
+
+      return `
+        <div class="exercise-item sheet-exercise-row checked readonly">
+          <div class="exercise-info">
+            <div class="exercise-name">${escapeHtml(exercise.emoji || '💪')} ${escapeHtml(exercise.name || 'Exercice')}</div>
+          </div>
+          <div class="sheet-ex-right">
+            ${metaTag}
+            <span class="sheet-ex-check on">✓</span>
+          </div>
+        </div>`;
+    }).join('') || '<p class="exercise-inline-help" style="padding:8px 12px">Aucun exercice effectué ce jour.</p>';
+  }
+
+  async function _renderDayActionsSheet() {
     const sheet = document.getElementById('home-day-sheet');
     if (!sheet || !activeSheetDate) return;
 
-    const dateObj = _dateFromKey(activeSheetDate);
+    const requestedDate = activeSheetDate;
+    const dateObj = _dateFromKey(requestedDate);
     const title = `${DAYS_FR[dateObj.getDay()]} ${dateObj.getDate()} ${MONTHS_FR[dateObj.getMonth()]}`;
-    const isRest = _isRestDay(activeSheetDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isReadOnly = requestedDate !== dateKey(today);
+    const isRest = _isRestDay(requestedDate);
+    const renderReadOnlyNote = (dayIsRest) => `
+      <section class="sheet-section">
+        <div class="sheet-readonly-note${dayIsRest ? ' is-rest' : ''}">
+          <strong>${dayIsRest ? 'Jour de repos déclaré' : 'Historique de la journée'}</strong>
+          <small>${dayIsRest ? 'Cette journée a été marquée comme repos. Les jours passés sont consultables uniquement.' : 'Lecture seule : tu peux consulter les exercices validés ce jour-là, sans les modifier.'}</small>
+        </div>
+      </section>`;
+
+    if (isReadOnly) {
+      sheet.innerHTML = _renderHomeDaySheetShell(
+        title,
+        'Lecture seule — historique du jour',
+        `${renderReadOnlyNote(isRest)}
+          <section class="sheet-section">
+            <h4 class="sheet-section-title">🏠 Activité Maison</h4>
+            <div class="sheet-acc-body"><p class="exercise-inline-help" style="padding:8px 12px">Chargement de l'historique…</p></div>
+          </section>`
+      );
+
+      try {
+        const data = await API.getHomeDayDetail(requestedDate);
+        if (activeSheetDate !== requestedDate || !document.getElementById('home-day-sheet')) return;
+
+        sheet.innerHTML = _renderHomeDaySheetShell(
+          title,
+          'Lecture seule — historique du jour',
+          `${renderReadOnlyNote(isRest)}
+            <section class="sheet-section">
+              <h4 class="sheet-section-title">🏠 Activité Maison</h4>
+              <div class="sheet-acc-body">${_renderHomeReadOnlyExercises(data.exercises || [])}</div>
+            </section>`
+        );
+      } catch (err) {
+        console.error('[Home day detail]', err);
+        if (activeSheetDate !== requestedDate || !document.getElementById('home-day-sheet')) return;
+
+        sheet.innerHTML = _renderHomeDaySheetShell(
+          title,
+          'Lecture seule — historique du jour',
+          `${renderReadOnlyNote(isRest)}
+            <section class="sheet-section">
+              <h4 class="sheet-section-title">🏠 Activité Maison</h4>
+              <div class="sheet-acc-body"><p class="exercise-inline-help" style="padding:8px 12px">Impossible de charger l'historique.</p></div>
+            </section>`
+        );
+      }
+      return;
+    }
 
     const exercisesHtml = getExercisesForDay(dateObj).map(ex => {
-      const checked = entries[`${activeSheetDate}_${ex.id}`] === true;
+      const checked = entries[`${requestedDate}_${ex.id}`] === true;
       const metaTag = ex.is_running
         ? `<span class="exercise-tag running sheet-tag-reps">${ex.reps}&nbsp;${escapeHtml(ex.unit || 'min')}</span>`
         : `<span class="exercise-tag sheet-tag-reps">${ex.sets}&nbsp;×&nbsp;${ex.reps}&nbsp;rép.</span>`;
       return `
         <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}"
-             onclick="WorkoutPage.toggleExercise('${activeSheetDate}', ${ex.id}, this)">
+             onclick="WorkoutPage.toggleExercise('${requestedDate}', ${ex.id}, this)">
           <div class="exercise-info">
             <div class="exercise-name">${escapeHtml(ex.emoji || '💪')} ${escapeHtml(ex.name)}</div>
           </div>
@@ -361,34 +459,27 @@ const WorkoutPage = (() => {
         </div>`;
     }).join('') || '<p class="exercise-inline-help" style="padding:8px 12px">Aucun exercice disponible</p>';
 
-    sheet.innerHTML = `
-      <div class="gym-day-sheet">
-        <div class="sheet-handle"></div>
-        <header class="sheet-header">
-          <div>
-            <h3>${title}</h3>
-            <p class="sheet-subtitle">Que veux-tu enregistrer pour ce jour ?</p>
-          </div>
-          <button type="button" class="sheet-close" onclick="WorkoutPage.closeDayActionsSheet()" aria-label="Fermer">✕</button>
-        </header>
-        <div class="sheet-body">
-          <section class="sheet-section">
-            <button type="button" class="rest-toggle-btn${isRest ? ' on' : ''}" onclick="WorkoutPage.toggleRestDay('${activeSheetDate}')">
-              <span class="rest-toggle-icon">🛌</span>
-              <span class="rest-toggle-text">
-                <strong>${isRest ? 'Jour de repos déclaré' : 'Marquer comme jour de repos'}</strong>
-                <small>${isRest ? 'Cliquer pour annuler' : 'Mémorisé localement sur Maison'}</small>
-              </span>
-              <span class="rest-toggle-state">${isRest ? '✓' : ''}</span>
-            </button>
-          </section>
-          <section class="sheet-section">
-            <h4 class="sheet-section-title">🏠 Exercices Maison</h4>
-            <div class="sheet-acc-body">${exercisesHtml}</div>
-          </section>
-        </div>
-      </div>
-    `;
+    const introSection = `
+      <section class="sheet-section">
+        <button type="button" class="rest-toggle-btn${isRest ? ' on' : ''}" onclick="WorkoutPage.toggleRestDay('${requestedDate}')">
+          <span class="rest-toggle-icon">🛌</span>
+          <span class="rest-toggle-text">
+            <strong>${isRest ? 'Jour de repos déclaré' : 'Marquer comme jour de repos'}</strong>
+            <small>${isRest ? 'Cliquer pour annuler' : 'Mémorisé localement sur Maison'}</small>
+          </span>
+          <span class="rest-toggle-state">${isRest ? '✓' : ''}</span>
+        </button>
+      </section>`;
+
+    sheet.innerHTML = _renderHomeDaySheetShell(
+      title,
+      'Que veux-tu enregistrer pour ce jour ?',
+      `${introSection}
+        <section class="sheet-section">
+          <h4 class="sheet-section-title">🏠 Exercices Maison</h4>
+          <div class="sheet-acc-body">${exercisesHtml}</div>
+        </section>`
+    );
   }
 
   function _refreshDayUI(dateStr) {

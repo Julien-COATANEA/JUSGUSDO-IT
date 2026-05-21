@@ -261,6 +261,29 @@ function _applyDevMock() {
       .filter(entry => (!start || entry.entry_date >= start) && (!end || entry.entry_date <= end))
       .map(entry => ({ ...entry })),
   });
+  API.getHomeDayDetail = async (date) => {
+    const exercises = _devChecklistEntries
+      .filter(entry => entry.entry_date === date && entry.completed)
+      .map(entry => {
+        const exercise = findDevExercise(entry.exercise_id);
+        return {
+          id: entry.id,
+          exercise_id: entry.exercise_id,
+          entry_date: entry.entry_date,
+          completed: true,
+          completed_at: entry.completed_at || null,
+          name: exercise?.name || 'Exercice supprimé',
+          emoji: exercise?.emoji || '💪',
+          sets: exercise?.sets ?? null,
+          reps: exercise?.reps ?? null,
+          unit: exercise?.unit || null,
+          is_running: !!exercise?.is_running,
+          is_active: exercise?.is_active !== false,
+        };
+      });
+
+    return { date, exercises };
+  };
   API.toggleChecklist = async (exercise_id, entry_date) => {
     const today = _devTodayStr();
     if (entry_date > today) throw new Error('Impossible de cocher une date future');
@@ -605,6 +628,7 @@ function _applyDevMock() {
           id: zone.id, name: zone.name, icon: zone.icon, color: zone.color,
           parent_name: parent ? parent.name : null,
           parent_icon: parent ? parent.icon : null,
+          set_count: _normalizeDevGymZoneSetCount(z.set_count),
         } : null;
       })
       .filter(Boolean);

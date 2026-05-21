@@ -46,6 +46,7 @@ const API = (() => {
     getUserStats: (id) => request('GET', `/users/${id}/stats`),
     getExercises: () => request('GET', '/exercises'),
     getChecklist: (start, end) => request('GET', `/exercises/checklist?start=${start}&end=${end}`),
+    getHomeDayDetail: (date) => request('GET', `/exercises/checklist/day/${date}`),
     toggleChecklist: (exercise_id, entry_date) =>
       request('POST', '/exercises/checklist/toggle', { exercise_id, entry_date }),
     getStats: () => request('GET', '/exercises/stats'),

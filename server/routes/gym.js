@@ -642,7 +642,7 @@ router.get('/day/:userId/:date', requireAuth, async (req, res) => {
         [userId, date]
       ),
       db.query(
-        `SELECT z.id, z.name, z.icon, z.color, p.name AS parent_name, p.icon AS parent_icon
+        `SELECT z.id, z.name, z.icon, z.color, p.name AS parent_name, p.icon AS parent_icon, e.set_count
            FROM gym_zone_entries e
            JOIN gym_zones z ON z.id = e.zone_id
       LEFT JOIN gym_zones p ON p.id = z.parent_id
@@ -660,7 +660,10 @@ router.get('/day/:userId/:date', requireAuth, async (req, res) => {
       date,
       is_rest: restRes.rowCount > 0,
       exercises: exRes.rows.map(mapGymEntryRow),
-      zones: zRes.rows,
+      zones: zRes.rows.map(row => ({
+        ...row,
+        set_count: normalizeZoneSetCount(row.set_count),
+      })),
     });
   } catch (err) {
     console.error('[gym] day detail', err);

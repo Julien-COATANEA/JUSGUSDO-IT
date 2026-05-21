@@ -5689,6 +5689,62 @@ html, body {
   box-shadow: 0 0 14px color-mix(in srgb, var(--zc) 55%, transparent);
 }
 
+.day-header.day-header-clickable,
+.day-card.past .day-header.day-header-clickable {
+  cursor: pointer;
+}
+
+.gym-day-cta.cta-readonly {
+  border-style: dashed;
+}
+
+.sheet-readonly-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.04);
+}
+
+.sheet-readonly-note strong {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.sheet-readonly-note small {
+  font-size: 12px;
+  color: var(--text3);
+  line-height: 1.45;
+}
+
+.sheet-readonly-note.is-rest {
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.sheet-acc-body .exercise-item.sheet-exercise-row.readonly,
+.sheet-acc-body .exercise-item.sheet-exercise-row.readonly .sheet-ex-main {
+  cursor: default;
+}
+
+.sheet-acc-body .exercise-item.sheet-exercise-row.readonly:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.sheet-acc-body .exercise-item.sheet-exercise-row.readonly.checked:hover {
+  background: rgba(34,209,139,0.06);
+}
+
+.zone-card.single.readonly,
+.zone-card.single.readonly:hover,
+.zone-card.single.readonly:active {
+  cursor: default;
+  transform: none;
+}
+
 /* Group card header (parent with children) */
 .zone-card-head {
   display: flex; align-items: center; gap: 10px;
