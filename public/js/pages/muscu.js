@@ -7,15 +7,18 @@ const MuscuPage = (() => {
   let _gymEntries = {};            // 'YYYY-MM-DD_exnamelower' → { completed, session_name, performed_reps }
   let _gymSessionsCatalog = [];    // [{ name, icon, color, exercises: [{id,name,emoji,sets,reps,unit}] }]
   let _gymZones = [];              // [{ id, parent_id, name, icon, color, order_index }]
-  let _gymZoneEntriesByDate = {};  // 'YYYY-MM-DD' → Set<zone_id>
+  let _gymZoneEntriesByDate = {};  // 'YYYY-MM-DD' → Map<zone_id, set_count>
+  let _gymZoneMutationQueueByKey = new Map();
+  let _gymZoneMutationVersionByKey = new Map();
   let _gymRestDays = new Set();    // Set<'YYYY-MM-DD'>
   let _activeSheetDate = null;     // 'YYYY-MM-DD' currently shown in day-actions sheet
   let _activeGymRepsEditorKey = null;
-  let _openGymZoneGroupKeys = new Set();
+  let _activeGymZoneSeriesEditorKey = null;
 
   const _DAYS_FR = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
   const _MONTHS_FR = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
   const _DAY_LETTERS = ['D','L','M','M','J','V','S'];
+  const _DEFAULT_GYM_ZONE_SET_COUNT = 3;
 
   // ── Session definitions (fallback; overridden by DB data at runtime) ──────
   let _muscuSessions = [
@@ -133,8 +136,75 @@ const MuscuPage = (() => {
     return `${dateStr}_${String(sessionName || '').toLowerCase()}_${String(exerciseName || '').toLowerCase()}`;
   }
 
-  function _getGymZoneGroupKey(dateStr, parentId) {
-    return `${dateStr}_zone_${parentId}`;
+  function _normalizeGymZoneSetCount(value) {
+    return _clampGymMetric(value, 1, 24, _DEFAULT_GYM_ZONE_SET_COUNT);
+  }
+
+  function _cloneGymZoneEntriesForDate(dateStr) {
+    return _gymZoneEntriesByDate[dateStr] ? new Map(_gymZoneEntriesByDate[dateStr]) : new Map();
+  }
+
+  function _setGymZoneEntriesForDate(dateStr, entriesMap) {
+    if (entriesMap && entriesMap.size > 0) _gymZoneEntriesByDate[dateStr] = entriesMap;
+    else delete _gymZoneEntriesByDate[dateStr];
+  }
+
+  function _getGymZoneSeriesEditorKey(dateStr, zoneId) {
+    return `${dateStr}_zone_series_${zoneId}`;
+  }
+
+  function _getGymZoneSetCount(dateStr, zoneId) {
+    return _normalizeGymZoneSetCount(_gymZoneEntriesByDate[dateStr]?.get(zoneId));
+  }
+
+  function _getGymZoneMutationKey(dateStr, zoneId) {
+    return `${dateStr}_zone_mutation_${zoneId}`;
+  }
+
+  function _beginGymZoneMutation(dateStr, zoneId) {
+    const key = _getGymZoneMutationKey(dateStr, zoneId);
+    const nextVersion = (_gymZoneMutationVersionByKey.get(key) || 0) + 1;
+    _gymZoneMutationVersionByKey.set(key, nextVersion);
+    return { key, version: nextVersion };
+  }
+
+  function _isLatestGymZoneMutation(mutation) {
+    return _gymZoneMutationVersionByKey.get(mutation.key) === mutation.version;
+  }
+
+  function _queueGymZoneMutation(dateStr, zoneId, task) {
+    const key = _getGymZoneMutationKey(dateStr, zoneId);
+    const previous = _gymZoneMutationQueueByKey.get(key) || Promise.resolve();
+    let tracked = null;
+    const next = previous.catch(() => {}).then(task);
+    tracked = next.finally(() => {
+      if (_gymZoneMutationQueueByKey.get(key) === tracked) {
+        _gymZoneMutationQueueByKey.delete(key);
+      }
+    });
+    _gymZoneMutationQueueByKey.set(key, tracked);
+    return tracked;
+  }
+
+  function _renderGymZoneSeriesEditor(zone, dateStr, setCount, color) {
+    const safeName = _escape(zone.name || 'Zone');
+    const safeIcon = _escape(zone.icon || '💪');
+    return `
+      <div class="zone-series-editor" style="--zc:${color}" onclick="event.stopPropagation()">
+        <div class="zone-series-copy">
+          <span class="zone-series-title">${safeIcon} ${safeName}</span>
+          <small>${setCount} série${setCount > 1 ? 's' : ''} réalisée${setCount > 1 ? 's' : ''}</small>
+        </div>
+        <div class="zone-series-stepper">
+          <button type="button" class="zone-series-btn"
+            onclick="event.stopPropagation();MuscuPage.adjustGymZoneSetCount(${zone.id}, '${dateStr}', -1, this)"
+            aria-label="Retirer une série">−</button>
+          <span class="zone-series-value">${setCount}</span>
+          <button type="button" class="zone-series-btn"
+            onclick="event.stopPropagation();MuscuPage.adjustGymZoneSetCount(${zone.id}, '${dateStr}', 1, this)"
+            aria-label="Ajouter une série">+</button>
+        </div>
+      </div>`;
   }
 
   function _syncGymXp(result, anchorEl) {
@@ -300,8 +370,8 @@ const MuscuPage = (() => {
       _gymZoneEntriesByDate = {};
       (zoneEntriesRes.entries || []).forEach(e => {
         const dk = typeof e.entry_date === 'string' ? e.entry_date.split('T')[0] : new Date(e.entry_date).toISOString().split('T')[0];
-        if (!_gymZoneEntriesByDate[dk]) _gymZoneEntriesByDate[dk] = new Set();
-        _gymZoneEntriesByDate[dk].add(e.zone_id);
+        if (!_gymZoneEntriesByDate[dk]) _gymZoneEntriesByDate[dk] = new Map();
+        _gymZoneEntriesByDate[dk].set(e.zone_id, _normalizeGymZoneSetCount(e.set_count));
       });
 
       _gymRestDays = new Set(restDaysRes.dates || []);
@@ -473,7 +543,7 @@ const MuscuPage = (() => {
     if (target > today || target < today) return; // only today allowed
     _activeSheetDate = dateStr;
     _activeGymRepsEditorKey = null;
-    _openGymZoneGroupKeys = new Set();
+    _activeGymZoneSeriesEditorKey = null;
     let sheet = document.getElementById('gym-day-sheet');
     if (!sheet) {
       sheet = document.createElement('div');
@@ -548,7 +618,7 @@ const MuscuPage = (() => {
   function closeDayActionsSheet() {
     _activeSheetDate = null;
     _activeGymRepsEditorKey = null;
-    _openGymZoneGroupKeys = new Set();
+    _activeGymZoneSeriesEditorKey = null;
     const sheet = document.getElementById('gym-day-sheet');
     if (sheet) sheet.classList.remove('open');
     // Restore background page scroll
@@ -668,69 +738,78 @@ const MuscuPage = (() => {
       : '<p class="exercise-inline-help" style="padding:8px 12px">Aucune séance disponible</p>';
 
     const parents = _gymZones.filter(z => !z.parent_id).sort((a,b) => a.order_index - b.order_index);
-    const zonesActive = _gymZoneEntriesByDate[dateStr] || new Set();
+    const zonesActive = _gymZoneEntriesByDate[dateStr] || new Map();
     const zonesHtml = parents.length
       ? `<div class="zone-grid">${parents.map(p => {
           const children = _gymZones.filter(z => z.parent_id === p.id).sort((a,b) => a.order_index - b.order_index);
           const color = p.color || '#888';
 
-          // Parent without children: single compact line toggle.
           if (!children.length) {
             const on = zonesActive.has(p.id);
-            return `<button type="button" class="zone-line zone-line-single${on ? ' on' : ''}" style="--zc:${color}"
-              onclick="MuscuPage.toggleGymZone(${p.id}, '${dateStr}')">
-              <div class="zone-line-main">
-                <span class="zone-line-emoji">${_escape(p.icon || '💪')}</span>
-                <div class="zone-line-copy">
-                  <strong>${_escape(p.name)}</strong>
-                  <small>${on ? 'Zone validée' : 'Zone libre'}</small>
+            const setCount = _getGymZoneSetCount(dateStr, p.id);
+            const editorKey = _getGymZoneSeriesEditorKey(dateStr, p.id);
+            const isEditorOpen = on && _activeGymZoneSeriesEditorKey === editorKey;
+            return `<div class="zone-single-wrap">
+              <button type="button" class="zone-card single${on ? ' on' : ''}" style="--zc:${color}"
+                onclick="MuscuPage.toggleGymZone(${p.id}, '${dateStr}')">
+                <span class="zone-card-emoji">${_escape(p.icon || '💪')}</span>
+                <div class="zone-card-text">
+                  <h5>${_escape(p.name)}</h5>
+                  <small>${on ? 'Travaillé ✓' : 'Toucher pour valider'}</small>
                 </div>
-              </div>
-              <span class="zone-line-status${on ? ' active' : ''}">${on ? 'Actif' : 'Inactif'}</span>
-            </button>`;
+                <span class="zone-card-state">${on ? '✓' : ''}</span>
+              </button>
+              ${on ? `<button type="button" class="zone-series-badge${isEditorOpen ? ' active' : ''}" style="--zc:${color}"
+                onclick="event.stopPropagation();MuscuPage.toggleGymZoneSeriesEditor('${dateStr}', ${p.id})">${setCount} série${setCount > 1 ? 's' : ''}</button>` : ''}
+              ${isEditorOpen ? _renderGymZoneSeriesEditor(p, dateStr, setCount, color) : ''}
+            </div>`;
           }
 
           const onCount = children.filter(c => zonesActive.has(c.id)).length;
           const total   = children.length;
+          const pct     = total ? Math.round((onCount / total) * 100) : 0;
           const allOn   = onCount === total;
           const someOn  = onCount > 0;
           const childIds = children.map(c => c.id).join(',');
-          const quickLabel = allOn ? 'Vider' : 'Tout';
+          const quickLabel = allOn ? '✕ Vider' : '✓ Tout';
           const quickAction = allOn ? 'false' : 'true';
-          const groupKey = _getGymZoneGroupKey(dateStr, p.id);
-          const isOpen = _openGymZoneGroupKeys.has(groupKey);
-          const summaryLabel = allOn ? 'Complet' : `${onCount}/${total} zone${total > 1 ? 's' : ''}`;
+          const openChild = children.find(z =>
+            zonesActive.has(z.id) && _activeGymZoneSeriesEditorKey === _getGymZoneSeriesEditorKey(dateStr, z.id)
+          );
 
-          const chips = children.map(z => {
+          const tiles = children.map(z => {
             const on = zonesActive.has(z.id);
-            return `<button type="button" class="zone-chip${on ? ' on' : ''}" style="--zc:${z.color || color}"
-              onclick="MuscuPage.toggleGymZone(${z.id}, '${dateStr}')"
-              aria-pressed="${on}">
-              <span class="zone-chip-emoji">${_escape(z.icon || '💪')}</span>
-              <span class="zone-chip-name">${_escape(z.name)}</span>
-              <span class="zone-chip-check" aria-hidden="true">${on ? '✓' : ''}</span>
-            </button>`;
+            const zoneColor = z.color || color;
+            const setCount = _getGymZoneSetCount(dateStr, z.id);
+            const editorKey = _getGymZoneSeriesEditorKey(dateStr, z.id);
+            const isEditorOpen = on && _activeGymZoneSeriesEditorKey === editorKey;
+            return `<div class="zone-tile-wrap${isEditorOpen ? ' editing' : ''}">
+              <button type="button" class="zone-tile${on ? ' on' : ''}" style="--zc:${zoneColor}"
+                onclick="MuscuPage.toggleGymZone(${z.id}, '${dateStr}')"
+                aria-pressed="${on}">
+                <span class="zone-tile-emoji">${_escape(z.icon || '💪')}</span>
+                <span class="zone-tile-name">${_escape(z.name)}</span>
+                <span class="zone-tile-check" aria-hidden="true">${on ? '✓' : ''}</span>
+              </button>
+              ${on ? `<button type="button" class="zone-series-badge mini${isEditorOpen ? ' active' : ''}" style="--zc:${zoneColor}"
+                onclick="event.stopPropagation();MuscuPage.toggleGymZoneSeriesEditor('${dateStr}', ${z.id})">${setCount} série${setCount > 1 ? 's' : ''}</button>` : ''}
+            </div>`;
           }).join('');
 
-          return `<div class="zone-group${allOn ? ' all-on' : someOn ? ' some-on' : ''}" style="--zc:${color}">
-            <div class="zone-line">
-              <div class="zone-line-main">
-                <span class="zone-line-emoji">${_escape(p.icon || '💪')}</span>
-                <div class="zone-line-copy">
-                  <strong>${_escape(p.name)}</strong>
-                  <small>${someOn ? 'Zones sélectionnées' : 'Toucher le badge pour ouvrir'}</small>
-                </div>
+          return `<article class="zone-card group${allOn ? ' all-on' : someOn ? ' some-on' : ''}" style="--zc:${color}">
+            <header class="zone-card-head">
+              <span class="zone-card-emoji">${_escape(p.icon || '💪')}</span>
+              <div class="zone-card-text">
+                <h5>${_escape(p.name)}</h5>
+                <small>${onCount}/${total} muscle${total > 1 ? 's' : ''}</small>
               </div>
-              <div class="zone-line-actions">
-                <button type="button" class="zone-line-status zone-line-status-toggle${isOpen ? ' active' : ''}"
-                  onclick="event.stopPropagation();MuscuPage.toggleGymZoneGroup('${dateStr}', ${p.id})"
-                  aria-pressed="${isOpen}">${summaryLabel}</button>
-                <button type="button" class="zone-line-quick" data-act="${quickAction}"
-                  onclick="event.stopPropagation();MuscuPage.bulkToggleZones('${childIds}', '${dateStr}', ${quickAction})">${quickLabel}</button>
-              </div>
-            </div>
-            ${isOpen ? `<div class="zone-chip-list">${chips}</div>` : ''}
-          </div>`;
+              <button type="button" class="zone-card-quick" data-act="${quickAction}"
+                onclick="event.stopPropagation();MuscuPage.bulkToggleZones('${childIds}', '${dateStr}', ${quickAction})">${quickLabel}</button>
+            </header>
+            <div class="zone-card-progress" aria-hidden="true"><span style="width:${pct}%"></span></div>
+            <div class="zone-card-tiles">${tiles}</div>
+            ${openChild ? _renderGymZoneSeriesEditor(openChild, dateStr, _getGymZoneSetCount(dateStr, openChild.id), openChild.color || color) : ''}
+          </article>`;
         }).join('')}</div>`
       : '<p class="exercise-inline-help" style="padding:8px 12px">Aucune zone définie</p>';
 
@@ -1021,11 +1100,42 @@ const MuscuPage = (() => {
     if (_activeSheetDate === dateStr) _renderDayActionsSheet();
   }
 
-  function toggleGymZoneGroup(dateStr, parentId) {
-    const key = _getGymZoneGroupKey(dateStr, parentId);
-    if (_openGymZoneGroupKeys.has(key)) _openGymZoneGroupKeys.delete(key);
-    else _openGymZoneGroupKeys.add(key);
+  function toggleGymZoneSeriesEditor(dateStr, zoneId) {
+    const nextKey = _getGymZoneSeriesEditorKey(dateStr, zoneId);
+    _activeGymZoneSeriesEditorKey = _activeGymZoneSeriesEditorKey === nextKey ? null : nextKey;
     if (_activeSheetDate === dateStr) _renderDayActionsSheet();
+  }
+
+  async function adjustGymZoneSetCount(zoneId, dateStr, delta, anchorEl) {
+    const previousEntries = _cloneGymZoneEntriesForDate(dateStr);
+    if (!previousEntries.has(zoneId)) return;
+
+    const nextEntries = _cloneGymZoneEntriesForDate(dateStr);
+    const nextSetCount = _normalizeGymZoneSetCount((previousEntries.get(zoneId) || _DEFAULT_GYM_ZONE_SET_COUNT) + delta);
+    nextEntries.set(zoneId, nextSetCount);
+    _setGymZoneEntriesForDate(dateStr, nextEntries);
+    _refreshDayUI(dateStr);
+    const mutation = _beginGymZoneMutation(dateStr, zoneId);
+
+    return _queueGymZoneMutation(dateStr, zoneId, async () => {
+      try {
+        const result = await API.saveGymZoneEntry(zoneId, dateStr, nextSetCount);
+        if (_isLatestGymZoneMutation(mutation)) {
+          const syncedEntries = _cloneGymZoneEntriesForDate(dateStr);
+          syncedEntries.set(zoneId, _normalizeGymZoneSetCount(result.set_count));
+          _setGymZoneEntriesForDate(dateStr, syncedEntries);
+          _syncGymXp(result, anchorEl?.closest('.zone-series-editor') || anchorEl);
+          _refreshDayUI(dateStr);
+        }
+      } catch (err) {
+        if (_isLatestGymZoneMutation(mutation)) {
+          _setGymZoneEntriesForDate(dateStr, previousEntries);
+          _refreshDayUI(dateStr);
+          if (typeof App !== 'undefined') App.showToast('Erreur : ' + err.message);
+        }
+        throw err;
+      }
+    }).catch(() => {});
   }
 
   async function changeGymExerciseSetCount(exerciseName, sessionName, dateStr, plannedSets, plannedReps, delta, anchorEl) {
@@ -1080,42 +1190,55 @@ const MuscuPage = (() => {
     const [y, m, d] = dateStr.split('-').map(Number);
     if (new Date(y, m - 1, d) > today) return;
 
-    const wasOn = _gymZoneEntriesByDate[dateStr] && _gymZoneEntriesByDate[dateStr].has(zoneId);
-    if (!_gymZoneEntriesByDate[dateStr]) _gymZoneEntriesByDate[dateStr] = new Set();
-    if (wasOn) _gymZoneEntriesByDate[dateStr].delete(zoneId);
-    else _gymZoneEntriesByDate[dateStr].add(zoneId);
-    _refreshDayUI(dateStr);
-
-    try {
-      const result = await API.toggleGymZone(zoneId, dateStr);
-      // Sync (in case of mismatch)
-      if (result.active && !_gymZoneEntriesByDate[dateStr].has(zoneId)) _gymZoneEntriesByDate[dateStr].add(zoneId);
-      if (!result.active && _gymZoneEntriesByDate[dateStr].has(zoneId)) _gymZoneEntriesByDate[dateStr].delete(zoneId);
-      if (result.xp !== undefined) {
-        const stored = JSON.parse(localStorage.getItem('user') || '{}');
-        stored.xp = result.xp;
-        localStorage.setItem('user', JSON.stringify(stored));
-      }
-      if (result.xpDelta) {
-        const anchor = document.querySelector(`.zone-tile.on, .zone-card.on, .zone-tile, .zone-card`)
-                    || document.querySelector('.gym-day-sheet');
-        if (anchor) Gamification.spawnXPPopup(anchor, `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
-      }
-      _refreshDayUI(dateStr);
-    } catch (err) {
-      // Revert
-      if (wasOn) _gymZoneEntriesByDate[dateStr].add(zoneId);
-      else _gymZoneEntriesByDate[dateStr].delete(zoneId);
-      _refreshDayUI(dateStr);
-      if (typeof App !== 'undefined') App.showToast('Erreur : ' + err.message);
+    const previousEntries = _cloneGymZoneEntriesForDate(dateStr);
+    const wasOn = previousEntries.has(zoneId);
+    const nextActive = !wasOn;
+    const nextEntries = _cloneGymZoneEntriesForDate(dateStr);
+    if (wasOn) nextEntries.delete(zoneId);
+    else nextEntries.set(zoneId, _DEFAULT_GYM_ZONE_SET_COUNT);
+    if (wasOn && _activeGymZoneSeriesEditorKey === _getGymZoneSeriesEditorKey(dateStr, zoneId)) {
+      _activeGymZoneSeriesEditorKey = null;
     }
+    _setGymZoneEntriesForDate(dateStr, nextEntries);
+    _refreshDayUI(dateStr);
+    const mutation = _beginGymZoneMutation(dateStr, zoneId);
+
+    return _queueGymZoneMutation(dateStr, zoneId, async () => {
+      try {
+        const result = await API.toggleGymZone(zoneId, dateStr, nextActive);
+        if (_isLatestGymZoneMutation(mutation)) {
+          const syncedEntries = _cloneGymZoneEntriesForDate(dateStr);
+          if (result.active) syncedEntries.set(zoneId, _normalizeGymZoneSetCount(result.set_count));
+          else syncedEntries.delete(zoneId);
+          _setGymZoneEntriesForDate(dateStr, syncedEntries);
+          if (result.xp !== undefined) {
+            const stored = JSON.parse(localStorage.getItem('user') || '{}');
+            stored.xp = result.xp;
+            localStorage.setItem('user', JSON.stringify(stored));
+          }
+          if (result.xpDelta) {
+            const anchor = document.querySelector(`.zone-series-editor, .zone-series-badge, .zone-tile.on, .zone-card.single.on, .zone-card.group`)
+                        || document.querySelector('.gym-day-sheet');
+            if (anchor) Gamification.spawnXPPopup(anchor, `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
+          }
+          _refreshDayUI(dateStr);
+        }
+      } catch (err) {
+        if (_isLatestGymZoneMutation(mutation)) {
+          _setGymZoneEntriesForDate(dateStr, previousEntries);
+          _refreshDayUI(dateStr);
+          if (typeof App !== 'undefined') App.showToast('Erreur : ' + err.message);
+        }
+        throw err;
+      }
+    }).catch(() => {});
   }
 
   // Bulk: toggle a list of zones to the same target state (true = activate all off, false = deactivate all on)
   async function bulkToggleZones(idsCsv, dateStr, makeOn) {
     const ids = String(idsCsv).split(',').map(s => parseInt(s, 10)).filter(Boolean);
     if (!ids.length) return;
-    const active = _gymZoneEntriesByDate[dateStr] || new Set();
+    const active = _gymZoneEntriesByDate[dateStr] || new Map();
     const targets = ids.filter(id => makeOn ? !active.has(id) : active.has(id));
     if (!targets.length) return;
     // Sequential to keep XP/day-activation logic consistent server-side
@@ -1524,5 +1647,5 @@ const MuscuPage = (() => {
     _refresh();
   }
 
-  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, toggleGymRepsEditor, toggleGymZoneGroup, changeGymExerciseSetCount, adjustGymExerciseSetReps, setGymExercisePerformance, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
+  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, toggleGymRepsEditor, toggleGymZoneSeriesEditor, changeGymExerciseSetCount, adjustGymExerciseSetReps, setGymExercisePerformance, adjustGymZoneSetCount, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
 })();

@@ -262,15 +262,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_gym_zones_parent_name
   ON gym_zones(COALESCE(parent_id, 0), name);
 CREATE INDEX IF NOT EXISTS idx_gym_zones_parent ON gym_zones(parent_id);
 
--- Per-user / per-day toggled zones. Each row = "user worked this zone on this date".
+-- Per-user / per-day toggled zones. Each row = user worked this zone on this date,
+-- with the number of sets completed for that free-work zone.
 CREATE TABLE IF NOT EXISTS gym_zone_entries (
   id           SERIAL PRIMARY KEY,
   user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   entry_date   DATE NOT NULL,
   zone_id      INTEGER NOT NULL REFERENCES gym_zones(id) ON DELETE CASCADE,
   completed_at TIMESTAMPTZ DEFAULT NOW(),
+  set_count    INTEGER DEFAULT 3,
   UNIQUE(user_id, entry_date, zone_id)
 );
+ALTER TABLE gym_zone_entries ADD COLUMN IF NOT EXISTS set_count INTEGER DEFAULT 3;
+ALTER TABLE gym_zone_entries ALTER COLUMN set_count SET DEFAULT 3;
 CREATE INDEX IF NOT EXISTS idx_gym_zone_entries_user_date ON gym_zone_entries(user_id, entry_date);
 
 -- Per-user / per-day "rest day" flag (Salle only).

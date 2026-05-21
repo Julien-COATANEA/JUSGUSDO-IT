@@ -628,10 +628,15 @@ function _applyDevMock() {
     { id: 13, parent_id: 5, name: 'Fesses',     icon: '🍑', color: '#22d18b', order_index: 5 },
     { id: 14, parent_id: 5, name: 'Mollets',    icon: '🦵', color: '#22d18b', order_index: 6 },
   ];
-  let _devGymZoneEntries = []; // { id, entry_date, zone_id }
+  let _devGymZoneEntries = []; // { id, entry_date, zone_id, set_count }
   let _devGymRestDays = new Set();
   let _devNextZoneId = 100;
   let _devNextZoneEntryId = 1;
+  const _normalizeDevGymZoneSetCount = (value) => {
+    const parsed = parseInt(value, 10);
+    if (!Number.isInteger(parsed)) return 3;
+    return Math.min(24, Math.max(1, parsed));
+  };
 
   API.getGymZones = async () => ({ zones: _devGymZones.slice() });
 
@@ -639,25 +644,51 @@ function _applyDevMock() {
     entries: _devGymZoneEntries.filter(e => e.entry_date >= start && e.entry_date <= end),
   });
 
-  API.toggleGymZone = async (zone_id, entry_date) => {
+  API.toggleGymZone = async (zone_id, entry_date, active) => {
     const today = new Date().toISOString().split('T')[0];
     if (entry_date > today) throw new Error('Impossible de cocher une date future');
     const zid = parseInt(zone_id, 10);
     if (!_devGymZones.some(z => z.id === zid)) throw new Error('Zone introuvable');
     const wasActive = _devDayIsActive(entry_date);
     const idx = _devGymZoneEntries.findIndex(e => e.entry_date === entry_date && e.zone_id === zid);
-    let active;
-    if (idx >= 0) {
+    const nextActive = typeof active === 'boolean' ? active : idx < 0;
+    if (!nextActive && idx >= 0) {
       _devGymZoneEntries.splice(idx, 1);
-      active = false;
-    } else {
-      _devGymZoneEntries.push({ id: _devNextZoneEntryId++, entry_date, zone_id: zid });
-      active = true;
+    } else if (nextActive && idx < 0) {
+      _devGymZoneEntries.push({ id: _devNextZoneEntryId++, entry_date, zone_id: zid, set_count: 3 });
     }
     const isActive = _devDayIsActive(entry_date);
     const xpDelta = (isActive && !wasActive) ? 30 : (!isActive && wasActive) ? -30 : 0;
     DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
-    return { active, xp: DEV_FAKE_USER.xp, xpDelta };
+    const existing = _devGymZoneEntries.find(e => e.entry_date === entry_date && e.zone_id === zid);
+    return {
+      active: !!existing,
+      set_count: existing ? _normalizeDevGymZoneSetCount(existing.set_count) : 0,
+      xp: DEV_FAKE_USER.xp,
+      xpDelta,
+    };
+  };
+
+  API.saveGymZoneEntry = async (zone_id, entry_date, set_count) => {
+    const today = new Date().toISOString().split('T')[0];
+    if (entry_date > today) throw new Error('Impossible de cocher une date future');
+    const zid = parseInt(zone_id, 10);
+    if (!_devGymZones.some(z => z.id === zid)) throw new Error('Zone introuvable');
+
+    const nextSetCount = _normalizeDevGymZoneSetCount(set_count);
+    const wasActive = _devDayIsActive(entry_date);
+    const idx = _devGymZoneEntries.findIndex(e => e.entry_date === entry_date && e.zone_id === zid);
+
+    if (idx >= 0) {
+      _devGymZoneEntries[idx].set_count = nextSetCount;
+    } else {
+      _devGymZoneEntries.push({ id: _devNextZoneEntryId++, entry_date, zone_id: zid, set_count: nextSetCount });
+    }
+
+    const isActive = _devDayIsActive(entry_date);
+    const xpDelta = (isActive && !wasActive) ? 30 : (!isActive && wasActive) ? -30 : 0;
+    DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
+    return { active: true, set_count: nextSetCount, xp: DEV_FAKE_USER.xp, xpDelta };
   };
 
   API.getGymRestDays = async (start, end) => ({

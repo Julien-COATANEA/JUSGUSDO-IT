@@ -99,8 +99,10 @@ const API = (() => {
     // Gym work zones (groups + sub-zones, read-only for users)
     getGymZones: () => request('GET', '/gym-checklist/zones'),
     getGymZoneEntries: (start, end) => request('GET', `/gym-checklist/zones/entries?start=${start}&end=${end}`),
-    toggleGymZone: (zone_id, entry_date) =>
-      request('POST', '/gym-checklist/zones/toggle', { zone_id, entry_date }),
+    toggleGymZone: (zone_id, entry_date, active) =>
+      request('POST', '/gym-checklist/zones/toggle', { zone_id, entry_date, active }),
+    saveGymZoneEntry: (zone_id, entry_date, set_count) =>
+      request('POST', '/gym-checklist/zones/entry', { zone_id, entry_date, set_count }),
     // Gym rest days (Salle only)
     getGymRestDays: (start, end) => request('GET', `/gym-checklist/rest-days?start=${start}&end=${end}`),
     toggleGymRestDay: (entry_date) =>

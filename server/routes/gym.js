@@ -6,6 +6,7 @@ const router = express.Router();
 
 const DAILY_GYM_XP = 30;
 const ZONE_XP = 30;
+const DEFAULT_GYM_ZONE_SETS = 3;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const GYM_DAY_ACTIVE_SQL = `
   SELECT (
@@ -28,10 +29,23 @@ function normalizePerformedReps(value) {
     .slice(0, 24);
 }
 
+function normalizeZoneSetCount(value) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isInteger(parsed)) return DEFAULT_GYM_ZONE_SETS;
+  return Math.min(24, Math.max(1, parsed));
+}
+
 function mapGymEntryRow(row) {
   return {
     ...row,
     performed_reps: normalizePerformedReps(row.performed_reps),
+  };
+}
+
+function mapGymZoneEntryRow(row) {
+  return {
+    ...row,
+    set_count: normalizeZoneSetCount(row.set_count),
   };
 }
 
@@ -115,6 +129,41 @@ async function saveGymChecklistEntry({ userId, exerciseName, sessionName, entryD
     performed_reps: nextPerformedReps,
     sessionDone: doneRes.rows[0]?.done || 0,
     sessionTotal: 0,
+    ...xpResult,
+  };
+}
+
+async function saveGymZoneEntry({ userId, zoneId, entryDate, setCount }) {
+  const nextSetCount = normalizeZoneSetCount(setCount);
+  const wasActive = await getDayIsActive(userId, entryDate);
+
+  const existing = await db.query(
+    `SELECT id
+       FROM gym_zone_entries
+      WHERE user_id = $1 AND entry_date = $2 AND zone_id = $3`,
+    [userId, entryDate, zoneId]
+  );
+
+  if (existing.rows[0]) {
+    await db.query(
+      `UPDATE gym_zone_entries
+          SET set_count = $1,
+              completed_at = NOW()
+        WHERE id = $2`,
+      [nextSetCount, existing.rows[0].id]
+    );
+  } else {
+    await db.query(
+      `INSERT INTO gym_zone_entries (user_id, entry_date, zone_id, set_count)
+       VALUES ($1, $2, $3, $4)`,
+      [userId, entryDate, zoneId, nextSetCount]
+    );
+  }
+
+  const xpResult = await syncGymDayXp(userId, entryDate, wasActive);
+  return {
+    active: true,
+    set_count: nextSetCount,
     ...xpResult,
   };
 }
@@ -240,13 +289,13 @@ router.get('/zones/entries', requireAuth, async (req, res) => {
   }
   try {
     const result = await db.query(
-      `SELECT id, entry_date, zone_id, completed_at
+      `SELECT id, entry_date, zone_id, completed_at, set_count
        FROM gym_zone_entries
        WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3
        ORDER BY entry_date, zone_id`,
       [req.user.id, start, end]
     );
-    res.json({ entries: result.rows });
+    res.json({ entries: result.rows.map(mapGymZoneEntryRow) });
   } catch (err) {
     console.error('[gym] zone entries', err);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -266,53 +315,73 @@ router.post('/zones/toggle', requireAuth, async (req, res) => {
   }
 
   try {
-    const DAY_ACTIVE_SQL = `
-      SELECT (
-        EXISTS(SELECT 1 FROM gym_checklist_entries WHERE user_id = $1 AND entry_date = $2 AND completed = TRUE)
-        OR EXISTS(SELECT 1 FROM gym_zone_entries WHERE user_id = $1 AND entry_date = $2)
-      ) AS is_active`;
-
-    const wasActiveRes = await db.query(DAY_ACTIVE_SQL, [req.user.id, entryDate]);
-    const wasActive = wasActiveRes.rows[0].is_active;
-
     const zoneRes = await db.query('SELECT id FROM gym_zones WHERE id = $1', [zoneId]);
     if (!zoneRes.rows[0]) return res.status(404).json({ error: 'Zone introuvable' });
 
     const existing = await db.query(
-      `SELECT id FROM gym_zone_entries WHERE user_id = $1 AND entry_date = $2 AND zone_id = $3`,
+      `SELECT id, set_count FROM gym_zone_entries WHERE user_id = $1 AND entry_date = $2 AND zone_id = $3`,
       [req.user.id, entryDate, zoneId]
     );
+    const wantsActive = typeof req.body.active === 'boolean' ? req.body.active : !existing.rows[0];
 
-    let active;
+    if (!wantsActive) {
+      const wasActive = await getDayIsActive(req.user.id, entryDate);
+      if (existing.rows[0]) {
+        await db.query('DELETE FROM gym_zone_entries WHERE id = $1', [existing.rows[0].id]);
+      }
+      const xpResult = await syncGymDayXp(req.user.id, entryDate, wasActive);
+      return res.json({ active: false, set_count: 0, ...xpResult });
+    }
+
     if (existing.rows[0]) {
-      await db.query('DELETE FROM gym_zone_entries WHERE id = $1', [existing.rows[0].id]);
-      active = false;
-    } else {
-      await db.query(
-        `INSERT INTO gym_zone_entries (user_id, entry_date, zone_id) VALUES ($1, $2, $3)`,
-        [req.user.id, entryDate, zoneId]
-      );
-      active = true;
+      const wasActive = await getDayIsActive(req.user.id, entryDate);
+      const xpResult = await syncGymDayXp(req.user.id, entryDate, wasActive);
+      return res.json({
+        active: true,
+        set_count: normalizeZoneSetCount(existing.rows[0].set_count),
+        ...xpResult,
+      });
     }
 
-    const isActiveRes = await db.query(DAY_ACTIVE_SQL, [req.user.id, entryDate]);
-    const isActive = isActiveRes.rows[0].is_active;
+    const result = await saveGymZoneEntry({
+      userId: req.user.id,
+      zoneId,
+      entryDate,
+      setCount: DEFAULT_GYM_ZONE_SETS,
+    });
 
-    const xpDelta = (isActive && !wasActive) ? DAILY_GYM_XP
-                  : (!isActive && wasActive)  ? -DAILY_GYM_XP
-                  : 0;
-
-    if (xpDelta !== 0) {
-      await db.query(
-        `UPDATE users SET xp = GREATEST(0, xp + $1) WHERE id = $2`,
-        [xpDelta, req.user.id]
-      );
-    }
-    const userRes = await db.query('SELECT xp FROM users WHERE id = $1', [req.user.id]);
-
-    res.json({ active, xp: userRes.rows[0]?.xp ?? 0, xpDelta });
+    res.json(result);
   } catch (err) {
     console.error('[gym] zone toggle', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/gym-checklist/zones/entry  body: { zone_id, entry_date, set_count }
+router.post('/zones/entry', requireAuth, async (req, res) => {
+  const zoneId = parseInt(req.body.zone_id, 10);
+  const entryDate = req.body.entry_date;
+  if (!zoneId || !entryDate || !DATE_REGEX.test(entryDate)) {
+    return res.status(400).json({ error: 'zone_id et entry_date (YYYY-MM-DD) requis' });
+  }
+  if (entryDate > todayStr()) {
+    return res.status(400).json({ error: 'Impossible de cocher une date future' });
+  }
+
+  try {
+    const zoneRes = await db.query('SELECT id FROM gym_zones WHERE id = $1', [zoneId]);
+    if (!zoneRes.rows[0]) return res.status(404).json({ error: 'Zone introuvable' });
+
+    const result = await saveGymZoneEntry({
+      userId: req.user.id,
+      zoneId,
+      entryDate,
+      setCount: req.body.set_count,
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error('[gym] zone entry save', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
