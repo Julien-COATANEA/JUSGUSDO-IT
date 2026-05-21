@@ -11,6 +11,15 @@ const ProfilePage = (() => {
   let _homeCalendarResizeFrame = 0;
   let _homeCalendarResizeBound = false;
 
+  function _getHomeRestDays() {
+    if (!_isOwnProfile) return new Set();
+    try {
+      return new Set(JSON.parse(localStorage.getItem('rest_days') || '[]'));
+    } catch {
+      return new Set();
+    }
+  }
+
   function render() {
     return `
       <div class="app-page">
@@ -594,11 +603,16 @@ const ProfilePage = (() => {
     if (!calendar || !calendar.length) return '';
     const today = new Date().toISOString().split('T')[0];
     const DAY_LABELS = ['L','M','M','J','V','S','D'];
+    const homeRestDays = _getHomeRestDays();
+    const calendarWithRest = calendar.map(day => ({
+      ...day,
+      is_rest: homeRestDays.has(day.date) && (day.done || 0) === 0,
+    }));
 
     // Group into ISO weeks of 7 (data already aligned to Monday)
     _calendarWeeks = [];
-    for (let i = 0; i < calendar.length; i += 7) {
-      _calendarWeeks.push(calendar.slice(i, i + 7));
+    for (let i = 0; i < calendarWithRest.length; i += 7) {
+      _calendarWeeks.push(calendarWithRest.slice(i, i + 7));
     }
     // Pad to at least 4 weeks for visual balance
     while (_calendarWeeks.length < 4) {
@@ -606,7 +620,7 @@ const ProfilePage = (() => {
       const padWeek = Array.from({length: 7}, (_, i) => {
         const d = new Date(firstDate);
         d.setDate(firstDate.getDate() - 7 + i);
-        return { date: d.toISOString().split('T')[0], done: 0, total: 0 };
+        return { date: d.toISOString().split('T')[0], done: 0, total: 0, is_rest: false };
       });
       _calendarWeeks.unshift(padWeek);
     }
@@ -638,9 +652,9 @@ const ProfilePage = (() => {
           </div>
         </div>
         <div class="cal-legend">
-          <div class="cal-cell full"  style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Complet</span>
-          <div class="cal-cell partial" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Partiel</span>
-          <div class="cal-cell empty" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Aucun</span>
+          <div class="cal-cell active" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Sport effectué</span>
+          <div class="cal-cell rest" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Jour de repos</span>
+          <div class="cal-cell empty" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Inactif</span>
         </div>
       </div>`;
   }
@@ -716,12 +730,18 @@ const ProfilePage = (() => {
         monthLabel = d.toLocaleDateString('fr-FR', { month: 'short' });
       }
       const cells = week.map(day => {
-        const pct = day.total > 0 ? day.done / day.total : 0;
+        const hasActivity = (day.done || 0) > 0;
+        const isRest = !!day.is_rest && !hasActivity;
         const cls = day.date > today ? 'future'
-                  : pct >= 1        ? 'full'
-                  : pct > 0         ? 'partial'
-                  :                   'empty';
-        return `<div class="cal-cell ${cls}${day.date === today ? ' cal-today' : ''}" title="${day.date} · ${day.done}/${day.total}"></div>`;
+                  : hasActivity      ? 'active'
+                  : isRest           ? 'rest'
+                  :                    'empty';
+        const tip = hasActivity
+          ? `${day.date} · ${day.done} exercice${day.done !== 1 ? 's' : ''}`
+          : isRest
+            ? `${day.date} · Jour de repos`
+            : `${day.date} · Inactif`;
+        return `<div class="cal-cell ${cls}${day.date === today ? ' cal-today' : ''}" title="${tip}"></div>`;
       }).join('');
       return `<div class="cal-week-col"><div class="cal-month-label">${monthLabel}</div>${cells}</div>`;
     }).join('');
