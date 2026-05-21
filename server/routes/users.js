@@ -136,7 +136,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
          FROM exercises e
          WHERE e.is_active = TRUE
            AND COALESCE(e.type, 'home') = 'home'`,
-        [userId]
+        []
       ),
     ]);
 

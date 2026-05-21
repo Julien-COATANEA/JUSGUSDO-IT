@@ -127,9 +127,8 @@ const WorkoutPage = (() => {
     return { doneCount, total: dayExercises.length };
   }
 
-  function _isDayComplete(dateStr) {
-    const { doneCount, total } = _dayCounts(dateStr);
-    return total > 0 && doneCount === total;
+  function _isDayActive(dateStr) {
+    return _dayCounts(dateStr).doneCount > 0;
   }
 
   async function loadWeek() {
@@ -160,13 +159,11 @@ const WorkoutPage = (() => {
     const isFuture = date > today;
     const isPast = !isToday && !isFuture;
 
-    const { doneCount, total } = _dayCounts(key);
+    const { doneCount } = _dayCounts(key);
     const hasActivity = doneCount > 0;
-    const allDone = total > 0 && doneCount === total;
     const isRest = !hasActivity && _isRestDay(key);
-    const ringPct = total > 0 ? Math.round(doneCount / total * 100) : isRest ? 100 : 0;
-    const ringColor = allDone ? '#22d18b'
-      : hasActivity ? '#fbbf24'
+    const ringPct = (hasActivity || isRest) ? 100 : 0;
+    const ringColor = hasActivity ? '#22d18b'
       : isRest ? '#3b82f6'
       : isFuture ? 'rgba(255,255,255,0.07)'
       : 'rgba(255,255,255,0.18)';
@@ -178,7 +175,6 @@ const WorkoutPage = (() => {
       const pills = [
         `<span class="gym-day-pill">🏠 ${doneCount} exercice${doneCount !== 1 ? 's' : ''}</span>`,
       ];
-      if (allDone) pills.push('<span class="gym-day-pill">✅ Journée complète</span>');
       summaryHtml = `<div class="gym-day-summary">${pills.join('')}</div>`;
     } else if (isRest) {
       summaryHtml = `<p class="gym-rest-day-msg">🛌 Jour de repos déclaré</p>`;
@@ -192,7 +188,7 @@ const WorkoutPage = (() => {
       <button type="button" class="${ctaClass}" onclick="event.stopPropagation();WorkoutPage.openDayActionsSheet('${key}')">${ctaLabel}</button>` : '';
 
     const card = document.createElement('div');
-    card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${(isHero || isToday) ? ' open' : ''}${isRest ? ' gym-rest-day' : ''}${isHero ? ' hero' : ''}`;
+    card.className = `day-card${hasActivity ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${(isHero || isToday) ? ' open' : ''}${isRest ? ' gym-rest-day' : ''}${isHero ? ' hero' : ''}`;
     card.dataset.key = key;
     card.id = `day-${key}`;
 
@@ -209,7 +205,7 @@ const WorkoutPage = (() => {
           </div>
         </div>
         <div class="day-ring" style="--ring-p:${ringPct};--ring-c:${ringColor}">
-          <span class="day-ring-val">${doneCount}/${total}</span>
+          <span class="day-ring-val">${isRest ? '🛌' : doneCount}</span>
         </div>
       </div>
       <div class="exercises-list">
@@ -245,8 +241,7 @@ const WorkoutPage = (() => {
       const isFuture = date > today;
       if (!isFuture) {
         weekTotal++;
-        const dayExercises = getExercisesForDay(date);
-        if (dayExercises.length > 0 && dayExercises.every(ex => entries[`${key}_${ex.id}`] === true)) weekDone++;
+        if (_isDayActive(key)) weekDone++;
       }
     });
 
@@ -282,16 +277,17 @@ const WorkoutPage = (() => {
       const key = dateKey(date);
       const isToday = date.getTime() === today.getTime();
       const isFuture = date > today;
-      const { doneCount, total } = _dayCounts(key);
-      const allDone = total > 0 && doneCount === total;
-      const pct = total > 0 ? Math.round(doneCount / total * 100) : 0;
-      const ringC = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : _isRestDay(key) ? 'rgba(255,255,255,0.18)' : '#ef4444';
-      const state = isFuture ? 'future' : allDone ? 'done' : doneCount > 0 ? 'partial' : _isRestDay(key) ? 'rest' : 'missed';
+      const { doneCount } = _dayCounts(key);
+      const isActive = doneCount > 0;
+      const isRest = _isRestDay(key);
+      const pct = (isActive || isRest) ? 100 : 0;
+      const ringC = isActive ? '#22d18b' : isFuture ? 'rgba(255,255,255,0.07)' : isRest ? '#3b82f6' : '#ef4444';
+      const state = isFuture ? 'future' : isActive ? 'done' : isRest ? 'rest' : 'missed';
 
       return `
         <div class="wsd ${state}${isToday ? ' today-dot' : ''}" onclick="document.getElementById('day-${key}')?.scrollIntoView({behavior:'smooth',block:'center'})">
           <div class="wsd-ring" style="--ring-p:${pct};--ring-c:${ringC}">
-            <span class="wsd-inner">${doneCount}</span>
+            <span class="wsd-inner">${isRest ? '🛌' : doneCount}</span>
           </div>
           <span class="wsd-lbl">${DAY_LETTERS[date.getDay()]}</span>
         </div>
@@ -418,7 +414,7 @@ const WorkoutPage = (() => {
     dates.forEach(date => {
       if (date > today) return;
       weekTotal++;
-      if (_isDayComplete(dateKey(date))) weekDone++;
+      if (_isDayActive(dateKey(date))) weekDone++;
     });
 
     document.getElementById('stat-week').textContent = `${weekDone}/${weekTotal}`;
@@ -432,7 +428,6 @@ const WorkoutPage = (() => {
 
     const key = `${dateStr}_${exerciseId}`;
     const wasChecked = entries[key] === true;
-    const wasAllDone = _isDayComplete(dateStr);
 
     entries[key] = !wasChecked;
     _refreshDayUI(dateStr);
@@ -461,17 +456,6 @@ const WorkoutPage = (() => {
       stats = statsData;
       updateHUD();
       _refreshDayUI(dateStr);
-
-      if (result.dayComplete && !wasAllDone) {
-        App.showToast('🎉 Journée complète ! Bien joué !');
-        Gamification.launchConfetti();
-        const ringEl = document.querySelector(`#day-${dateStr} .day-ring`);
-        if (ringEl) {
-          ringEl.classList.remove('ring-bounce');
-          void ringEl.offsetWidth;
-          ringEl.classList.add('ring-bounce');
-        }
-      }
 
     } catch (err) {
       entries[key] = wasChecked;
