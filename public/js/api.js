@@ -89,6 +89,8 @@ const API = (() => {
     getGymChecklist: (start, end) => request('GET', `/gym-checklist?start=${start}&end=${end}`),
     toggleGymChecklist: (exercise_name, session_name, entry_date) =>
       request('POST', '/gym-checklist/toggle', { exercise_name, session_name, entry_date }),
+    saveGymChecklistEntry: (exercise_name, session_name, entry_date, completed, performed_reps) =>
+      request('POST', '/gym-checklist/entry', { exercise_name, session_name, entry_date, completed, performed_reps }),
     getGymStats: (userId) => request('GET', `/gym-checklist/stats/${userId}`),
     getGymDayDetail: (userId, date) => request('GET', `/gym-checklist/day/${userId}/${date}`),
     // All gym sessions with exercises (for Records tab + day actions sheet)

@@ -5216,6 +5216,43 @@ html, body {
   color: #fff;
   box-shadow: 0 0 10px rgba(34,209,139,0.45);
 }
+.sheet-acc-body .exercise-item.sheet-exercise-row.has-reps-editor {
+  align-items: flex-start;
+}
+.sheet-acc-body .exercise-item.sheet-exercise-row.checked .exercise-name {
+  text-decoration: none;
+  color: var(--text);
+}
+.sheet-reps-editor {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sheet-reps-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.sheet-reps-input {
+  width: 100%;
+  min-height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(7, 10, 18, 0.55);
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+}
+.sheet-reps-input:focus {
+  border-color: rgba(34,209,139,0.42);
+  box-shadow: 0 0 0 3px rgba(34,209,139,0.12);
+}
+.sheet-reps-help {
+  font-size: 12px;
+  color: var(--text3);
+}
 /* === New zone selection UI (cards + tiles) ============================== */
 .zone-grid {
   display: grid;

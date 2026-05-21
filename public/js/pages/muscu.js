@@ -4,7 +4,7 @@ const MuscuPage = (() => {
   let _customSessionExercises = {}; // { [sessionName]: string[] } – stored in localStorage
   let _activeTab = 'planning';  // 'records' | 'planning'
   let _gymWeekOffset = 0;          // week offset (0 = current week)
-  let _gymEntries = {};            // 'YYYY-MM-DD_exnamelower' → { completed, session_name }
+  let _gymEntries = {};            // 'YYYY-MM-DD_exnamelower' → { completed, session_name, performed_reps }
   let _gymSessionsCatalog = [];    // [{ name, icon, color, exercises: [{id,name,emoji,sets,reps,unit}] }]
   let _gymZones = [];              // [{ id, parent_id, name, icon, color, order_index }]
   let _gymZoneEntriesByDate = {};  // 'YYYY-MM-DD' → Set<zone_id>
@@ -50,6 +50,42 @@ const MuscuPage = (() => {
 
   function _escape(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function _normalizeGymReps(value) {
+    const rawValues = Array.isArray(value)
+      ? value
+      : (typeof value === 'string' ? value.split(/[^0-9]+/) : []);
+
+    return rawValues
+      .map(item => parseInt(item, 10))
+      .filter(item => Number.isInteger(item) && item > 0 && item <= 9999)
+      .slice(0, 24);
+  }
+
+  function _formatGymReps(value) {
+    return _normalizeGymReps(value).join(' / ');
+  }
+
+  function _repsPlaceholder(sets, reps) {
+    const totalSets = Math.max(0, parseInt(sets, 10) || 0);
+    const repsPerSet = parseInt(reps, 10) || 0;
+    if (totalSets > 0 && repsPerSet > 0) {
+      return Array.from({ length: Math.min(totalSets, 4) }, () => repsPerSet).join(' / ');
+    }
+    return '12 / 10 / 8';
+  }
+
+  function _syncGymXp(result, anchorEl) {
+    if (result?.xp !== undefined) {
+      const stored = JSON.parse(localStorage.getItem('user') || '{}');
+      stored.xp = result.xp;
+      localStorage.setItem('user', JSON.stringify(stored));
+    }
+    if (result?.xpDelta) {
+      const anchor = anchorEl || document.querySelector('.gym-day-sheet');
+      if (anchor) Gamification.spawnXPPopup(anchor, `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
+    }
   }
 
   function _loadCustomExercises() {
@@ -190,7 +226,11 @@ const MuscuPage = (() => {
       _gymEntries = {};
       (checklistRes.entries || []).forEach(e => {
         const dk = typeof e.entry_date === 'string' ? e.entry_date.split('T')[0] : new Date(e.entry_date).toISOString().split('T')[0];
-        _gymEntries[`${dk}_${e.exercise_name.toLowerCase()}`] = { completed: e.completed, session_name: e.session_name };
+        _gymEntries[`${dk}_${e.exercise_name.toLowerCase()}`] = {
+          completed: !!e.completed,
+          session_name: e.session_name,
+          performed_reps: _normalizeGymReps(e.performed_reps),
+        };
       });
 
       _gymSessionsCatalog = sessionsRes.sessions || [];
@@ -480,16 +520,34 @@ const MuscuPage = (() => {
             const exEmoji = ex.emoji || '💪';
             const exSets  = ex.sets || null;
             const exReps  = ex.reps || null;
-            const checked = !!_gymEntries[`${dateStr}_${exName.toLowerCase()}`]?.completed;
+            const entry = _gymEntries[`${dateStr}_${exName.toLowerCase()}`] || null;
+            const checked = !!entry?.completed;
+            const performedReps = _normalizeGymReps(entry?.performed_reps);
             const setsRepsTag = exSets
               ? `<span class="exercise-tag sheet-tag-reps">${exSets}&nbsp;×&nbsp;${exReps}&nbsp;rép.</span>`
               : '';
             const safeEx  = _escape(exName).replace(/'/g, "\\'");
+            const repsValue = _formatGymReps(performedReps);
+            const repsEditor = checked ? `
+              <div class="sheet-reps-editor" onclick="event.stopPropagation()">
+                <label class="sheet-reps-label">Répétitions réalisées</label>
+                <input
+                  class="sheet-reps-input"
+                  type="text"
+                  value="${repsValue}"
+                  placeholder="${_repsPlaceholder(exSets, exReps)}"
+                  autocomplete="off"
+                  spellcheck="false"
+                  onkeydown="MuscuPage.handleGymRepsKeydown(event,'${safeEx}','${safeSes}','${dateStr}',this)"
+                  onchange="MuscuPage.saveGymExerciseReps('${safeEx}','${safeSes}','${dateStr}',this.value,this)" />
+                <div class="sheet-reps-help">Sépare chaque série par un espace, une virgule ou un /</div>
+              </div>` : '';
             return `
-              <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}"
-                   onclick="MuscuPage.toggleGymExercise('${safeEx}','${safeSes}','${dateStr}',this)">
+              <div class="exercise-item sheet-exercise-row${checked ? ' checked has-reps-editor' : ''}"
+                   onclick="MuscuPage.toggleGymExercise('${safeEx}','${safeSes}','${dateStr}',this,event)">
                 <div class="exercise-info">
                   <div class="exercise-name">${_escape(exName)}</div>
+                  ${repsEditor}
                 </div>
                 <div class="sheet-ex-right">
                   ${setsRepsTag}
@@ -793,7 +851,9 @@ const MuscuPage = (() => {
     if (container) _loadGymWeek(container);
   }
 
-  async function toggleGymExercise(exerciseName, sessionName, dateStr, el) {
+  async function toggleGymExercise(exerciseName, sessionName, dateStr, el, evt) {
+    if (evt?.target?.closest && evt.target.closest('.sheet-reps-editor')) return;
+
     // Block future dates
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const [y, m, d] = dateStr.split('-').map(Number);
@@ -801,29 +861,87 @@ const MuscuPage = (() => {
 
     const entryKey = `${dateStr}_${exerciseName.toLowerCase()}`;
     const wasChecked = _gymEntries[entryKey]?.completed || false;
+    const previousEntry = _gymEntries[entryKey]
+      ? {
+          ..._gymEntries[entryKey],
+          performed_reps: _normalizeGymReps(_gymEntries[entryKey].performed_reps),
+        }
+      : null;
 
     // Optimistic DOM update
-    if (!_gymEntries[entryKey]) _gymEntries[entryKey] = { session_name: sessionName, completed: false };
+    if (!_gymEntries[entryKey]) _gymEntries[entryKey] = { session_name: sessionName, completed: false, performed_reps: [] };
+    _gymEntries[entryKey].session_name = sessionName;
     _gymEntries[entryKey].completed = !wasChecked;
+    _gymEntries[entryKey].performed_reps = !wasChecked ? _normalizeGymReps(previousEntry?.performed_reps) : [];
     el?.classList.toggle('checked', !wasChecked);
-    const cbEl = el?.querySelector('.exercise-checkbox');
-    if (cbEl) cbEl.textContent = !wasChecked ? '✓' : '';
+    el?.classList.toggle('has-reps-editor', !wasChecked);
+    const cbEl = el?.querySelector('.sheet-ex-check');
+    if (cbEl) cbEl.classList.toggle('on', !wasChecked);
 
     try {
       const result = await API.toggleGymChecklist(exerciseName, sessionName, dateStr);
-      _gymEntries[entryKey].completed = result.completed;
+      _gymEntries[entryKey] = {
+        session_name: sessionName,
+        completed: !!result.completed,
+        performed_reps: _normalizeGymReps(result.performed_reps),
+      };
 
-      if (result.xp !== undefined) {
-        const stored = JSON.parse(localStorage.getItem('user') || '{}');
-        stored.xp = result.xp;
-        localStorage.setItem('user', JSON.stringify(stored));
-      }
-      if (result.xpDelta && result.xpDelta !== 0) {
-        Gamification.spawnXPPopup(el, `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
-      }
+      _syncGymXp(result, el);
       _refreshDayUI(dateStr);
     } catch (err) {
-      _gymEntries[entryKey].completed = wasChecked;
+      if (previousEntry) _gymEntries[entryKey] = previousEntry;
+      else delete _gymEntries[entryKey];
+      _refreshDayUI(dateStr);
+      if (typeof App !== 'undefined') App.showToast('Erreur : ' + err.message);
+    }
+  }
+
+  function handleGymRepsKeydown(event, exerciseName, _sessionName, dateStr, inputEl) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      inputEl.blur();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      const entryKey = `${dateStr}_${exerciseName.toLowerCase()}`;
+      inputEl.value = _formatGymReps(_gymEntries[entryKey]?.performed_reps);
+      inputEl.blur();
+    }
+  }
+
+  async function saveGymExerciseReps(exerciseName, sessionName, dateStr, rawValue, inputEl) {
+    const entryKey = `${dateStr}_${exerciseName.toLowerCase()}`;
+    const previousEntry = _gymEntries[entryKey]
+      ? {
+          ..._gymEntries[entryKey],
+          performed_reps: _normalizeGymReps(_gymEntries[entryKey].performed_reps),
+        }
+      : { session_name: sessionName, completed: false, performed_reps: [] };
+
+    const nextPerformedReps = _normalizeGymReps(rawValue);
+    const nextCompleted = previousEntry.completed || nextPerformedReps.length > 0;
+
+    if (!previousEntry.completed && !nextPerformedReps.length) return;
+
+    _gymEntries[entryKey] = {
+      session_name: sessionName,
+      completed: nextCompleted,
+      performed_reps: nextPerformedReps,
+    };
+
+    try {
+      const result = await API.saveGymChecklistEntry(exerciseName, sessionName, dateStr, nextCompleted, nextPerformedReps);
+      _gymEntries[entryKey] = {
+        session_name: sessionName,
+        completed: !!result.completed,
+        performed_reps: _normalizeGymReps(result.performed_reps),
+      };
+      _syncGymXp(result, inputEl?.closest('.sheet-exercise-row') || inputEl);
+      _refreshDayUI(dateStr);
+    } catch (err) {
+      if (previousEntry.completed || previousEntry.performed_reps.length) _gymEntries[entryKey] = previousEntry;
+      else delete _gymEntries[entryKey];
       _refreshDayUI(dateStr);
       if (typeof App !== 'undefined') App.showToast('Erreur : ' + err.message);
     }
@@ -1278,5 +1396,5 @@ const MuscuPage = (() => {
     _refresh();
   }
 
-  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
+  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, saveGymExerciseReps, handleGymRepsKeydown, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
 })();

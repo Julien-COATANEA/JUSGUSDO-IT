@@ -7,9 +7,116 @@ const router = express.Router();
 const DAILY_GYM_XP = 30;
 const ZONE_XP = 30;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const GYM_DAY_ACTIVE_SQL = `
+  SELECT (
+    EXISTS(SELECT 1 FROM gym_checklist_entries WHERE user_id = $1 AND entry_date = $2 AND completed = TRUE)
+    OR EXISTS(SELECT 1 FROM gym_zone_entries WHERE user_id = $1 AND entry_date = $2)
+  ) AS is_active`;
 
 function todayStr() {
   return new Date().toISOString().split('T')[0];
+}
+
+function normalizePerformedReps(value) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : (typeof value === 'string' ? value.split(/[^0-9]+/) : []);
+
+  return rawValues
+    .map(item => parseInt(item, 10))
+    .filter(item => Number.isInteger(item) && item > 0 && item <= 9999)
+    .slice(0, 24);
+}
+
+function mapGymEntryRow(row) {
+  return {
+    ...row,
+    performed_reps: normalizePerformedReps(row.performed_reps),
+  };
+}
+
+async function getDayIsActive(userId, entryDate) {
+  const result = await db.query(GYM_DAY_ACTIVE_SQL, [userId, entryDate]);
+  return !!result.rows[0]?.is_active;
+}
+
+async function syncGymDayXp(userId, entryDate, wasActive) {
+  const isActive = await getDayIsActive(userId, entryDate);
+  const xpDelta = (isActive && !wasActive) ? DAILY_GYM_XP
+                : (!isActive && wasActive)  ? -DAILY_GYM_XP
+                : 0;
+
+  if (xpDelta !== 0) {
+    await db.query(
+      `UPDATE users SET xp = GREATEST(0, xp + $1) WHERE id = $2`,
+      [xpDelta, userId]
+    );
+  }
+
+  const userRes = await db.query(`SELECT xp FROM users WHERE id = $1`, [userId]);
+  return {
+    xp: userRes.rows[0]?.xp ?? 0,
+    xpDelta,
+  };
+}
+
+async function saveGymChecklistEntry({ userId, exerciseName, sessionName, entryDate, completed, performedReps }) {
+  const nextPerformedReps = normalizePerformedReps(performedReps);
+  const nextCompleted = !!completed || nextPerformedReps.length > 0;
+  const wasActive = await getDayIsActive(userId, entryDate);
+
+  const existing = await db.query(
+    `SELECT id, completed_at
+       FROM gym_checklist_entries
+      WHERE user_id = $1 AND entry_date = $2 AND exercise_name = $3`,
+    [userId, entryDate, exerciseName]
+  );
+
+  if (existing.rows[0]) {
+    await db.query(
+      `UPDATE gym_checklist_entries
+          SET session_name = $1,
+              completed = $2,
+              completed_at = CASE
+                WHEN $2 THEN COALESCE(completed_at, NOW())
+                ELSE NULL
+              END,
+              performed_reps = $3
+        WHERE id = $4`,
+      [sessionName, nextCompleted, nextPerformedReps, existing.rows[0].id]
+    );
+  } else if (nextCompleted) {
+    await db.query(
+      `INSERT INTO gym_checklist_entries (
+         user_id,
+         entry_date,
+         exercise_name,
+         session_name,
+         completed,
+         completed_at,
+         performed_reps
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, entryDate, exerciseName, sessionName, nextCompleted, nextCompleted ? new Date() : null, nextPerformedReps]
+    );
+  }
+
+  const doneRes = await db.query(
+    `SELECT COUNT(*)::int AS done
+       FROM gym_checklist_entries
+      WHERE user_id = $1 AND entry_date = $2 AND session_name = $3 AND completed = TRUE`,
+    [userId, entryDate, sessionName]
+  );
+
+  const xpResult = await syncGymDayXp(userId, entryDate, wasActive);
+
+  return {
+    completed: nextCompleted,
+    performed_reps: nextPerformedReps,
+    sessionDone: doneRes.rows[0]?.done || 0,
+    sessionTotal: 0,
+    ...xpResult,
+  };
 }
 
 // ─── Gym checklist (per-exercise, inside a session) ───────────────────────
@@ -22,13 +129,13 @@ router.get('/', requireAuth, async (req, res) => {
   }
   try {
     const result = await db.query(
-      `SELECT id, entry_date, exercise_name, session_name, completed, completed_at
+      `SELECT id, entry_date, exercise_name, session_name, completed, completed_at, performed_reps
        FROM gym_checklist_entries
        WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3
        ORDER BY entry_date, session_name, exercise_name`,
       [req.user.id, start, end]
     );
-    res.json({ entries: result.rows });
+    res.json({ entries: result.rows.map(mapGymEntryRow) });
   } catch (err) {
     console.error('[gym] GET', err);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -50,71 +157,60 @@ router.post('/toggle', requireAuth, async (req, res) => {
   }
 
   try {
-    // Day-activation XP: +30 when the day goes from inactive → active, -30 the reverse.
-    const DAY_ACTIVE_SQL = `
-      SELECT (
-        EXISTS(SELECT 1 FROM gym_checklist_entries WHERE user_id = $1 AND entry_date = $2 AND completed = TRUE)
-        OR EXISTS(SELECT 1 FROM gym_zone_entries WHERE user_id = $1 AND entry_date = $2)
-      ) AS is_active`;
-    const wasActiveRes = await db.query(DAY_ACTIVE_SQL, [req.user.id, entry_date]);
-    const wasActive = wasActiveRes.rows[0].is_active;
-
     const existing = await db.query(
-      `SELECT id, completed FROM gym_checklist_entries
+      `SELECT completed, performed_reps FROM gym_checklist_entries
        WHERE user_id = $1 AND entry_date = $2 AND exercise_name = $3`,
       [req.user.id, entry_date, exercise_name]
     );
 
-    let newCompleted;
-    if (existing.rows[0]) {
-      newCompleted = !existing.rows[0].completed;
-      await db.query(
-        `UPDATE gym_checklist_entries SET completed = $1, completed_at = $2 WHERE id = $3`,
-        [newCompleted, newCompleted ? new Date() : null, existing.rows[0].id]
-      );
-    } else {
-      newCompleted = true;
-      await db.query(
-        `INSERT INTO gym_checklist_entries (user_id, entry_date, exercise_name, session_name, completed, completed_at)
-         VALUES ($1, $2, $3, $4, TRUE, NOW())`,
-        [req.user.id, entry_date, exercise_name, session_name]
-      );
-    }
-
-    const doneRes = await db.query(
-      `SELECT COUNT(*)::int AS done
-       FROM gym_checklist_entries
-       WHERE user_id = $1 AND entry_date = $2 AND session_name = $3 AND completed = TRUE`,
-      [req.user.id, entry_date, session_name]
-    );
-    const sessionDone = doneRes.rows[0]?.done || 0;
-
-    const isActiveRes = await db.query(DAY_ACTIVE_SQL, [req.user.id, entry_date]);
-    const isActive = isActiveRes.rows[0].is_active;
-
-    // XP = 30 only when the day transitions between inactive ↔ active
-    const xpDelta = (isActive && !wasActive) ? DAILY_GYM_XP
-                  : (!isActive && wasActive)  ? -DAILY_GYM_XP
-                  : 0;
-
-    if (xpDelta !== 0) {
-      await db.query(
-        `UPDATE users SET xp = GREATEST(0, xp + $1) WHERE id = $2`,
-        [xpDelta, req.user.id]
-      );
-    }
-
-    const userRes = await db.query(`SELECT xp FROM users WHERE id = $1`, [req.user.id]);
-
-    res.json({
-      completed: newCompleted,
-      xp: userRes.rows[0]?.xp ?? 0,
-      xpDelta,
-      sessionDone,
-      sessionTotal: 0,
+    const result = await saveGymChecklistEntry({
+      userId: req.user.id,
+      exerciseName: exercise_name,
+      sessionName: session_name,
+      entryDate: entry_date,
+      completed: !(existing.rows[0]?.completed),
+      performedReps: existing.rows[0]?.completed ? [] : existing.rows[0]?.performed_reps,
     });
+
+    res.json(result);
   } catch (err) {
     console.error('[gym] toggle', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/gym-checklist/entry
+// body: { exercise_name, session_name, entry_date, completed, performed_reps }
+router.post('/entry', requireAuth, async (req, res) => {
+  const { exercise_name, session_name, entry_date } = req.body;
+  if (!exercise_name || !session_name || !entry_date) {
+    return res.status(400).json({ error: 'exercise_name, session_name et entry_date requis' });
+  }
+  if (!DATE_REGEX.test(entry_date)) {
+    return res.status(400).json({ error: 'Format de date invalide' });
+  }
+  if (entry_date > todayStr()) {
+    return res.status(400).json({ error: 'Impossible de cocher une date future' });
+  }
+
+  try {
+    const performedReps = normalizePerformedReps(req.body.performed_reps);
+    const completed = typeof req.body.completed === 'boolean'
+      ? req.body.completed
+      : performedReps.length > 0;
+
+    const result = await saveGymChecklistEntry({
+      userId: req.user.id,
+      exerciseName: exercise_name,
+      sessionName: session_name,
+      entryDate: entry_date,
+      completed,
+      performedReps,
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error('[gym] entry save', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
@@ -470,7 +566,7 @@ router.get('/day/:userId/:date', requireAuth, async (req, res) => {
   try {
     const [exRes, zRes, restRes] = await Promise.all([
       db.query(
-        `SELECT exercise_name, session_name, completed_at
+        `SELECT exercise_name, session_name, completed_at, performed_reps
            FROM gym_checklist_entries
           WHERE user_id = $1 AND entry_date = $2 AND completed = TRUE
           ORDER BY completed_at NULLS LAST, exercise_name`,
@@ -494,7 +590,7 @@ router.get('/day/:userId/:date', requireAuth, async (req, res) => {
     res.json({
       date,
       is_rest: restRes.rowCount > 0,
-      exercises: exRes.rows,
+      exercises: exRes.rows.map(mapGymEntryRow),
       zones: zRes.rows,
     });
   } catch (err) {

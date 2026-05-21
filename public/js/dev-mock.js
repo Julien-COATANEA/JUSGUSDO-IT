@@ -470,9 +470,13 @@ function _applyDevMock() {
 
   // Gym checklist (salle de sport)
   let _devGymEntries = [
-    { id: 1, entry_date: new Date().toISOString().split('T')[0], exercise_name: 'Tirage Bucheron', session_name: 'Dos Biceps', completed: true, completed_at: new Date().toISOString() },
-    { id: 2, entry_date: new Date().toISOString().split('T')[0], exercise_name: 'Tirage Verticale', session_name: 'Dos Biceps', completed: false, completed_at: null },
+    { id: 1, entry_date: new Date().toISOString().split('T')[0], exercise_name: 'Tirage Bucheron', session_name: 'Dos Biceps', completed: true, completed_at: new Date().toISOString(), performed_reps: [12, 10, 8] },
+    { id: 2, entry_date: new Date().toISOString().split('T')[0], exercise_name: 'Tirage Verticale', session_name: 'Dos Biceps', completed: false, completed_at: null, performed_reps: [] },
   ];
+  const _normalizeDevGymReps = (value) => (Array.isArray(value) ? value : (typeof value === 'string' ? value.split(/[^0-9]+/) : []))
+    .map(v => parseInt(v, 10))
+    .filter(v => Number.isInteger(v) && v > 0 && v <= 9999)
+    .slice(0, 24);
   API.getGymChecklist = async (start, end) => ({
     entries: _devGymEntries.filter(e => e.entry_date >= start && e.entry_date <= end),
   });
@@ -489,17 +493,65 @@ function _applyDevMock() {
     if (idx >= 0) {
       newCompleted = !_devGymEntries[idx].completed;
       _devGymEntries[idx].completed = newCompleted;
-      _devGymEntries[idx].completed_at = newCompleted ? new Date().toISOString() : null;
+      _devGymEntries[idx].completed_at = newCompleted ? (_devGymEntries[idx].completed_at || new Date().toISOString()) : null;
+      _devGymEntries[idx].performed_reps = newCompleted ? _normalizeDevGymReps(_devGymEntries[idx].performed_reps) : [];
     } else {
       newCompleted = true;
-      _devGymEntries.push({ id: Date.now(), entry_date, exercise_name, session_name, completed: true, completed_at: new Date().toISOString() });
+      _devGymEntries.push({ id: Date.now(), entry_date, exercise_name, session_name, completed: true, completed_at: new Date().toISOString(), performed_reps: [] });
     }
     const isActive = _devDayIsActive(entry_date);
     const xpDelta = (isActive && !wasActive) ? 30 : (!isActive && wasActive) ? -30 : 0;
     DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
     const sessionEntries = _devGymEntries.filter(e => e.entry_date === entry_date && e.session_name === session_name);
     const doneNow = sessionEntries.filter(e => e.completed).length;
-    return { completed: newCompleted, xp: DEV_FAKE_USER.xp, xpDelta, sessionDone: doneNow, sessionTotal: 0 };
+    return {
+      completed: newCompleted,
+      performed_reps: idx >= 0 ? _normalizeDevGymReps(_devGymEntries[idx].performed_reps) : [],
+      xp: DEV_FAKE_USER.xp,
+      xpDelta,
+      sessionDone: doneNow,
+      sessionTotal: 0,
+    };
+  };
+  API.saveGymChecklistEntry = async (exercise_name, session_name, entry_date, completed, performed_reps) => {
+    const today = new Date().toISOString().split('T')[0];
+    if (entry_date > today) throw new Error('Impossible de cocher une date future');
+    const reps = _normalizeDevGymReps(performed_reps);
+    const nextCompleted = !!completed || reps.length > 0;
+    const wasActive = _devDayIsActive(entry_date);
+    const idx = _devGymEntries.findIndex(e => e.entry_date === entry_date && e.exercise_name === exercise_name);
+
+    if (idx >= 0) {
+      _devGymEntries[idx].session_name = session_name;
+      _devGymEntries[idx].completed = nextCompleted;
+      _devGymEntries[idx].completed_at = nextCompleted ? (_devGymEntries[idx].completed_at || new Date().toISOString()) : null;
+      _devGymEntries[idx].performed_reps = reps;
+    } else if (nextCompleted) {
+      _devGymEntries.push({
+        id: Date.now(),
+        entry_date,
+        exercise_name,
+        session_name,
+        completed: true,
+        completed_at: new Date().toISOString(),
+        performed_reps: reps,
+      });
+    }
+
+    const isActive = _devDayIsActive(entry_date);
+    const xpDelta = (isActive && !wasActive) ? 30 : (!isActive && wasActive) ? -30 : 0;
+    DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
+    const sessionEntries = _devGymEntries.filter(e => e.entry_date === entry_date && e.session_name === session_name);
+    const doneNow = sessionEntries.filter(e => e.completed).length;
+
+    return {
+      completed: nextCompleted,
+      performed_reps: reps,
+      xp: DEV_FAKE_USER.xp,
+      xpDelta,
+      sessionDone: doneNow,
+      sessionTotal: 0,
+    };
   };
   API.getGymStats = async (userId) => {
     const today = new Date().toISOString().split('T')[0];
@@ -544,7 +596,12 @@ function _applyDevMock() {
   API.getGymDayDetail = async (_userId, date) => {
     const exercises = _devGymEntries
       .filter(e => e.entry_date === date && e.completed)
-      .map(e => ({ exercise_name: e.exercise_name, session_name: e.session_name, completed_at: e.completed_at || null }));
+      .map(e => ({
+        exercise_name: e.exercise_name,
+        session_name: e.session_name,
+        completed_at: e.completed_at || null,
+        performed_reps: _normalizeDevGymReps(e.performed_reps),
+      }));
     const zones = _devGymZoneEntries
       .filter(z => z.entry_date === date)
       .map(z => {

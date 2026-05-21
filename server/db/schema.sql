@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS gym_checklist_entries (
   completed_at  TIMESTAMPTZ,
   UNIQUE(user_id, entry_date, exercise_name)
 );
+ALTER TABLE gym_checklist_entries ADD COLUMN IF NOT EXISTS performed_reps INTEGER[] DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS idx_gym_checklist_user_date ON gym_checklist_entries(user_id, entry_date);
 DO $$
 BEGIN

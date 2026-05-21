@@ -501,7 +501,12 @@ const ProfilePage = (() => {
             <div class="gym-day-group">
               <div class="gym-day-group-label">${_escape(sess)}</div>
               <ul class="gym-day-list">
-                ${items.map(e => `<li>${_escape(e.exercise_name)}</li>`).join('')}
+                ${items.map(e => {
+                  const reps = Array.isArray(e.performed_reps) && e.performed_reps.length
+                    ? ` <small>(${e.performed_reps.join(' / ')} rép.)</small>`
+                    : '';
+                  return `<li>${_escape(e.exercise_name)}${reps}</li>`;
+                }).join('')}
               </ul>
             </div>`).join('');
         }
