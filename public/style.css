@@ -5219,39 +5219,125 @@ html, body {
 .sheet-acc-body .exercise-item.sheet-exercise-row.has-reps-editor {
   align-items: flex-start;
 }
-.sheet-acc-body .exercise-item.sheet-exercise-row.checked .exercise-name {
+.sheet-acc-body .exercise-item.sheet-exercise-row.has-reps-editor.checked .exercise-name {
   text-decoration: none;
   color: var(--text);
 }
 .sheet-reps-editor {
-  margin-top: 8px;
+  margin-top: 10px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(34,209,139,0.1), rgba(255,255,255,0.03));
+  border: 1px solid rgba(34,209,139,0.12);
+}
+.sheet-reps-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .sheet-reps-label {
   font-size: 11px;
   font-weight: 700;
   color: var(--text2);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
-.sheet-reps-input {
-  width: 100%;
-  min-height: 38px;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(7, 10, 18, 0.55);
+.sheet-reps-summary {
+  font-size: 24px;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1;
+}
+.sheet-reps-preset {
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.05);
+  color: var(--text2);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.16s, background 0.16s, color 0.16s, transform 0.1s;
+}
+.sheet-reps-preset:hover {
+  border-color: rgba(34,209,139,0.28);
   color: var(--text);
-  padding: 10px 12px;
-  font-size: 14px;
-  outline: none;
 }
-.sheet-reps-input:focus {
-  border-color: rgba(34,209,139,0.42);
-  box-shadow: 0 0 0 3px rgba(34,209,139,0.12);
+.sheet-reps-preset:active {
+  transform: scale(0.98);
+}
+.sheet-reps-preset.active {
+  color: #062b1c;
+  background: rgba(34,209,139,0.9);
+  border-color: rgba(34,209,139,0.9);
+}
+.sheet-reps-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.sheet-stepper-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(8, 12, 22, 0.45);
+}
+.sheet-stepper-card.accent {
+  border-color: rgba(34,209,139,0.16);
+  background: rgba(34,209,139,0.08);
+}
+.sheet-stepper-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.sheet-stepper-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sheet-stepper-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.16s;
+}
+.sheet-stepper-btn:hover {
+  background: rgba(255,255,255,0.14);
+}
+.sheet-stepper-btn:active {
+  transform: scale(0.94);
+}
+.sheet-stepper-value {
+  min-width: 44px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
 }
 .sheet-reps-help {
   font-size: 12px;
   color: var(--text3);
+}
+@media (max-width: 560px) {
+  .sheet-reps-grid {
+    grid-template-columns: 1fr;
+  }
 }
 /* === New zone selection UI (cards + tiles) ============================== */
 .zone-grid {
