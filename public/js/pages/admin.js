@@ -20,6 +20,7 @@ const AdminPage = (() => {
   let pendingGymSession = null; // pre-fill gym_session when creating a new gym exercise
   let currentView = 'catalog';
   let creatingSession = false;  // true when showing session creation form
+  let isReorderingGymSessions = false;
   let currentExTab = 'home'; // 'home' | 'gym'
   let editingZoneId = null;     // id of zone being inline-edited
   let creatingZoneParent = null; // parent_id when inline-creating a child zone (or 'root')
@@ -61,6 +62,7 @@ const AdminPage = (() => {
       users = (userData.users || []).map(normalizeUser);
       gymSessions = gymSessionData.sessions || [];
       gymZones = gymZoneData.zones || [];
+      isReorderingGymSessions = false;
       renderCurrentView();
     } catch (err) {
       renderShell(renderErrorState(err));
@@ -249,7 +251,7 @@ const AdminPage = (() => {
         <div class="ex-admin-list-header">
           <div>
             <h2>Séances</h2>
-            <p>${gymSessions.length} séance${gymSessions.length !== 1 ? 's' : ''}</p>
+            <p>${gymSessions.length} séance${gymSessions.length !== 1 ? 's' : ''}${isCurrentUserAdmin() && gymSessions.length > 1 ? ' · ordre du planning modifiable ici' : ''}</p>
           </div>
         </div>
         ${gymSessions.length
@@ -322,7 +324,11 @@ const AdminPage = (() => {
     `;
   }
 
-  function renderGymSessionCard(session) {
+  function renderGymSessionCard(session, index) {
+    const sessionNameArg = escapeJsString(session.name);
+    const exerciseCount = (session.exercises || []).length;
+    const isFirst = index === 0;
+    const isLast = index === gymSessions.length - 1;
     const exListItems = (session.exercises || []).map(ex =>
       `<li class="gym-admin-session-ex-item">
         <span>${escapeHtml(ex.emoji || '💪')} ${escapeHtml(ex.name)}</span>
@@ -336,14 +342,24 @@ const AdminPage = (() => {
           <span class="gym-admin-session-icon">${session.icon}</span>
           <div class="gym-admin-session-info">
             <h3>${escapeHtml(session.name)}</h3>
-            <p class="gym-admin-session-exercises">${(session.exercises || []).length} exercice${(session.exercises || []).length !== 1 ? 's' : ''}</p>
+            <p class="gym-admin-session-exercises">${exerciseCount} exercice${exerciseCount !== 1 ? 's' : ''}</p>
+            <div class="gym-admin-session-order-row">
+              <span class="gym-admin-session-order-chip">Planning · #${index + 1}</span>
+              ${isCurrentUserAdmin() ? `
+                <div class="gym-admin-session-order-actions">
+                  <button type="button" class="admin-secondary-btn gym-admin-session-order-btn"
+                    onclick="AdminPage.moveGymSession('${sessionNameArg}', -1)" title="Monter dans le planning"${isFirst || isReorderingGymSessions ? ' disabled' : ''}>↑</button>
+                  <button type="button" class="admin-secondary-btn gym-admin-session-order-btn"
+                    onclick="AdminPage.moveGymSession('${sessionNameArg}', 1)" title="Descendre dans le planning"${isLast || isReorderingGymSessions ? ' disabled' : ''}>↓</button>
+                </div>` : ''}
+            </div>
           </div>
           ${isCurrentUserAdmin() ? `
           <div class="gym-admin-session-card-actions">
             <button type="button" class="admin-secondary-btn gym-admin-session-edit-btn"
-              onclick="AdminPage.openSessionMetaEditor('${escapeHtml(session.name)}')" title="Modifier la séance">✏️</button>
+              onclick="AdminPage.openSessionMetaEditor('${sessionNameArg}')" title="Modifier la séance">✏️</button>
             <button type="button" class="admin-secondary-btn gym-admin-session-delete-btn"
-              onclick="AdminPage.deleteGymSession('${escapeHtml(session.name)}')" title="Supprimer la séance">🗑️</button>
+              onclick="AdminPage.deleteGymSession('${sessionNameArg}')" title="Supprimer la séance">🗑️</button>
           </div>` : ''}
         </div>
         <details class="gym-admin-session-details">
@@ -352,7 +368,7 @@ const AdminPage = (() => {
           ${isCurrentUserAdmin() ? `
           <div class="gym-admin-session-ex-footer">
             <button type="button" class="gym-admin-ex-add-btn"
-              onclick="AdminPage.openNewGymExercise('${escapeHtml(session.name)}')">+ Ajouter un exercice</button>
+              onclick="AdminPage.openNewGymExercise('${sessionNameArg}')">+ Ajouter un exercice</button>
           </div>` : ''}
         </details>
       </article>
@@ -620,6 +636,7 @@ const AdminPage = (() => {
     const PRESET_ICONS  = ['💪','🏋️','🦵','⚡','🎯','🔥','💥','👊','🔱','🏃'];
     const session = gymSessions.find(s => s.name === editingSession);
     if (!session) return '<p class="exercise-empty">Séance introuvable.</p>';
+    const sessionNameArg = escapeJsString(session.name);
     const exCount = (session.exercises || []).length;
     const assignCount = (session.assignments || []).length;
     return `
@@ -672,7 +689,7 @@ const AdminPage = (() => {
             <div class="ex-editor-footer-actions">
               <button type="button" class="admin-secondary-btn" onclick="AdminPage.closeSessionMetaEditor()">Annuler</button>
               <button type="button" class="admin-secondary-btn" style="color:#e94560"
-                onclick="AdminPage.deleteGymSession('${escapeHtml(session.name)}')">Supprimer la séance</button>
+                onclick="AdminPage.deleteGymSession('${sessionNameArg}')">Supprimer la séance</button>
               <button type="submit" class="submit-btn">Enregistrer</button>
             </div>
           </div>
@@ -1143,6 +1160,34 @@ const AdminPage = (() => {
     renderCurrentView();
   }
 
+  async function moveGymSession(sessionName, direction) {
+    if (!isCurrentUserAdmin() || isReorderingGymSessions) return;
+
+    const fromIndex = gymSessions.findIndex(session => session.name === sessionName);
+    const toIndex = fromIndex + Number(direction);
+    if (fromIndex < 0 || toIndex < 0 || toIndex >= gymSessions.length) return;
+
+    const previousSessions = gymSessions;
+    const nextSessions = gymSessions.slice();
+    const [movedSession] = nextSessions.splice(fromIndex, 1);
+    nextSessions.splice(toIndex, 0, movedSession);
+
+    gymSessions = nextSessions;
+    isReorderingGymSessions = true;
+    renderCurrentView();
+
+    try {
+      await API.adminReorderGymSessions(nextSessions.map(session => session.name));
+      App.showToast('✅ Ordre du planning mis à jour');
+    } catch (err) {
+      gymSessions = previousSessions;
+      App.showToast(err.message || 'Erreur serveur');
+    } finally {
+      isReorderingGymSessions = false;
+      renderCurrentView();
+    }
+  }
+
   async function saveSessionMeta(event) {
     event.preventDefault();
     const errorEl = document.getElementById('edit-session-error');
@@ -1398,6 +1443,18 @@ const AdminPage = (() => {
       .replace(/"/g, '&quot;');
   }
 
+  function escapeJsString(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n')
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e')
+      .replace(/"/g, '&quot;');
+  }
+
   return {
     render,
     init,
@@ -1423,6 +1480,7 @@ const AdminPage = (() => {
     saveNewSession,
     _addPendingExercise,
     _removePendingExercise,
+    moveGymSession,
     openSessionMetaEditor,
     closeSessionMetaEditor,
     saveSessionMeta,

@@ -758,6 +758,22 @@ function _applyDevMock() {
     return { ok: true };
   };
 
+  API.adminReorderGymSessions = async (names) => {
+    const nextOrder = Array.isArray(names)
+      ? names.map(name => typeof name === 'string' ? name.trim() : '').filter(Boolean)
+      : [];
+    if (!nextOrder.length || new Set(nextOrder).size !== nextOrder.length) {
+      throw new Error('Ordre de séances invalide');
+    }
+    const sameMembers = nextOrder.length === _DEV_GYM_SESSION_ORDER.length
+      && nextOrder.every(name => _DEV_GYM_SESSION_ORDER.includes(name));
+    if (!sameMembers) {
+      throw new Error('La liste des séances ne correspond pas au catalogue');
+    }
+    _DEV_GYM_SESSION_ORDER = [...nextOrder];
+    return { ok: true };
+  };
+
   API.adminUpdateGymSession = async (name, data) => {
     if (!_DEV_GYM_SESSION_ORDER.includes(name)) throw new Error('Séance introuvable');
     const newName = (data && typeof data.name === 'string') ? data.name.trim() : '';

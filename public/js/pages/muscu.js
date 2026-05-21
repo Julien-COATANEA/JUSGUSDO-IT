@@ -634,6 +634,7 @@ const MuscuPage = (() => {
               </div>` : '';
             return `
               <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}${isEditorOpen ? ' has-reps-editor' : ''}"
+                   >
                 <div class="sheet-ex-main"
                      onclick="MuscuPage.toggleGymExercise('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},this.closest('.sheet-exercise-row'),event)">
                   <div class="exercise-info">

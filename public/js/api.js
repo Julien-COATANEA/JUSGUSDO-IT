@@ -62,6 +62,7 @@ const API = (() => {
     adminGetGymSessions: () => request('GET', '/admin/gym-sessions'),
     adminCreateGymSession: (data) => request('POST', '/admin/gym-sessions', data),
     adminUpdateGymSession: (name, data) => request('PUT', `/admin/gym-sessions/${encodeURIComponent(name)}`, data),
+    adminReorderGymSessions: (names) => request('POST', '/admin/gym-sessions/reorder', { names }),
     adminDeleteGymSession: (name) => request('DELETE', `/admin/gym-sessions/${encodeURIComponent(name)}`),
     // Gym zones (admin CRUD on the zone tree)
     adminGetGymZones: () => request('GET', '/admin/gym-zones'),

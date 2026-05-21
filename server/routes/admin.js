@@ -224,6 +224,52 @@ router.get('/gym-sessions', requireAdmin, async (req, res) => {
   }
 });
 
+// POST /api/admin/gym-sessions/reorder — persist display order for planning
+router.post('/gym-sessions/reorder', requireAdmin, async (req, res) => {
+  const names = Array.isArray(req.body?.names)
+    ? req.body.names
+        .map(name => typeof name === 'string' ? name.trim() : '')
+        .filter(Boolean)
+    : [];
+
+  if (!names.length || new Set(names).size !== names.length) {
+    return res.status(400).json({ error: 'Ordre de séances invalide' });
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existingRes = await client.query(
+      `SELECT name FROM gym_sessions ORDER BY order_index, name FOR UPDATE`
+    );
+    const existingNames = existingRes.rows.map(row => row.name);
+    const sameMembers = existingNames.length === names.length
+      && existingNames.every(name => names.includes(name));
+
+    if (!sameMembers) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'La liste des séances ne correspond pas au catalogue' });
+    }
+
+    for (const [index, sessionName] of names.entries()) {
+      await client.query(
+        `UPDATE gym_sessions SET order_index = $1 WHERE name = $2`,
+        [index + 1, sessionName]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[admin] reorder gym-sessions', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  } finally {
+    client.release();
+  }
+});
+
 // POST /api/admin/gym-sessions — create a new session
 router.post('/gym-sessions', requireAdmin, async (req, res) => {
   const { name, icon, color } = req.body;
