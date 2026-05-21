@@ -8,6 +8,7 @@ const WorkoutPage = (() => {
   let entries = {}; // { 'YYYY-MM-DD_exerciseId': true/false }
   let currentUser = null;
   let stats = { streak: 0, totalCompletedDays: 0 };
+  let activeSheetDate = null;
 
   // ── Rest days (localStorage) ──────────────────────────────
   function _getRestDays() {
@@ -20,7 +21,7 @@ const WorkoutPage = (() => {
     if (idx >= 0) list.splice(idx, 1);
     else list.push(key);
     localStorage.setItem('rest_days', JSON.stringify(list));
-    renderWeek(getWeekDates(weekOffset));
+    _refreshDayUI(key);
   }
 
   function render() {
@@ -111,9 +112,24 @@ const WorkoutPage = (() => {
     return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
   }
 
-  function getExercisesForDay(date) {
-    const day = date.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    return exercises.filter(ex => !ex.schedule || ex.schedule.length === 0 || ex.schedule.includes(day));
+  function getExercisesForDay(_date) {
+    return exercises.filter(ex => ex.is_active !== false);
+  }
+
+  function _dateFromKey(dateStr) {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  function _dayCounts(dateStr) {
+    const dayExercises = getExercisesForDay(_dateFromKey(dateStr));
+    const doneCount = dayExercises.filter(ex => entries[`${dateStr}_${ex.id}`] === true).length;
+    return { doneCount, total: dayExercises.length };
+  }
+
+  function _isDayComplete(dateStr) {
+    const { doneCount, total } = _dayCounts(dateStr);
+    return total > 0 && doneCount === total;
   }
 
   async function loadWeek() {
@@ -144,61 +160,61 @@ const WorkoutPage = (() => {
     const isFuture = date > today;
     const isPast = !isToday && !isFuture;
 
-    const dayExercises = getExercisesForDay(date);
-    const doneCount = dayExercises.filter(ex => entries[`${key}_${ex.id}`] === true).length;
-    const allDone = dayExercises.length > 0 && doneCount === dayExercises.length;
-    const ringPct = dayExercises.length > 0 ? Math.round(doneCount / dayExercises.length * 100) : 0;
-    const isRest = isPast && !allDone && _isRestDay(key);
-    const ringColor = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : isRest ? 'rgba(255,255,255,0.15)' : '#ef4444';
+    const { doneCount, total } = _dayCounts(key);
+    const hasActivity = doneCount > 0;
+    const allDone = total > 0 && doneCount === total;
+    const isRest = !hasActivity && _isRestDay(key);
+    const ringPct = total > 0 ? Math.round(doneCount / total * 100) : isRest ? 100 : 0;
+    const ringColor = allDone ? '#22d18b'
+      : hasActivity ? '#fbbf24'
+      : isRest ? '#3b82f6'
+      : isFuture ? 'rgba(255,255,255,0.07)'
+      : 'rgba(255,255,255,0.18)';
+
+    let summaryHtml;
+    if (isFuture) {
+      summaryHtml = '';
+    } else if (hasActivity) {
+      const pills = [
+        `<span class="gym-day-pill">🏠 ${doneCount} exercice${doneCount !== 1 ? 's' : ''}</span>`,
+      ];
+      if (allDone) pills.push('<span class="gym-day-pill">✅ Journée complète</span>');
+      summaryHtml = `<div class="gym-day-summary">${pills.join('')}</div>`;
+    } else if (isRest) {
+      summaryHtml = `<p class="gym-rest-day-msg">🛌 Jour de repos déclaré</p>`;
+    } else {
+      summaryHtml = `<p class="gym-rest-day-msg">${isToday ? 'Pas encore d\'activité' : 'Aucune activité ce jour'}</p>`;
+    }
+
+    const ctaLabel = isToday ? (hasActivity || isRest ? '✎&nbsp;Modifier' : '+&nbsp;Enregistrer mon activité') : '';
+    const ctaClass = `gym-day-cta${(hasActivity || isRest) ? ' cta-edit' : ''}${isToday ? ' cta-today' : ''}`;
+    const cta = isToday ? `
+      <button type="button" class="${ctaClass}" onclick="event.stopPropagation();WorkoutPage.openDayActionsSheet('${key}')">${ctaLabel}</button>` : '';
 
     const card = document.createElement('div');
-    card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${(isHero || isToday) ? ' open' : ''}${isRest ? ' rest-day' : ''}${isHero ? ' hero' : ''}`;
+    card.className = `day-card${allDone ? ' completed' : ''}${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${isPast ? ' past' : ''}${(isHero || isToday) ? ' open' : ''}${isRest ? ' gym-rest-day' : ''}${isHero ? ' hero' : ''}`;
     card.dataset.key = key;
     card.id = `day-${key}`;
 
-    const exercisesHTML = dayExercises.length === 0
-      ? `<p style="color:var(--text3);font-size:13px;text-align:center;padding:12px 0;">Repos 🙌</p>`
-      : dayExercises.map(ex => {
-          const checked = entries[`${key}_${ex.id}`] === true;
-          const metaTags = ex.is_running
-            ? `<span class="exercise-tag running">${escapeHtml(ex.emoji)} ${ex.reps}\u00a0${escapeHtml(ex.unit || 'min')}</span>`
-            : `<span class="exercise-tag"><span class="exercise-tag-val">${ex.sets}</span> série${ex.sets > 1 ? 's' : ''}</span>
-               <span class="exercise-tag"><span class="exercise-tag-val">${ex.reps}</span> rép.</span>`;
-          return `
-            <div class="exercise-item${checked ? ' checked' : ''}${isPast ? ' disabled' : ''}${isFuture ? ' future-day' : ''}"
-                 id="ex-${key}-${ex.id}"
-                 onclick="WorkoutPage.toggleExercise('${key}', ${ex.id}, this)">
-              <div class="exercise-icon">${escapeHtml(ex.emoji)}</div>
-              <div class="exercise-info">
-                <div class="exercise-name">${escapeHtml(ex.name)}</div>
-                <div class="exercise-meta">${metaTags}</div>
-              </div>
-              <div class="exercise-checkbox">${checked ? '✓' : ''}</div>
-            </div>
-          `;
-        }).join('');
-
     card.innerHTML = `
-      <div class="day-header" onclick="WorkoutPage.toggleDay(this)">
-        <div class="day-check">${allDone ? '✓' : ''}</div>
+      <div class="day-header" onclick="${isToday ? `WorkoutPage.openDayActionsSheet('${key}')` : ''}">
+        <div class="day-check">${hasActivity ? '✓' : isRest ? '🛌' : ''}</div>
         <div class="day-name-block">
           <div class="day-name">${DAYS_FR[date.getDay()]}</div>
           <div class="day-date">${date.getDate()} ${MONTHS_FR[date.getMonth()]}</div>
+          <div class="day-badges">
+            ${isToday ? '<span class="today-badge">Aujourd\'hui</span>' : ''}
+            ${isFuture ? '<span class="preview-badge">À venir</span>' : ''}
+            ${isRest && !isFuture ? '<span class="rest-badge">Repos</span>' : ''}
+          </div>
         </div>
-        ${isToday ? '<span class="today-badge">Aujourd\'hui</span>' : ''}
-        ${isFuture ? '<span class="preview-badge">À venir</span>' : ''}
         <div class="day-ring" style="--ring-p:${ringPct};--ring-c:${ringColor}">
-          <span class="day-ring-val">${doneCount}/${dayExercises.length}</span>
+          <span class="day-ring-val">${doneCount}/${total}</span>
         </div>
-        ${!isHero ? '<div class="day-toggle">▼</div>' : ''}
       </div>
       <div class="exercises-list">
-        ${exercisesHTML}
-        <div class="all-done-badge">🎉 Journée complète ! Bravo !</div>
-        ${isPast && !allDone ? `
-        <button class="rest-day-btn${isRest ? ' active' : ''}" onclick="event.stopPropagation();WorkoutPage.toggleRestDay('${key}')">
-          ${isRest ? '✓ Repos noté' : '🛌 Marquer repos'}
-        </button>` : ''}
+        ${summaryHtml}
+        ${cta}
       </div>
     `;
     return card;
@@ -266,9 +282,7 @@ const WorkoutPage = (() => {
       const key = dateKey(date);
       const isToday = date.getTime() === today.getTime();
       const isFuture = date > today;
-      const dayExercises = getExercisesForDay(date);
-      const doneCount = dayExercises.filter(ex => entries[`${key}_${ex.id}`] === true).length;
-      const total = dayExercises.length;
+      const { doneCount, total } = _dayCounts(key);
       const allDone = total > 0 && doneCount === total;
       const pct = total > 0 ? Math.round(doneCount / total * 100) : 0;
       const ringC = allDone ? '#22d18b' : doneCount > 0 ? '#fbbf24' : isFuture ? 'rgba(255,255,255,0.07)' : _isRestDay(key) ? 'rgba(255,255,255,0.18)' : '#ef4444';
@@ -287,45 +301,146 @@ const WorkoutPage = (() => {
 
   function toggleDay(headerEl) {
     const card = headerEl.closest('.day-card');
-    card.classList.toggle('open');
+    const key = card?.dataset.key;
+    if (!key) return;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (key === dateKey(today)) openDayActionsSheet(key);
+  }
+
+  function openDayActionsSheet(dateStr) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (dateStr !== dateKey(today)) return;
+
+    activeSheetDate = dateStr;
+    let sheet = document.getElementById('home-day-sheet');
+    if (!sheet) {
+      sheet = document.createElement('div');
+      sheet.id = 'home-day-sheet';
+      sheet.className = 'gym-day-sheet-backdrop';
+      sheet.addEventListener('click', e => {
+        if (e.target === sheet) closeDayActionsSheet();
+      });
+      document.body.appendChild(sheet);
+    }
+
+    _renderDayActionsSheet();
+    sheet.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+  }
+
+  function closeDayActionsSheet() {
+    activeSheetDate = null;
+    const sheet = document.getElementById('home-day-sheet');
+    if (sheet) sheet.classList.remove('open');
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
+  }
+
+  function _renderDayActionsSheet() {
+    const sheet = document.getElementById('home-day-sheet');
+    if (!sheet || !activeSheetDate) return;
+
+    const dateObj = _dateFromKey(activeSheetDate);
+    const title = `${DAYS_FR[dateObj.getDay()]} ${dateObj.getDate()} ${MONTHS_FR[dateObj.getMonth()]}`;
+    const isRest = _isRestDay(activeSheetDate);
+
+    const exercisesHtml = getExercisesForDay(dateObj).map(ex => {
+      const checked = entries[`${activeSheetDate}_${ex.id}`] === true;
+      const metaTag = ex.is_running
+        ? `<span class="exercise-tag running sheet-tag-reps">${ex.reps}&nbsp;${escapeHtml(ex.unit || 'min')}</span>`
+        : `<span class="exercise-tag sheet-tag-reps">${ex.sets}&nbsp;×&nbsp;${ex.reps}&nbsp;rép.</span>`;
+      return `
+        <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}"
+             onclick="WorkoutPage.toggleExercise('${activeSheetDate}', ${ex.id}, this)">
+          <div class="exercise-info">
+            <div class="exercise-name">${escapeHtml(ex.emoji || '💪')} ${escapeHtml(ex.name)}</div>
+          </div>
+          <div class="sheet-ex-right">
+            ${metaTag}
+            <span class="sheet-ex-check${checked ? ' on' : ''}">✓</span>
+          </div>
+        </div>`;
+    }).join('') || '<p class="exercise-inline-help" style="padding:8px 12px">Aucun exercice disponible</p>';
+
+    sheet.innerHTML = `
+      <div class="gym-day-sheet">
+        <div class="sheet-handle"></div>
+        <header class="sheet-header">
+          <div>
+            <h3>${title}</h3>
+            <p class="sheet-subtitle">Que veux-tu enregistrer pour ce jour ?</p>
+          </div>
+          <button type="button" class="sheet-close" onclick="WorkoutPage.closeDayActionsSheet()" aria-label="Fermer">✕</button>
+        </header>
+        <div class="sheet-body">
+          <section class="sheet-section">
+            <button type="button" class="rest-toggle-btn${isRest ? ' on' : ''}" onclick="WorkoutPage.toggleRestDay('${activeSheetDate}')">
+              <span class="rest-toggle-icon">🛌</span>
+              <span class="rest-toggle-text">
+                <strong>${isRest ? 'Jour de repos déclaré' : 'Marquer comme jour de repos'}</strong>
+                <small>${isRest ? 'Cliquer pour annuler' : 'Mémorisé localement sur Maison'}</small>
+              </span>
+              <span class="rest-toggle-state">${isRest ? '✓' : ''}</span>
+            </button>
+          </section>
+          <section class="sheet-section">
+            <h4 class="sheet-section-title">🏠 Exercices Maison</h4>
+            <div class="sheet-acc-body">${exercisesHtml}</div>
+          </section>
+        </div>
+      </div>
+    `;
+  }
+
+  function _refreshDayUI(dateStr) {
+    const dates = getWeekDates(weekOffset);
+    const oldCard = document.getElementById(`day-${dateStr}`);
+    if (oldCard) {
+      const date = _dateFromKey(dateStr);
+      const isHero = oldCard.classList.contains('hero');
+      const newCard = _buildDayCard(date, isHero);
+      oldCard.replaceWith(newCard);
+    }
+    _refreshWeekStats(dates);
+    renderWeekStrip(dates);
+    if (activeSheetDate === dateStr) _renderDayActionsSheet();
+  }
+
+  function _refreshWeekStats(dates) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let weekDone = 0;
+    let weekTotal = 0;
+    dates.forEach(date => {
+      if (date > today) return;
+      weekTotal++;
+      if (_isDayComplete(dateKey(date))) weekDone++;
+    });
+
+    document.getElementById('stat-week').textContent = `${weekDone}/${weekTotal}`;
+    document.getElementById('stat-streak').textContent = stats.streak;
+    document.getElementById('stat-total').textContent = stats.totalCompletedDays;
   }
 
   async function toggleExercise(dateStr, exerciseId, el) {
-    // Block past and future days — only today is interactive
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const target = new Date(y, m - 1, d);
-    if (target.getTime() !== today.getTime()) return;
+    if (dateStr !== dateKey(today)) return;
 
     const key = `${dateStr}_${exerciseId}`;
     const wasChecked = entries[key] === true;
-    const card = el.closest('.day-card');
-    const dayExercises = getExercisesForDay(new Date(dateStr + 'T00:00:00'));
-    const wasAllDone = dayExercises.every(ex => entries[`${dateStr}_${ex.id}`] === true);
+    const wasAllDone = _isDayComplete(dateStr);
 
-    // Optimistic update
     entries[key] = !wasChecked;
-    el.classList.toggle('checked', !wasChecked);
-    el.querySelector('.exercise-checkbox').textContent = !wasChecked ? '✓' : '';
-
-    const doneCount = dayExercises.filter(ex => entries[`${dateStr}_${ex.id}`] === true).length;
-    const allDone = doneCount === dayExercises.length;
-    card.classList.toggle('completed', allDone);
-    card.querySelector('.day-check').textContent = allDone ? '✓' : '';
-    const ringEl = card.querySelector('.day-ring');
-    if (ringEl) {
-      const pct = dayExercises.length > 0 ? Math.round(doneCount / dayExercises.length * 100) : 0;
-      ringEl.style.setProperty('--ring-p', pct);
-      ringEl.querySelector('.day-ring-val').textContent = `${doneCount}/${dayExercises.length}`;
-    }
+    _refreshDayUI(dateStr);
 
     try {
       const result = await API.toggleChecklist(exerciseId, dateStr);
 
-      // Sync actual server state
       entries[key] = result.completed;
-      el.classList.toggle('checked', result.completed);
-      el.querySelector('.exercise-checkbox').textContent = result.completed ? '✓' : '';
 
       const prevXP = currentUser.xp;
       currentUser.xp = result.xp;
@@ -335,53 +450,47 @@ const WorkoutPage = (() => {
       const newRank = Gamification.getRank(result.xp);
 
       if (result.xpDelta !== 0) {
-        Gamification.spawnXPPopup(el, `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
-      }
-
-      if (result.dayComplete && !wasAllDone) {
-        App.showToast('🎉 Journée complète ! Bien joué !');
-        Gamification.launchConfetti();
-        const ringEl = card.querySelector('.day-ring');
-        if (ringEl) {
-          ringEl.classList.remove('ring-bounce');
-          void ringEl.offsetWidth; // reflow to restart animation
-          ringEl.classList.add('ring-bounce');
-        }
+        Gamification.spawnXPPopup(el || document.querySelector('#home-day-sheet .gym-day-sheet'), `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
       }
 
       if (newRank.index > prevRank.index) {
         setTimeout(() => App.showLevelUp(newRank), 600);
       }
 
-      // Refresh stats
       const statsData = await API.getStats();
       stats = statsData;
       updateHUD();
-      renderWeek(getWeekDates(weekOffset));
+      _refreshDayUI(dateStr);
+
+      if (result.dayComplete && !wasAllDone) {
+        App.showToast('🎉 Journée complète ! Bien joué !');
+        Gamification.launchConfetti();
+        const ringEl = document.querySelector(`#day-${dateStr} .day-ring`);
+        if (ringEl) {
+          ringEl.classList.remove('ring-bounce');
+          void ringEl.offsetWidth;
+          ringEl.classList.add('ring-bounce');
+        }
+      }
 
     } catch (err) {
-      // Revert optimistic update
       entries[key] = wasChecked;
-      el.classList.toggle('checked', wasChecked);
-      el.querySelector('.exercise-checkbox').textContent = wasChecked ? '✓' : '';
-      card.classList.toggle('completed', wasAllDone);
-      card.querySelector('.day-check').textContent = wasAllDone ? '✓' : '';
-      const revertDone = dayExercises.filter(ex => entries[`${dateStr}_${ex.id}`] === true).length;
-      const revertRingEl = card.querySelector('.day-ring');
-      if (revertRingEl) {
-        const pct = dayExercises.length > 0 ? Math.round(revertDone / dayExercises.length * 100) : 0;
-        revertRingEl.style.setProperty('--ring-p', pct);
-        revertRingEl.querySelector('.day-ring-val').textContent = `${revertDone}/${dayExercises.length}`;
-      }
+      _refreshDayUI(dateStr);
       App.showToast('Erreur : ' + err.message);
     }
   }
 
   async function changeWeek(delta) {
     weekOffset += delta;
+    closeDayActionsSheet();
     document.getElementById('calendar-container').innerHTML =
       '<div class="skeleton-card"></div><div class="skeleton-card"></div><div class="skeleton-card"></div>';
     await loadWeek();
+  }
+
+  function destroy() {
+    closeDayActionsSheet();
+    document.getElementById('home-day-sheet')?.remove();
   }
 
   function updateHUD() {
@@ -403,5 +512,5 @@ const WorkoutPage = (() => {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  return { render, init, toggleDay, toggleExercise, changeWeek, renderWeekStrip, toggleRestDay };
+  return { render, init, destroy, toggleDay, toggleExercise, changeWeek, renderWeekStrip, toggleRestDay, openDayActionsSheet, closeDayActionsSheet };
 })();

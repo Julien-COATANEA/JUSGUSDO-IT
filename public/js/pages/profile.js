@@ -8,6 +8,8 @@ const ProfilePage = (() => {
   let _activeStatsTab = 'maison'; // 'maison' | 'salle'
   let _gymCalendarWeeks = [];
   let _gymCalPage       = 0;
+  let _homeCalendarResizeFrame = 0;
+  let _homeCalendarResizeBound = false;
 
   function render() {
     return `
@@ -30,6 +32,8 @@ const ProfilePage = (() => {
   }
 
   async function init({ userId } = {}) {
+    destroy();
+
     const container = document.getElementById('profile-content');
     if (!container) return;
 
@@ -55,7 +59,8 @@ const ProfilePage = (() => {
       const gymSessions = gymSessionsRes?.sessions || [];
 
       container.innerHTML = _renderAll(user, stats, gymStats, gymStatsError, gymRecords, gymSessions);
-      requestAnimationFrame(_autoSizeCalendar);
+  _bindHomeCalendarResize();
+  _queueHomeCalendarAutoSize();
       requestAnimationFrame(_autoSizeGymCalendar);
 
       // Initialise notification status UI
@@ -119,7 +124,38 @@ const ProfilePage = (() => {
         (btn.textContent.includes('Maison') && tab === 'maison') ||
         (btn.textContent.includes('Salle')  && tab === 'salle'));
     });
+    if (tab === 'maison') _queueHomeCalendarAutoSize();
     if (tab === 'salle') requestAnimationFrame(_autoSizeGymCalendar);
+  }
+
+  function _queueHomeCalendarAutoSize() {
+    if (_homeCalendarResizeFrame) cancelAnimationFrame(_homeCalendarResizeFrame);
+    _homeCalendarResizeFrame = requestAnimationFrame(() => {
+      _homeCalendarResizeFrame = 0;
+      requestAnimationFrame(_autoSizeCalendar);
+    });
+  }
+
+  function _bindHomeCalendarResize() {
+    if (_homeCalendarResizeBound) return;
+    window.addEventListener('resize', _queueHomeCalendarAutoSize);
+    _homeCalendarResizeBound = true;
+  }
+
+  function _measureCalendarPageSize(wrap, weeksRow) {
+    const wrapWidth = Math.floor(wrap.getBoundingClientRect().width);
+    if (!wrapWidth) return 1;
+
+    const labels = wrap.querySelector('.cal-day-labels');
+    const labelsWidth = labels ? Math.ceil(labels.getBoundingClientRect().width) : 32;
+    const gap = parseFloat(getComputedStyle(weeksRow).gap || '0') || 0;
+    const weekWidths = Array.from(weeksRow.querySelectorAll('.cal-week-col'))
+      .map(week => Math.ceil(week.getBoundingClientRect().width))
+      .filter(Boolean);
+    const weekWidth = weekWidths.length ? Math.max(...weekWidths) : 24 + gap;
+    const availableWidth = Math.max(0, wrapWidth - labelsWidth - gap);
+
+    return Math.max(1, Math.floor((availableWidth + gap) / (weekWidth + gap)));
   }
 
   // ── Gym (salle) stats renderer ─────────────────────────────
@@ -157,13 +193,14 @@ const ProfilePage = (() => {
     } else if (todayRest) {
       cls = 'partial'; icon = '🛌'; msg = `Jour de repos déclaré`;
     } else {
-      cls = 'empty'; icon = '😴'; msg = `Pas encore d'activité salle aujourd'hui`;
+      return `
+      ${statsGridHtml}
+      ${_renderGymCalendar(gymStats.calendar)}
+    `;
     }
-    const gymCta = cls === 'empty' ? `<button class="profile-today-cta" onclick="Router.navigate('muscu')">Go Salle →</button>` : '';
     todayBadge = `<div class="profile-today-badge ${cls}" style="animation:fadeIn 0.3s ease 0.05s both">
       <span class="profile-today-icon">${icon}</span>
       <span class="profile-today-msg">${msg}</span>
-      ${gymCta}
     </div>`;
 
     return `
@@ -540,17 +577,14 @@ const ProfilePage = (() => {
   // ── 2. Statut du jour ───────────────────────────────────────
   function _renderTodayBadge(stats) {
     const { today_done: done, today_total: total } = stats;
-    if (!total) return '';
+    if (!total || done <= 0) return '';
     let cls, icon, msg;
     if (done >= total)      { cls = 'done';    icon = '✅'; msg = `Journée complète ! (${done}/${total})`; }
     else if (done > 0)      { cls = 'partial'; icon = '💪'; msg = `${done}\u202f/\u202f${total} exercices aujourd'hui`; }
-    else                    { cls = 'empty';   icon = '😴'; msg = `Pas encore commencé aujourd'hui`; }
-    const cta = cls === 'empty' ? `<button class="profile-today-cta" onclick="Router.navigate('app')">Go Maison →</button>` : '';
     return `
       <div class="profile-today-badge ${cls}" style="animation:fadeIn 0.3s ease 0.07s both">
         <span class="profile-today-icon">${icon}</span>
         <span class="profile-today-msg">${msg}</span>
-        ${cta}
       </div>`;
   }
 
@@ -621,16 +655,16 @@ const ProfilePage = (() => {
   function _autoSizeCalendar() {
     const wrap = document.getElementById('cal-heatmap-wrap');
     if (!wrap || !_calendarWeeks.length) return;
-    const labels  = wrap.querySelector('.cal-day-labels');
-    const labelsW = labels ? labels.offsetWidth + 4 : 32;
-    const available = wrap.clientWidth - labelsW - 4;
-    const cellSz = 24 + 5; // --cal-sz + --cal-gap for cal-sz-lg
-    _calPageSize = Math.max(1, Math.floor(available / cellSz));
+    if (wrap.clientWidth === 0 || wrap.offsetParent === null) return;
+
+    const weeksRow = document.getElementById('cal-weeks-row');
+    if (!weeksRow) return;
+
+    _calPageSize = _measureCalendarPageSize(wrap, weeksRow);
     _calPage = 0;
     const today      = new Date().toISOString().split('T')[0];
     const weeksSlice = _calWeeksForPage(0);
     const maxPage    = Math.max(0, Math.ceil(_calendarWeeks.length / _calPageSize) - 1);
-    const weeksRow   = document.getElementById('cal-weeks-row');
     if (weeksRow) weeksRow.innerHTML = _renderWeeks(weeksSlice, today);
     const labelEl  = document.getElementById('cal-pager-label');
     if (labelEl)  labelEl.textContent = _calPagerLabel(weeksSlice);
@@ -703,6 +737,17 @@ const ProfilePage = (() => {
 
   function setCalFilter(n, btn) {
     // Legacy — no longer used; pagination handled by calPage()
+  }
+
+  function destroy() {
+    if (_homeCalendarResizeFrame) {
+      cancelAnimationFrame(_homeCalendarResizeFrame);
+      _homeCalendarResizeFrame = 0;
+    }
+    if (_homeCalendarResizeBound) {
+      window.removeEventListener('resize', _queueHomeCalendarAutoSize);
+      _homeCalendarResizeBound = false;
+    }
   }
 
   // ── 4. Graphique XP 30 jours (SVG inline) ──────────────────
@@ -1089,6 +1134,6 @@ const ProfilePage = (() => {
     }
   }
 
-  return { render, init, switchStatsTab, calPage, gymCalPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar, openGymDay };
+  return { render, init, destroy, switchStatsTab, calPage, gymCalPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar, openGymDay };
 })();
 

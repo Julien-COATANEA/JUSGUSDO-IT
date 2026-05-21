@@ -56,6 +56,167 @@ function findDevExercise(id) {
   return DEV_FAKE_EXERCISES.find(exercise => exercise.id === Number(id));
 }
 
+function _devTodayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function _devDateDaysAgo(daysAgo) {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  return date.toISOString().split('T')[0];
+}
+
+let _devChecklistEntries = [
+  { id: 1, exercise_id: 1, entry_date: _devTodayStr(),      completed: true,  completed_at: new Date().toISOString() },
+  { id: 2, exercise_id: 2, entry_date: _devTodayStr(),      completed: false, completed_at: null },
+  { id: 3, exercise_id: 3, entry_date: _devTodayStr(),      completed: true,  completed_at: new Date().toISOString() },
+  { id: 4, exercise_id: 4, entry_date: _devTodayStr(),      completed: false, completed_at: null },
+  { id: 5, exercise_id: 1, entry_date: _devDateDaysAgo(1),  completed: true,  completed_at: new Date(Date.now() - 86400000).toISOString() },
+  { id: 6, exercise_id: 2, entry_date: _devDateDaysAgo(1),  completed: true,  completed_at: new Date(Date.now() - 86400000).toISOString() },
+  { id: 7, exercise_id: 3, entry_date: _devDateDaysAgo(1),  completed: true,  completed_at: new Date(Date.now() - 86400000).toISOString() },
+  { id: 8, exercise_id: 4, entry_date: _devDateDaysAgo(1),  completed: true,  completed_at: new Date(Date.now() - 86400000).toISOString() },
+];
+
+function _devActiveHomeExercises() {
+  return DEV_FAKE_EXERCISES.filter(exercise => exercise.is_active !== false && (exercise.type || 'home') === 'home');
+}
+
+function _devHomeTotalCount() {
+  return _devActiveHomeExercises().length;
+}
+
+function _devHomeCompletedExerciseIds(entryDate) {
+  const activeExerciseIds = new Set(_devActiveHomeExercises().map(exercise => exercise.id));
+  return new Set(
+    _devChecklistEntries
+      .filter(entry => entry.entry_date === entryDate && entry.completed && activeExerciseIds.has(entry.exercise_id))
+      .map(entry => entry.exercise_id)
+  );
+}
+
+function _devHomeDoneCount(entryDate) {
+  return _devHomeCompletedExerciseIds(entryDate).size;
+}
+
+function _devIsHomeComplete(entryDate) {
+  const total = _devHomeTotalCount();
+  return total > 0 && _devHomeDoneCount(entryDate) >= total;
+}
+
+function _devHomeFullDates() {
+  const dates = Array.from(new Set(_devChecklistEntries.filter(entry => entry.completed).map(entry => entry.entry_date))).sort();
+  return dates.filter(_devIsHomeComplete);
+}
+
+function _devHomeStreaks() {
+  const dates = _devHomeFullDates();
+  let bestStreak = 0;
+  let currentStreak = 0;
+
+  if (dates.length) {
+    let streak = 1;
+    let maxStreak = 1;
+    for (let i = 1; i < dates.length; i++) {
+      const diff = (new Date(dates[i]) - new Date(dates[i - 1])) / 86400000;
+      if (diff === 1) {
+        streak++;
+        if (streak > maxStreak) maxStreak = streak;
+      } else {
+        streak = 1;
+      }
+    }
+    bestStreak = maxStreak;
+
+    const today = _devTodayStr();
+    const yesterday = _devDateDaysAgo(1);
+    const lastDate = dates[dates.length - 1];
+    if (lastDate === today || lastDate === yesterday) {
+      let running = 1;
+      for (let i = dates.length - 2; i >= 0; i--) {
+        const diff = (new Date(dates[i + 1]) - new Date(dates[i])) / 86400000;
+        if (diff === 1) running++;
+        else break;
+      }
+      currentStreak = running;
+    }
+  }
+
+  return { bestStreak, currentStreak };
+}
+
+function _devHomeTopExercises() {
+  const counts = new Map();
+  const namesById = new Map(_devActiveHomeExercises().map(exercise => [exercise.id, exercise.name]));
+  _devChecklistEntries.forEach(entry => {
+    if (!entry.completed || !namesById.has(entry.exercise_id)) return;
+    counts.set(entry.exercise_id, (counts.get(entry.exercise_id) || 0) + 1);
+  });
+  return Array.from(counts.entries())
+    .map(([exerciseId, times]) => ({ name: namesById.get(exerciseId), times }))
+    .sort((left, right) => right.times - left.times)
+    .slice(0, 5);
+}
+
+function _devHomeCalendar() {
+  const today = new Date();
+  const start = new Date(today);
+  start.setDate(today.getDate() - 27);
+  const dayOfWeek = start.getDay();
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  start.setDate(start.getDate() + diffToMonday);
+
+  const total = _devHomeTotalCount();
+  const calendar = [];
+  for (let i = 0; i < 28; i++) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + i);
+    const key = date.toISOString().split('T')[0];
+    const isPast = key <= _devTodayStr();
+    calendar.push({
+      date: key,
+      done: isPast ? _devHomeDoneCount(key) : 0,
+      total: isPast ? total : 0,
+    });
+  }
+  return calendar;
+}
+
+function _devHomeXpHistory() {
+  const total = _devHomeTotalCount();
+  const baseXP = total ? Math.floor(30 / total) : 0;
+  const completionBonus = total ? 30 - (baseXP * total) : 0;
+  const history = [];
+  for (let i = 29; i >= 0; i--) {
+    const key = _devDateDaysAgo(i);
+    const done = _devHomeDoneCount(key);
+    const xpEarned = done === 0
+      ? 0
+      : (done * baseXP) + (_devIsHomeComplete(key) ? completionBonus : 0);
+    history.push({ date: key, xp_earned: xpEarned });
+  }
+  return history;
+}
+
+function _devHomeStatsSnapshot() {
+  const today = _devTodayStr();
+  const completedEntries = _devChecklistEntries.filter(entry => entry.completed);
+  const activeDays = new Set(completedEntries.map(entry => entry.entry_date)).size;
+  const fullDays = _devHomeFullDates().length;
+  const { bestStreak, currentStreak } = _devHomeStreaks();
+  return {
+    calendar: _devHomeCalendar(),
+    xp_history: _devHomeXpHistory(),
+    top_exercises: _devHomeTopExercises(),
+    total_completed: completedEntries.length,
+    full_days: fullDays,
+    best_streak: bestStreak,
+    current_streak: currentStreak,
+    active_days: activeDays,
+    today_done: _devHomeDoneCount(today),
+    today_total: _devHomeTotalCount(),
+  };
+}
+
 // Injecter le token et l'utilisateur dans localStorage
 localStorage.setItem('token', 'dev-fake-token-123');
 localStorage.setItem('user', JSON.stringify(DEV_FAKE_USER));
@@ -73,61 +234,88 @@ function _applyDevMock() {
   API.getUsers     = async () => ({ users: [...DEV_FAKE_USERS] });
   API.getUserStats = async (userId) => {
     const u = DEV_FAKE_USERS.find(u => u.id === userId) || DEV_FAKE_USER;
-    // Generate fake 28-day calendar (4 semaines)
-    const calendar = [];
-    const today = new Date();
-    // Start on a Monday 27 days ago
-    const start = new Date(today);
-    start.setDate(today.getDate() - 27);
-    const dayOfWeek = start.getDay();
-    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    start.setDate(start.getDate() + diffToMonday);
-    for (let i = 0; i < 28; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      const date = d.toISOString().split('T')[0];
-      const isPast = d <= today;
-      calendar.push({ date, done: isPast ? Math.floor(Math.random() * 3) : 0, total: isPast ? 4 : 0 });
-    }
-    // XP history 30 days
-    const xp_history = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      xp_history.push({ date: d.toISOString().split('T')[0], xp_earned: Math.random() > 0.4 ? Math.floor(Math.random() * 120) : 0 });
-    }
+    const homeStats = _devHomeStatsSnapshot();
     return {
       user: { ...u },
       stats: {
-        calendar,
-        xp_history,
-        top_exercises: [
-          { name: 'Pompes', times: 18 },
-          { name: 'Squats', times: 14 },
-          { name: 'Gainage', times: 10 },
-        ],
-        total_completed: 42,
-        full_days: 10,
-        best_streak: 7,
-        current_streak: 3,
-        active_days: 15,
-        today_done: 2,
-        today_total: 4,
+        calendar: homeStats.calendar,
+        xp_history: homeStats.xp_history,
+        top_exercises: homeStats.top_exercises,
+        total_completed: homeStats.total_completed,
+        full_days: homeStats.full_days,
+        best_streak: homeStats.best_streak,
+        current_streak: homeStats.current_streak,
+        active_days: homeStats.active_days,
+        today_done: homeStats.today_done,
+        today_total: homeStats.today_total,
       },
     };
   };
 
   // Exercises / checklist
-  API.getExercises  = async () => ({ exercises: DEV_FAKE_EXERCISES.map(cloneDevExercise) });
-  API.getChecklist  = async () => ({
-    entries: DEV_FAKE_EXERCISES.map(e => ({
-      exercise_id: e.id,
-      entry_date: new Date().toISOString().split('T')[0],
-      completed: Math.random() > 0.5,
-    })),
+  API.getExercises  = async () => ({ exercises: _devActiveHomeExercises().map(cloneDevExercise) });
+  API.getChecklist  = async (start, end) => ({
+    entries: _devChecklistEntries
+      .filter(entry => (!start || entry.entry_date >= start) && (!end || entry.entry_date <= end))
+      .map(entry => ({ ...entry })),
   });
-  API.toggleChecklist = async () => ({ ok: true });
-  API.getStats      = async () => ({ streak: 7, totalCompletedDays: 42, this_week: 5, xp_total: 1500 });
+  API.toggleChecklist = async (exercise_id, entry_date) => {
+    const today = _devTodayStr();
+    if (entry_date > today) throw new Error('Impossible de cocher une date future');
+
+    const exercise = _devActiveHomeExercises().find(item => item.id === Number(exercise_id));
+    if (!exercise) throw new Error('Exercice introuvable');
+
+    const totalEx = _devHomeTotalCount();
+    const doneBefore = _devHomeDoneCount(entry_date);
+    const wasComplete = _devIsHomeComplete(entry_date);
+    const idx = _devChecklistEntries.findIndex(entry => entry.entry_date === entry_date && entry.exercise_id === Number(exercise_id));
+
+    let completed;
+    if (idx >= 0) {
+      completed = !_devChecklistEntries[idx].completed;
+      _devChecklistEntries[idx].completed = completed;
+      _devChecklistEntries[idx].completed_at = completed ? new Date().toISOString() : null;
+    } else {
+      completed = true;
+      _devChecklistEntries.push({
+        id: Date.now(),
+        exercise_id: Number(exercise_id),
+        entry_date,
+        completed: true,
+        completed_at: new Date().toISOString(),
+      });
+    }
+
+    const doneAfter = _devHomeDoneCount(entry_date);
+    const isComplete = _devIsHomeComplete(entry_date);
+    const baseXP = totalEx ? Math.floor(30 / totalEx) : 0;
+    const completionBonus = totalEx ? 30 - (baseXP * totalEx) : 0;
+    let xpDelta = completed ? baseXP : -baseXP;
+    if (!wasComplete && isComplete) xpDelta += completionBonus;
+    if (wasComplete && !isComplete) xpDelta -= completionBonus;
+
+    DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
+
+    return {
+      completed,
+      xp: DEV_FAKE_USER.xp,
+      xpDelta,
+      dayComplete: isComplete,
+      bonusXP: (!wasComplete && isComplete) ? completionBonus : (wasComplete && !isComplete) ? -completionBonus : 0,
+      doneBefore,
+      doneAfter,
+    };
+  };
+  API.getStats = async () => {
+    const homeStats = _devHomeStatsSnapshot();
+    return {
+      streak: homeStats.current_streak,
+      totalCompletedDays: homeStats.full_days,
+      this_week: 0,
+      xp_total: DEV_FAKE_USER.xp,
+    };
+  };
 
   // Admin
   API.adminGetExercises    = async () => ({ exercises: DEV_FAKE_EXERCISES.map(cloneDevExercise) });

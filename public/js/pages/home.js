@@ -48,15 +48,10 @@ const HomePage = (() => {
         API.getChecklist(today, today),
         API.getExercises(),
       ]);
-      const _todayDow = new Date().getDay();
-      const _scheduledExIds = new Set(
-        exercisesData.exercises
-          .filter(ex => !ex.schedule || ex.schedule.length === 0 || ex.schedule.includes(_todayDow))
-          .map(ex => ex.id)
-      );
+      const _activeExIds = new Set(exercisesData.exercises.map(ex => ex.id));
       _todayStatus = {
-        done:  checklistData.entries.filter(e => e.completed && _scheduledExIds.has(e.exercise_id)).length,
-        total: _scheduledExIds.size,
+        done:  checklistData.entries.filter(e => e.completed && _activeExIds.has(e.exercise_id)).length,
+        total: _activeExIds.size,
       };
       renderActivity(users);
       // Mini-game levels badge
@@ -75,15 +70,10 @@ const HomePage = (() => {
           API.getChecklist(today, today),
           API.getExercises(),
         ]);
-        const _todayDow = new Date().getDay();
-        const _scheduledExIds = new Set(
-          exercisesData.exercises
-            .filter(ex => !ex.schedule || ex.schedule.length === 0 || ex.schedule.includes(_todayDow))
-            .map(ex => ex.id)
-        );
+        const _activeExIds = new Set(exercisesData.exercises.map(ex => ex.id));
         _todayStatus = {
-          done:  checklistData.entries.filter(e => e.completed && _scheduledExIds.has(e.exercise_id)).length,
-          total: _scheduledExIds.size,
+          done:  checklistData.entries.filter(e => e.completed && _activeExIds.has(e.exercise_id)).length,
+          total: _activeExIds.size,
         };
         renderActivity(users);
       } catch (_) {}

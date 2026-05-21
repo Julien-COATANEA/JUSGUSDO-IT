@@ -51,33 +51,24 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       [userId]
     );
 
-    // Days where every exercise scheduled for that day's DOW was completed
+    // Days where every active home exercise was completed
     const fullDaysRes = await db.query(
       `WITH day_counts AS (
          SELECT entry_date,
                 COUNT(*) FILTER (WHERE ce.completed) AS done
          FROM checklist_entries ce
+         JOIN exercises e ON e.id = ce.exercise_id
          WHERE ce.user_id = $1
+           AND e.is_active = TRUE
+           AND COALESCE(e.type, 'home') = 'home'
          GROUP BY entry_date
        ),
        day_totals AS (
          SELECT dc.entry_date,
                 dc.done,
                 (SELECT COUNT(*) FROM exercises e2
-                 LEFT JOIN LATERAL (
-                   SELECT uea.schedule FROM user_exercise_assignments uea
-                   WHERE uea.exercise_id = e2.id AND uea.user_id = $1 LIMIT 1
-                 ) usch2 ON TRUE
                  WHERE e2.is_active = TRUE
                    AND COALESCE(e2.type, 'home') = 'home'
-                   AND (
-                     COALESCE(array_length(COALESCE(usch2.schedule, e2.schedule), 1), 0) = 0
-                     OR EXTRACT(DOW FROM dc.entry_date)::int = ANY(COALESCE(usch2.schedule, e2.schedule))
-                   )
-                   AND (
-                     NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id)
-                     OR usch2.schedule IS NOT NULL
-                   )
                 ) AS total_for_day
          FROM day_counts dc
        )
@@ -93,27 +84,18 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
          SELECT entry_date,
                 COUNT(*) FILTER (WHERE ce.completed) AS done
          FROM checklist_entries ce
+         JOIN exercises e ON e.id = ce.exercise_id
          WHERE ce.user_id = $1
+           AND e.is_active = TRUE
+           AND COALESCE(e.type, 'home') = 'home'
          GROUP BY entry_date
        ),
        day_totals AS (
          SELECT dc.entry_date,
                 dc.done,
                 (SELECT COUNT(*) FROM exercises e2
-                 LEFT JOIN LATERAL (
-                   SELECT uea.schedule FROM user_exercise_assignments uea
-                   WHERE uea.exercise_id = e2.id AND uea.user_id = $1 LIMIT 1
-                 ) usch2 ON TRUE
                  WHERE e2.is_active = TRUE
                    AND COALESCE(e2.type, 'home') = 'home'
-                   AND (
-                     COALESCE(array_length(COALESCE(usch2.schedule, e2.schedule), 1), 0) = 0
-                     OR EXTRACT(DOW FROM dc.entry_date)::int = ANY(COALESCE(usch2.schedule, e2.schedule))
-                   )
-                   AND (
-                     NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id)
-                     OR usch2.schedule IS NOT NULL
-                   )
                 ) AS total_for_day
          FROM day_counts dc
        )
@@ -143,35 +125,17 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
         `SELECT COUNT(*) AS done
          FROM checklist_entries ce
          JOIN exercises e ON e.id = ce.exercise_id AND e.is_active = TRUE
-         LEFT JOIN user_exercise_assignments uea ON uea.exercise_id = e.id AND uea.user_id = $1
          WHERE ce.user_id = $1
            AND ce.entry_date = CURRENT_DATE
            AND ce.completed = TRUE
-           AND COALESCE(e.type, 'home') = 'home'
-           AND (
-             COALESCE(array_length(COALESCE(uea.schedule, e.schedule), 1), 0) = 0
-             OR EXTRACT(DOW FROM CURRENT_DATE)::int = ANY(COALESCE(uea.schedule, e.schedule))
-           )
-           AND (
-             NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
-             OR uea.user_id IS NOT NULL
-           )`,
+           AND COALESCE(e.type, 'home') = 'home'`,
         [userId]
       ),
       db.query(
         `SELECT COUNT(*) AS total
          FROM exercises e
-         LEFT JOIN user_exercise_assignments uea ON uea.exercise_id = e.id AND uea.user_id = $1
          WHERE e.is_active = TRUE
-           AND COALESCE(e.type, 'home') = 'home'
-           AND (
-             COALESCE(array_length(COALESCE(uea.schedule, e.schedule), 1), 0) = 0
-             OR EXTRACT(DOW FROM CURRENT_DATE)::int = ANY(COALESCE(uea.schedule, e.schedule))
-           )
-           AND (
-             NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
-             OR uea.user_id IS NOT NULL
-           )`,
+           AND COALESCE(e.type, 'home') = 'home'`,
         [userId]
       ),
     ]);
@@ -197,28 +161,19 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
        day_data AS (
          SELECT entry_date,
                 COUNT(*) FILTER (WHERE completed) AS done
-         FROM checklist_entries
-         WHERE user_id = $1
+         FROM checklist_entries ce
+         JOIN exercises e ON e.id = ce.exercise_id
+         WHERE ce.user_id = $1
+           AND e.is_active = TRUE
+           AND COALESCE(e.type, 'home') = 'home'
            AND entry_date >= (SELECT start_date FROM bounds)
          GROUP BY entry_date
        )
   SELECT d.entry_date,
          COALESCE(dd.done, 0) AS done,
          (SELECT COUNT(*) FROM exercises e2
-          LEFT JOIN LATERAL (
-            SELECT uea.schedule FROM user_exercise_assignments uea
-            WHERE uea.exercise_id = e2.id AND uea.user_id = $1 LIMIT 1
-          ) usch2 ON TRUE
           WHERE e2.is_active = TRUE
             AND COALESCE(e2.type, 'home') = 'home'
-            AND (
-              COALESCE(array_length(COALESCE(usch2.schedule, e2.schedule), 1), 0) = 0
-              OR EXTRACT(DOW FROM d.entry_date)::int = ANY(COALESCE(usch2.schedule, e2.schedule))
-            )
-            AND (
-              NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id)
-              OR usch2.schedule IS NOT NULL
-            )
          ) AS total
   FROM bounds b,
        generate_series(b.start_date, b.end_date, '1 day'::interval) AS d(entry_date)
@@ -235,20 +190,8 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
        totals AS (
          SELECT d.entry_date,
                 (SELECT COUNT(*) FROM exercises e
-                 LEFT JOIN LATERAL (
-                   SELECT uea.schedule FROM user_exercise_assignments uea
-                   WHERE uea.exercise_id = e.id AND uea.user_id = $1 LIMIT 1
-                 ) usch ON TRUE
                  WHERE e.is_active = TRUE
                    AND COALESCE(e.type, 'home') = 'home'
-                   AND (
-                     COALESCE(array_length(COALESCE(usch.schedule, e.schedule), 1), 0) = 0
-                     OR EXTRACT(DOW FROM d.entry_date)::int = ANY(COALESCE(usch.schedule, e.schedule))
-                   )
-                   AND (
-                     NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
-                     OR usch.schedule IS NOT NULL
-                   )
                 ) AS total_ex
          FROM days d
        ),
@@ -259,6 +202,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
          JOIN exercises e ON e.id = ce.exercise_id
          WHERE ce.user_id = $1
            AND ce.completed = TRUE
+           AND e.is_active = TRUE
            AND COALESCE(e.type, 'home') = 'home'
            AND ce.entry_date >= CURRENT_DATE - 29
          GROUP BY ce.entry_date

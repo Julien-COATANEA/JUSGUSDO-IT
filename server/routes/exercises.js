@@ -10,22 +10,12 @@ async function getDayProgress(userId, entryDate) {
     `SELECT COUNT(*) AS total,
             COUNT(*) FILTER (WHERE ce.completed = TRUE) AS done
      FROM exercises e
-     LEFT JOIN user_exercise_assignments uea
-       ON uea.exercise_id = e.id AND uea.user_id = $1
      LEFT JOIN checklist_entries ce
        ON ce.exercise_id = e.id
       AND ce.user_id = $1
       AND ce.entry_date = $2
      WHERE e.is_active = TRUE
-       AND (e.type IS NULL OR e.type = 'home')
-       AND (
-         COALESCE(array_length(COALESCE(uea.schedule, e.schedule), 1), 0) = 0
-         OR EXTRACT(DOW FROM $2::date)::int = ANY(COALESCE(uea.schedule, e.schedule))
-       )
-       AND (
-         NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
-         OR uea.user_id IS NOT NULL
-       )`,
+       AND (e.type IS NULL OR e.type = 'home')`,
     [userId, entryDate]
   );
 
@@ -46,27 +36,19 @@ function getDailyXpSplit(totalEx) {
   return { baseXP, completionBonus };
 }
 
-// GET /api/exercises — list active HOME exercises for the current user
-// Returns global exercises + exercises explicitly assigned to this user
-// The schedule field reflects the user's personal schedule (uea.schedule) when assigned,
-// or the exercise's global schedule otherwise.
+// GET /api/exercises — list all active HOME exercises.
+// Maison activity is no longer filtered by per-user assignment.
 router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await db.query(
       `SELECT e.id, e.name, e.emoji, e.sets, e.reps, e.unit, e.xp_reward,
               e.order_index, e.is_active, e.is_running, e.created_at,
-              COALESCE(uea.schedule, e.schedule) AS schedule
+              e.schedule
        FROM exercises e
-       LEFT JOIN user_exercise_assignments uea
-         ON uea.exercise_id = e.id AND uea.user_id = $1
        WHERE e.is_active = TRUE
          AND (e.type IS NULL OR e.type = 'home')
-         AND (
-           NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e.id)
-           OR uea.user_id IS NOT NULL
-         )
        ORDER BY e.order_index ASC, e.id ASC`,
-      [req.user.id]
+      []
     );
     res.json({ exercises: result.rows });
   } catch (err) {
@@ -130,7 +112,8 @@ router.post('/checklist/toggle', requireAuth, async (req, res) => {
   try {
     // Verify exercise exists and is active
     const exCheck = await db.query(
-      'SELECT id FROM exercises WHERE id = $1 AND is_active = TRUE',
+      `SELECT id FROM exercises
+       WHERE id = $1 AND is_active = TRUE AND (type IS NULL OR type = 'home')`,
       [exercise_id]
     );
     if (!exCheck.rows[0]) {
@@ -196,35 +179,24 @@ router.get('/stats', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Total completed days: all exercises scheduled for that day's DOW were done
+    // Total completed days: all active home exercises were done for that day.
     const totalDays = await db.query(
       `WITH day_counts AS (
          SELECT ce.entry_date,
                 COUNT(*) FILTER (WHERE ce.completed) AS done
          FROM checklist_entries ce
+         JOIN exercises e ON e.id = ce.exercise_id
          WHERE ce.user_id = $1
+           AND e.is_active = TRUE
+           AND COALESCE(e.type, 'home') = 'home'
          GROUP BY ce.entry_date
        ),
        day_totals AS (
          SELECT dc.entry_date,
                 dc.done,
                 (SELECT COUNT(*) FROM exercises e2
-                 LEFT JOIN LATERAL (
-                   SELECT uea.schedule
-                   FROM user_exercise_assignments uea
-                   WHERE uea.exercise_id = e2.id AND uea.user_id = $1
-                   LIMIT 1
-                 ) usch ON TRUE
                  WHERE e2.is_active = TRUE
-                   AND (
-                     COALESCE(array_length(COALESCE(usch.schedule, e2.schedule), 1), 0) = 0
-                     OR EXTRACT(DOW FROM dc.entry_date)::int = ANY(COALESCE(usch.schedule, e2.schedule))
-                   )
-                   AND (
-                     NOT EXISTS (SELECT 1 FROM user_exercise_assignments WHERE exercise_id = e2.id)
-                     OR usch.schedule IS NOT NULL
-                   )
-                ) AS total_for_day
+                   AND COALESCE(e2.type, 'home') = 'home') AS total_for_day
          FROM day_counts dc
        )
        SELECT entry_date
