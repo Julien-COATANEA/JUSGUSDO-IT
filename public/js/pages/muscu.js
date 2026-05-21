@@ -76,29 +76,47 @@ const MuscuPage = (() => {
     return Array.from({ length: safeSets }, () => safeReps);
   }
 
+  function _changeGymPerformedSetCount(performedReps, delta, fallbackReps) {
+    const next = _normalizeGymReps(performedReps);
+    const safeFallbackReps = _clampGymMetric(fallbackReps, 1, 9999, 10);
+    if (!next.length) next.push(safeFallbackReps);
+
+    if (delta > 0) {
+      next.push(next[next.length - 1] || safeFallbackReps);
+    } else if (delta < 0 && next.length > 1) {
+      next.pop();
+    }
+
+    return next.slice(0, 24);
+  }
+
+  function _changeGymPerformedSetReps(performedReps, setIndex, delta, fallbackReps) {
+    const next = _normalizeGymReps(performedReps);
+    const safeFallbackReps = _clampGymMetric(fallbackReps, 1, 9999, 10);
+    if (!next.length) next.push(safeFallbackReps);
+    if (setIndex < 0 || setIndex >= next.length) return next;
+
+    next[setIndex] = _clampGymMetric((next[setIndex] || safeFallbackReps) + delta, 1, 9999, next[setIndex] || safeFallbackReps);
+    return next;
+  }
+
   function _getGymPerformanceState(performedReps, fallbackSets, fallbackReps) {
     const normalized = _normalizeGymReps(performedReps);
     const plannedSets = _clampGymMetric(fallbackSets, 1, 24, 3);
     const plannedReps = _clampGymMetric(fallbackReps, 1, 9999, 10);
-
-    if (normalized.length) {
-      return {
-        sets: _clampGymMetric(normalized.length, 1, 24, plannedSets),
-        reps: _clampGymMetric(normalized[0], 1, 9999, plannedReps),
-        isUniform: normalized.every(value => value === normalized[0]),
-      };
-    }
+    const repsList = normalized.length ? normalized : _buildGymPerformedReps(plannedSets, plannedReps);
 
     return {
-      sets: plannedSets,
-      reps: plannedReps,
-      isUniform: true,
+      sets: _clampGymMetric(repsList.length, 1, 24, plannedSets),
+      reps: _clampGymMetric(repsList[0], 1, 9999, plannedReps),
+      repsList,
+      isUniform: repsList.every(value => value === repsList[0]),
     };
   }
 
   function _formatGymPerformance(performedReps, fallbackSets, fallbackReps) {
     const perf = _getGymPerformanceState(performedReps, fallbackSets, fallbackReps);
-    return `${perf.sets} x ${perf.reps}`;
+    return perf.isUniform ? `${perf.sets} x ${perf.reps}` : perf.repsList.join(' • ');
   }
 
   function _cloneGymEntry(entry) {
@@ -571,7 +589,7 @@ const MuscuPage = (() => {
               ? `<span class="exercise-tag sheet-tag-reps">${exSets}&nbsp;×&nbsp;${exReps}&nbsp;rép.</span>`
               : '';
             const safeEx  = _escape(exName).replace(/'/g, "\\'");
-            const perfSummary = `${performance.sets} x ${performance.reps}`;
+            const perfSummary = _formatGymPerformance(performedReps, exSets, exReps);
             const repsBadge = checked
               ? `<button type="button" class="exercise-tag sheet-tag-reps sheet-tag-reps-btn${isEditorOpen ? ' active' : ''}"
                    onclick="event.stopPropagation();MuscuPage.toggleGymRepsEditor('${safeEx}','${safeSes}','${dateStr}')"
@@ -579,29 +597,17 @@ const MuscuPage = (() => {
               : setsRepsTag;
             const repsEditor = isEditorOpen ? `
               <div class="sheet-reps-editor" onclick="event.stopPropagation()">
-                <div class="sheet-reps-inline">
+                <div class="sheet-reps-toolbar">
                   <div class="sheet-stepper-compact">
                     <span class="sheet-stepper-mini-label">Séries</span>
                     <div class="sheet-stepper-control compact">
                       <button type="button" class="sheet-stepper-btn compact"
-                        onclick="event.stopPropagation();MuscuPage.adjustGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},'sets',-1,this)"
+                        onclick="event.stopPropagation();MuscuPage.changeGymExerciseSetCount('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},-1,this)"
                         aria-label="Retirer une série">−</button>
                       <span class="sheet-stepper-value compact">${performance.sets}</span>
                       <button type="button" class="sheet-stepper-btn compact"
-                        onclick="event.stopPropagation();MuscuPage.adjustGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},'sets',1,this)"
+                        onclick="event.stopPropagation();MuscuPage.changeGymExerciseSetCount('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},1,this)"
                         aria-label="Ajouter une série">+</button>
-                    </div>
-                  </div>
-                  <div class="sheet-stepper-compact accent">
-                    <span class="sheet-stepper-mini-label">Rép.</span>
-                    <div class="sheet-stepper-control compact">
-                      <button type="button" class="sheet-stepper-btn compact"
-                        onclick="event.stopPropagation();MuscuPage.adjustGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},'reps',-1,this)"
-                        aria-label="Retirer une répétition">−</button>
-                      <span class="sheet-stepper-value compact">${performance.reps}</span>
-                      <button type="button" class="sheet-stepper-btn compact"
-                        onclick="event.stopPropagation();MuscuPage.adjustGymExercisePerformance('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},'reps',1,this)"
-                        aria-label="Ajouter une répétition">+</button>
                     </div>
                   </div>
                   ${exSets && exReps ? `<button type="button" class="sheet-reps-preset${perfSummary === plannedPerformance ? ' active' : ''}"
@@ -609,19 +615,36 @@ const MuscuPage = (() => {
                     Prévu ${plannedPerformance}
                   </button>` : ''}
                 </div>
-                ${performance.isUniform ? '' : '<div class="sheet-reps-help">Ancien format détecté</div>'}
+                <div class="sheet-reps-sets">
+                  ${performance.repsList.map((setReps, setIndex) => `
+                    <div class="sheet-set-pill${setIndex === performance.repsList.length - 1 ? ' accent' : ''}">
+                      <span class="sheet-set-label">S${setIndex + 1}</span>
+                      <div class="sheet-stepper-control compact">
+                        <button type="button" class="sheet-stepper-btn compact"
+                          onclick="event.stopPropagation();MuscuPage.adjustGymExerciseSetReps('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},${setIndex},-1,this)"
+                          aria-label="Retirer une répétition sur la série ${setIndex + 1}">−</button>
+                        <span class="sheet-stepper-value compact wide">${setReps}</span>
+                        <button type="button" class="sheet-stepper-btn compact"
+                          onclick="event.stopPropagation();MuscuPage.adjustGymExerciseSetReps('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},${setIndex},1,this)"
+                          aria-label="Ajouter une répétition sur la série ${setIndex + 1}">+</button>
+                      </div>
+                    </div>`).join('')}
+                </div>
+                ${performance.isUniform ? '' : '<div class="sheet-reps-help">Tu peux donc faire 10 • 8 • 6 sur le meme exercice.</div>'}
               </div>` : '';
             return `
               <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}${isEditorOpen ? ' has-reps-editor' : ''}"
-                     onclick="MuscuPage.toggleGymExercise('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},this,event)">
-                <div class="exercise-info">
-                  <div class="exercise-name">${_escape(exName)}</div>
-                  ${repsEditor}
+                <div class="sheet-ex-main"
+                     onclick="MuscuPage.toggleGymExercise('${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},this.closest('.sheet-exercise-row'),event)">
+                  <div class="exercise-info">
+                    <div class="exercise-name">${_escape(exName)}</div>
+                  </div>
+                  <div class="sheet-ex-right">
+                    ${repsBadge}
+                    <span class="sheet-ex-check${checked ? ' on' : ''}">✓</span>
+                  </div>
                 </div>
-                <div class="sheet-ex-right">
-                  ${repsBadge}
-                  <span class="sheet-ex-check${checked ? ' on' : ''}">✓</span>
-                </div>
+                ${repsEditor}
               </div>`;
           }).join('') || '<p class="exercise-inline-help" style="padding:8px 12px">Aucun exercice dans cette séance</p>';
           return `
@@ -965,7 +988,7 @@ const MuscuPage = (() => {
     const previousEntry = _cloneGymEntry(_gymEntries[entryKey]);
     const currentPerformance = _getGymPerformanceState(previousEntry?.performed_reps, plannedSets, plannedReps);
     const nextPerformedReps = !wasChecked
-      ? _buildGymPerformedReps(currentPerformance.sets, currentPerformance.reps)
+      ? currentPerformance.repsList
       : [];
 
     if (wasChecked && _activeGymRepsEditorKey === _getGymEditorKey(dateStr, sessionName, exerciseName)) {
@@ -981,19 +1004,27 @@ const MuscuPage = (() => {
     if (_activeSheetDate === dateStr) _renderDayActionsSheet();
   }
 
-  async function adjustGymExercisePerformance(exerciseName, sessionName, dateStr, plannedSets, plannedReps, field, delta, anchorEl) {
+  async function changeGymExerciseSetCount(exerciseName, sessionName, dateStr, plannedSets, plannedReps, delta, anchorEl) {
     const entryKey = `${dateStr}_${exerciseName.toLowerCase()}`;
     const previousEntry = _cloneGymEntry(_gymEntries[entryKey]) || { session_name: sessionName, completed: false, performed_reps: [] };
     const currentPerformance = _getGymPerformanceState(previousEntry.performed_reps, plannedSets, plannedReps);
-    const nextPerformance = {
-      sets: field === 'sets'
-        ? _clampGymMetric(currentPerformance.sets + delta, 1, 24, currentPerformance.sets)
-        : currentPerformance.sets,
-      reps: field === 'reps'
-        ? _clampGymMetric(currentPerformance.reps + delta, 1, 9999, currentPerformance.reps)
-        : currentPerformance.reps,
-    };
-    const nextPerformedReps = _buildGymPerformedReps(nextPerformance.sets, nextPerformance.reps);
+    const nextPerformedReps = _changeGymPerformedSetCount(currentPerformance.repsList, delta, plannedReps);
+
+    await _persistGymExercisePerformance(
+      exerciseName,
+      sessionName,
+      dateStr,
+      nextPerformedReps,
+      anchorEl?.closest('.sheet-exercise-row') || anchorEl,
+      previousEntry
+    );
+  }
+
+  async function adjustGymExerciseSetReps(exerciseName, sessionName, dateStr, plannedSets, plannedReps, setIndex, delta, anchorEl) {
+    const entryKey = `${dateStr}_${exerciseName.toLowerCase()}`;
+    const previousEntry = _cloneGymEntry(_gymEntries[entryKey]) || { session_name: sessionName, completed: false, performed_reps: [] };
+    const currentPerformance = _getGymPerformanceState(previousEntry.performed_reps, plannedSets, plannedReps);
+    const nextPerformedReps = _changeGymPerformedSetReps(currentPerformance.repsList, setIndex, delta, plannedReps);
 
     await _persistGymExercisePerformance(
       exerciseName,
@@ -1469,5 +1500,5 @@ const MuscuPage = (() => {
     _refresh();
   }
 
-  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, toggleGymRepsEditor, adjustGymExercisePerformance, setGymExercisePerformance, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
+  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, toggleGymRepsEditor, changeGymExerciseSetCount, adjustGymExerciseSetReps, setGymExercisePerformance, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
 })();
