@@ -321,10 +321,10 @@ const AdminPage = (() => {
       <form class="gym-zone-inline-form${parentZone ? ' child' : ''}" id="${formId}" onsubmit="AdminPage.submitZoneForm(event, ${zone ? zone.id : 'null'}, ${parentId === null ? 'null' : parentId})">
         <div class="gym-zone-inline-copy">
           <span class="gym-zone-inline-kicker">${helperTitle}</span>
-          <strong>${helperSubtitle}</strong>
+          <strong class="gym-zone-inline-parent">${helperSubtitle}</strong>
         </div>
         <div class="gym-zone-inline-fields">
-          <input type="text" name="name" value="${escapeHtml(z.name)}" placeholder="${parentZone ? 'Nom de la sous-zone' : 'Nom du groupe'}" required maxlength="60" />
+          <input type="text" name="name" value="${escapeHtml(z.name)}" placeholder="${parentZone ? 'Nom de la sous-zone' : 'Nom du groupe'}" required maxlength="60" class="gym-zone-name-input" />
           <input type="text" name="icon" value="${escapeHtml(z.icon || '💪')}" placeholder="💪" maxlength="4" class="gym-zone-icon-input" />
           <label class="gym-zone-color-field">
             <span>Couleur</span>
@@ -396,6 +396,9 @@ const AdminPage = (() => {
     const load = formatExerciseLoad(exercise);
     const isTargeted = isTargetedExercise(exercise);
     const isGymExercise = (exercise.type || currentExTab || 'home') === 'gym';
+    const lockedGymSession = isGymExercise && !editingId && !!pendingGymSession;
+    const selectedGymSession = exercise.gymSession || pendingGymSession || '';
+    const selectedGymSessionMeta = gymSessions.find(session => session.name === selectedGymSession) || null;
 
     return `
       <section class="ex-editor">
@@ -441,15 +444,23 @@ const AdminPage = (() => {
             ${currentExTab === 'gym' ? `
             <div class="form-group" style="margin-top:12px">
               <label>Séance</label>
-              <select id="ex-gym-session" class="mr-input mr-select">
-                <option value="Pecs Triceps"${(exercise.gymSession || '') === 'Pecs Triceps' ? ' selected' : ''}>💪 Pecs Triceps</option>
-                <option value="Dos Biceps"${(exercise.gymSession || '') === 'Dos Biceps' ? ' selected' : ''}>�️ Dos Biceps</option>
-                <option value="Jambes"${(exercise.gymSession || '') === 'Jambes' ? ' selected' : ''}>🦵 Jambes</option>
-                <option value="Full"${(exercise.gymSession || '') === 'Full' ? ' selected' : ''}>⚡ Full</option>
-                ${gymSessions.filter(s => !['Pecs Triceps','Dos Biceps','Jambes','Full'].includes(s.name)).map(s =>
-                  `<option value="${escapeHtml(s.name)}"${exercise.gymSession === s.name ? ' selected' : ''}>${escapeHtml(s.icon)} ${escapeHtml(s.name)}</option>`
-                ).join('')}
-              </select>
+              ${lockedGymSession
+                ? `
+                  <input type="hidden" id="ex-gym-session" value="${escapeHtml(selectedGymSession)}" />
+                  <div class="exercise-filter-note exercise-filter-note-simple" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,0.04);">
+                    <strong>${escapeHtml(selectedGymSessionMeta?.icon || '💪')} ${escapeHtml(selectedGymSession || 'Séance')}</strong>
+                    <span>Ajout direct dans cette séance</span>
+                  </div>`
+                : `
+                  <select id="ex-gym-session" class="mr-input mr-select">
+                    <option value="Pecs Triceps"${selectedGymSession === 'Pecs Triceps' ? ' selected' : ''}>💪 Pecs Triceps</option>
+                    <option value="Dos Biceps"${selectedGymSession === 'Dos Biceps' ? ' selected' : ''}>🏋️ Dos Biceps</option>
+                    <option value="Jambes"${selectedGymSession === 'Jambes' ? ' selected' : ''}>🦵 Jambes</option>
+                    <option value="Full"${selectedGymSession === 'Full' ? ' selected' : ''}>⚡ Full</option>
+                    ${gymSessions.filter(s => !['Pecs Triceps','Dos Biceps','Jambes','Full'].includes(s.name)).map(s =>
+                      `<option value="${escapeHtml(s.name)}"${selectedGymSession === s.name ? ' selected' : ''}>${escapeHtml(s.icon)} ${escapeHtml(s.name)}</option>`
+                    ).join('')}
+                  </select>`}
             </div>` : ''}
           </section>
 
@@ -918,6 +929,7 @@ const AdminPage = (() => {
     if (id) {
       const ex = exercises.find(e => e.id === id);
       if (ex) currentExTab = ex.type || 'home';
+      pendingGymSession = null;
     }
     currentView = 'editor';
     renderCurrentView();
@@ -926,6 +938,7 @@ const AdminPage = (() => {
   function closeExModal() {
     currentView = 'catalog';
     editingId = null;
+    pendingGymSession = null;
     renderCurrentView();
   }
 
@@ -987,6 +1000,7 @@ const AdminPage = (() => {
     const errorEl = document.getElementById('ex-form-error');
     const submitBtn = document.getElementById('ex-submit-btn');
     const isGymExercise = currentExTab === 'gym';
+    const lockedGymSession = isGymExercise && !editingId && !!pendingGymSession;
     const isRunning = !!document.getElementById('ex-is-running')?.checked;
     const isTargeted = !isGymExercise && !!document.getElementById('ex-audience-targeted')?.checked;
     const name = document.getElementById('ex-name')?.value.trim();
@@ -1031,7 +1045,9 @@ const AdminPage = (() => {
       schedule: (!isGymExercise && !isTargeted) ? getActiveDaysFrom(document.getElementById('ex-global-schedule')) : [],
       is_running: isRunning,
       type: currentExTab,
-      gym_session: currentExTab === 'gym' ? (document.getElementById('ex-gym-session')?.value || null) : null,
+      gym_session: currentExTab === 'gym'
+        ? (lockedGymSession ? pendingGymSession : (document.getElementById('ex-gym-session')?.value || null))
+        : null,
     };
 
     errorEl.textContent = '';
@@ -1055,6 +1071,7 @@ const AdminPage = (() => {
 
       currentView = 'catalog';
       editingId = null;
+  pendingGymSession = null;
       await refreshData();
     } catch (err) {
       errorEl.textContent = err.message || 'Erreur serveur';
@@ -1366,7 +1383,6 @@ const AdminPage = (() => {
 
   function createBlankExercise() {
     const gym = pendingGymSession;
-    pendingGymSession = null;
     return normalizeExercise({
       id: null,
       emoji: '💪',
