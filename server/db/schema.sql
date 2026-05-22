@@ -51,27 +51,31 @@ ALTER TABLE exercises ADD COLUMN IF NOT EXISTS schedule INTEGER[] DEFAULT '{}';
 -- Migration: add avatar column
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar VARCHAR(10) DEFAULT '💪';
 
--- Migration: unique constraint on exercise name to prevent seed duplicates
+-- Migration: drop global exercise-name uniqueness so admin can create duplicates
 DO $$
 BEGIN
-  -- Remove duplicate exercises, keeping the one with the lowest id
-  DELETE FROM exercises a
-  USING exercises b
-  WHERE a.id > b.id AND a.name = b.name;
-
-  IF NOT EXISTS (
+  IF EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'exercises_name_unique'
   ) THEN
-    ALTER TABLE exercises ADD CONSTRAINT exercises_name_unique UNIQUE (name);
+    ALTER TABLE exercises DROP CONSTRAINT exercises_name_unique;
   END IF;
 END$$;
 
 -- Seed default exercises
-INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index) VALUES
+INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index)
+SELECT seed.name, seed.emoji, seed.sets, seed.reps, seed.unit, seed.xp_reward, seed.order_index
+FROM (VALUES
   ('Pompes',  '💪', 1, 20, 'répétitions', 10, 1),
   ('Abdos',   '🔥', 1, 30, 'répétitions', 10, 2),
   ('Squats',  '🦵', 1, 30, 'répétitions', 10, 3)
-ON CONFLICT (name) DO NOTHING;
+) AS seed(name, emoji, sets, reps, unit, xp_reward, order_index)
+WHERE NOT EXISTS (
+  SELECT 1
+    FROM exercises e
+   WHERE e.name = seed.name
+     AND COALESCE(e.type, 'home') = 'home'
+     AND e.gym_session IS NULL
+);
 
 -- Migration: is_running flag for running sessions (gives 15 XP instead of 10)
 ALTER TABLE exercises ADD COLUMN IF NOT EXISTS is_running BOOLEAN DEFAULT FALSE;
@@ -162,14 +166,47 @@ CREATE TABLE IF NOT EXISTS gym_checklist_entries (
   id            SERIAL PRIMARY KEY,
   user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   entry_date    DATE NOT NULL,
+  exercise_id   INTEGER REFERENCES exercises(id) ON DELETE SET NULL,
   exercise_name VARCHAR(100) NOT NULL,
   session_name  VARCHAR(50) NOT NULL,
   completed     BOOLEAN DEFAULT FALSE,
   completed_at  TIMESTAMPTZ,
-  UNIQUE(user_id, entry_date, exercise_name)
+  UNIQUE(user_id, entry_date, exercise_id)
 );
+ALTER TABLE gym_checklist_entries
+  ADD COLUMN IF NOT EXISTS exercise_id INTEGER REFERENCES exercises(id) ON DELETE SET NULL;
 ALTER TABLE gym_checklist_entries ADD COLUMN IF NOT EXISTS performed_reps INTEGER[] DEFAULT '{}';
+ALTER TABLE gym_checklist_entries ALTER COLUMN performed_reps SET DEFAULT '{}';
+DO $$
+BEGIN
+  UPDATE gym_checklist_entries ge
+     SET exercise_id = e.id
+    FROM exercises e
+   WHERE ge.exercise_id IS NULL
+     AND e.type = 'gym'
+     AND e.name = ge.exercise_name;
+
+  IF EXISTS (
+    SELECT 1
+      FROM pg_constraint
+     WHERE conname = 'gym_checklist_entries_user_id_entry_date_exercise_name_key'
+  ) THEN
+    ALTER TABLE gym_checklist_entries
+      DROP CONSTRAINT gym_checklist_entries_user_id_entry_date_exercise_name_key;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_constraint
+     WHERE conname = 'gym_checklist_entries_user_id_entry_date_exercise_id_key'
+  ) THEN
+    ALTER TABLE gym_checklist_entries
+      ADD CONSTRAINT gym_checklist_entries_user_id_entry_date_exercise_id_key
+      UNIQUE (user_id, entry_date, exercise_id);
+  END IF;
+END$$;
 CREATE INDEX IF NOT EXISTS idx_gym_checklist_user_date ON gym_checklist_entries(user_id, entry_date);
+CREATE INDEX IF NOT EXISTS idx_gym_checklist_exercise ON gym_checklist_entries(exercise_id);
 DO $$
 BEGIN
   -- Replace old (user_id, play_date) unique with (user_id, play_date, level)
@@ -186,12 +223,14 @@ ALTER TABLE exercises ADD COLUMN IF NOT EXISTS type VARCHAR(10) DEFAULT 'home';
 ALTER TABLE exercises ADD COLUMN IF NOT EXISTS gym_session VARCHAR(50);
 
 -- Seed gym exercises (from _MUSCU_SESSIONS definition in frontend)
-INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index, schedule, is_active, type, gym_session) VALUES
+INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index, schedule, is_active, type, gym_session)
+SELECT seed.name, seed.emoji, seed.sets, seed.reps, seed.unit, seed.xp_reward, seed.order_index, seed.schedule, seed.is_active, seed.type, seed.gym_session
+FROM (VALUES
   -- Pecs Triceps
-  ('Développé Couché Haltères',             '💪', 3, 10, 'répétitions', 10, 100, '{}', TRUE, 'gym', 'Pecs Triceps'),
-  ('Développé Couché Barres',               '💪', 3, 10, 'répétitions', 10, 101, '{}', TRUE, 'gym', 'Pecs Triceps'),
-  ('Développé Couché Incliné',              '💪', 3, 10, 'répétitions', 10, 102, '{}', TRUE, 'gym', 'Pecs Triceps'),
-  ('Écarté Poulie',                         '💪', 3, 12, 'répétitions', 10, 103, '{}', TRUE, 'gym', 'Pecs Triceps'),
+  ('Développé Couché Haltères',              '💪', 3, 10, 'répétitions', 10, 100, '{}', TRUE, 'gym', 'Pecs Triceps'),
+  ('Développé Couché Barres',                '💪', 3, 10, 'répétitions', 10, 101, '{}', TRUE, 'gym', 'Pecs Triceps'),
+  ('Développé Couché Incliné',               '💪', 3, 10, 'répétitions', 10, 102, '{}', TRUE, 'gym', 'Pecs Triceps'),
+  ('Écarté Poulie',                          '💪', 3, 12, 'répétitions', 10, 103, '{}', TRUE, 'gym', 'Pecs Triceps'),
   ('Triceps Corde (extension poulie basse)','💪', 3, 12, 'répétitions', 10, 104, '{}', TRUE, 'gym', 'Pecs Triceps'),
   ('Triceps Corde (extension poulie haute)','💪', 3, 12, 'répétitions', 10, 105, '{}', TRUE, 'gym', 'Pecs Triceps'),
   ('Dips',                                  '💪', 3, 10, 'répétitions', 10, 106, '{}', TRUE, 'gym', 'Pecs Triceps'),
@@ -215,7 +254,14 @@ INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index, sc
   ('Développé Couché Barre',                '💪', 3, 10, 'répétitions', 10, 130, '{}', TRUE, 'gym', 'Full'),
   ('Triceps Corde / Élévation Latérale',    '💪', 3, 12, 'répétitions', 10, 131, '{}', TRUE, 'gym', 'Full'),
   ('Épaules',                               '💪', 3, 12, 'répétitions', 10, 132, '{}', TRUE, 'gym', 'Full')
-ON CONFLICT (name) DO NOTHING;
+) AS seed(name, emoji, sets, reps, unit, xp_reward, order_index, schedule, is_active, type, gym_session)
+WHERE NOT EXISTS (
+  SELECT 1
+    FROM exercises e
+   WHERE e.name = seed.name
+     AND COALESCE(e.type, 'home') = seed.type
+     AND e.gym_session IS NOT DISTINCT FROM seed.gym_session
+);
 
 -- Migration: gym session definitions table (replaces hardcoded GYM_SESSION_DEFS)
 CREATE TABLE IF NOT EXISTS gym_sessions (

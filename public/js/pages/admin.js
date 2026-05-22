@@ -310,12 +310,28 @@ const AdminPage = (() => {
     const z = zone || { name: '', icon: '💪', color: '#e94560', order_index: '' };
     const isNew = !zone;
     const formId = isNew ? `zone-form-new-${parentId || 'root'}` : `zone-form-${zone.id}`;
+    const parentZone = parentId === null ? null : gymZones.find(item => item.id === parentId);
+    const helperTitle = isNew
+      ? (parentZone ? 'Nouvelle sous-zone' : 'Nouveau groupe')
+      : 'Modifier la zone';
+    const helperSubtitle = parentZone
+      ? `Dans ${escapeHtml(parentZone.name)}`
+      : 'Catalogue des zones';
     return `
-      <form class="gym-zone-inline-form" id="${formId}" onsubmit="AdminPage.submitZoneForm(event, ${zone ? zone.id : 'null'}, ${parentId === null ? 'null' : parentId})">
-        <input type="text" name="name" value="${escapeHtml(z.name)}" placeholder="Nom de la zone" required maxlength="60" />
-        <input type="text" name="icon" value="${escapeHtml(z.icon || '💪')}" placeholder="💪" maxlength="4" class="gym-zone-icon-input" />
-        <input type="color" name="color" value="${escapeHtml(z.color || '#e94560')}" />
-        <input type="number" name="order_index" value="${z.order_index === '' ? '' : z.order_index}" placeholder="#" min="0" class="gym-zone-order-input" />
+      <form class="gym-zone-inline-form${parentZone ? ' child' : ''}" id="${formId}" onsubmit="AdminPage.submitZoneForm(event, ${zone ? zone.id : 'null'}, ${parentId === null ? 'null' : parentId})">
+        <div class="gym-zone-inline-copy">
+          <span class="gym-zone-inline-kicker">${helperTitle}</span>
+          <strong>${helperSubtitle}</strong>
+        </div>
+        <div class="gym-zone-inline-fields">
+          <input type="text" name="name" value="${escapeHtml(z.name)}" placeholder="${parentZone ? 'Nom de la sous-zone' : 'Nom du groupe'}" required maxlength="60" />
+          <input type="text" name="icon" value="${escapeHtml(z.icon || '💪')}" placeholder="💪" maxlength="4" class="gym-zone-icon-input" />
+          <label class="gym-zone-color-field">
+            <span>Couleur</span>
+            <input type="color" name="color" value="${escapeHtml(z.color || '#e94560')}" />
+          </label>
+          <input type="number" name="order_index" value="${z.order_index === '' ? '' : z.order_index}" placeholder="#" min="0" class="gym-zone-order-input" />
+        </div>
         <div class="gym-zone-form-actions">
           <button type="submit" class="submit-btn">${isNew ? 'Créer' : 'Enregistrer'}</button>
           <button type="button" class="admin-secondary-btn" onclick="AdminPage.cancelZoneForm()">Annuler</button>
@@ -379,6 +395,7 @@ const AdminPage = (() => {
     const exercise = getEditingExercise();
     const load = formatExerciseLoad(exercise);
     const isTargeted = isTargetedExercise(exercise);
+    const isGymExercise = (exercise.type || currentExTab || 'home') === 'gym';
 
     return `
       <section class="ex-editor">
@@ -389,13 +406,13 @@ const AdminPage = (() => {
             <h1>${editingId ? `Modifier — ${escapeHtml(exercise.name)}` : 'Nouvel exercice'}</h1>
             <div class="ex-editor-top-chips">
               <span class="ex-editor-top-chip">${exercise.is_active ? 'Actif' : 'Archivé'}</span>
-              <span class="ex-editor-top-chip">${isTargeted ? 'Ciblé' : 'Global'}</span>
+              <span class="ex-editor-top-chip">${isGymExercise ? `Séance · ${escapeHtml(exercise.gymSession || 'Hors séance')}` : (isTargeted ? 'Ciblé' : 'Global')}</span>
               <span class="ex-editor-top-chip">${exercise.is_running ? 'Running' : 'Classique'} · ${load}</span>
             </div>
           </div>
         </div>
 
-        ${editingId ? `
+        ${editingId && !isGymExercise ? `
         <div class="ex-impact-banner${isTargeted ? ' ex-impact-banner--targeted' : ' ex-impact-banner--global'}">
           ${isTargeted
             ? `👥 Assigné à <strong>${exercise.assignments.length} utilisateur${exercise.assignments.length !== 1 ? 's' : ''}</strong>${exercise.assignments.length > 0 ? ' : ' + exercise.assignments.slice(0, 3).map(a => escapeHtml(getUserName(a.user_id))).join(', ') + (exercise.assignments.length > 3 ? ` +${exercise.assignments.length - 3}` : '') : ''}. Archiver préserve leur historique.`
@@ -465,10 +482,6 @@ const AdminPage = (() => {
                   <input type="text" id="ex-unit" value="${escapeHtml(exercise.unit)}" placeholder="rép. / secondes" />
                 </div>
               </div>
-              <div class="ex-charge-preview">
-                <span class="ex-charge-label">Charge calculée</span>
-                <strong>${load}</strong>
-              </div>
             </div>
 
             <div id="ex-cardio-fields" style="display:${exercise.is_running ? 'flex' : 'none'};flex-direction:column;gap:14px;">
@@ -517,18 +530,22 @@ const AdminPage = (() => {
             </div>
           </section>
 
-          <section class="ex-editor-section">
+          ${isGymExercise ? '' : `<section class="ex-editor-section">
             <h2 class="ex-editor-section-title">Diffusion — par personne</h2>
             <input type="checkbox" id="ex-audience-targeted" checked hidden />
             <div id="ex-targeted-users-wrap">
               <div id="ex-assign-users" class="exercise-users-list">${renderAssignmentRowsMarkup(exercise.assignments)}</div>
             </div>
-          </section>
+          </section>`}
 
           <div class="ex-editor-footer">
             <p class="form-error" id="ex-form-error"></p>
             <div class="ex-editor-footer-actions">
-              ${editingId ? `<button type="button" class="admin-secondary-btn" id="ex-archive-btn" onclick="AdminPage.toggleExerciseState(${exercise.id}, ${!exercise.is_active})">${exercise.is_active ? '🗂 Archiver' : '♻️ Réactiver'}</button>` : ''}
+              ${editingId
+                ? (((exercise.type || currentExTab || 'home') === 'gym')
+                  ? `<button type="button" class="admin-secondary-btn" id="ex-delete-btn" onclick="AdminPage.deleteExercise(${exercise.id})">🗑️ Supprimer</button>`
+                  : `<button type="button" class="admin-secondary-btn" id="ex-archive-btn" onclick="AdminPage.toggleExerciseState(${exercise.id}, ${!exercise.is_active})">${exercise.is_active ? '🗂 Archiver' : '♻️ Réactiver'}</button>`)
+                : ''}
               <button type="button" class="admin-secondary-btn" onclick="AdminPage.closeExModal()">Annuler</button>
               <button type="submit" class="submit-btn" id="ex-submit-btn">${editingId ? 'Enregistrer' : "Créer l'exercice"}</button>
             </div>
@@ -743,6 +760,7 @@ const AdminPage = (() => {
   function renderExerciseCard(exercise) {
     const load = formatExerciseLoad(exercise);
     const stateLabel = exercise.is_active ? 'Actif' : 'Archivé';
+    const isGymExercise = (exercise.type || 'home') === 'gym';
 
     return `
       <article class="exercise-card exercise-card-simple${exercise.is_active ? '' : ' archived'}">
@@ -765,7 +783,9 @@ const AdminPage = (() => {
             <button type="button" class="ex-card-menu-btn" onclick="event.stopPropagation();this.closest('.ex-card-menu-wrap').classList.toggle('open')" aria-label="Actions">⋯</button>
             <div class="ex-card-menu-dropdown">
               <button type="button" onclick="AdminPage.openExModal(${exercise.id})">✏️ Modifier</button>
-              <button type="button" onclick="AdminPage.toggleExerciseState(${exercise.id}, ${exercise.is_active ? 'false' : 'true'})">${exercise.is_active ? '🗂 Archiver' : '♻️ Réactiver'}</button>
+              ${isGymExercise
+                ? `<button type="button" onclick="AdminPage.deleteExercise(${exercise.id})">🗑️ Supprimer</button>`
+                : `<button type="button" onclick="AdminPage.toggleExerciseState(${exercise.id}, ${exercise.is_active ? 'false' : 'true'})">${exercise.is_active ? '🗂 Archiver' : '♻️ Réactiver'}</button>`}
             </div>
           </div>` : ''}
         </div>
@@ -774,6 +794,12 @@ const AdminPage = (() => {
   }
 
   function renderExerciseAudienceSummary(exercise) {
+    if ((exercise.type || 'home') === 'gym') {
+      return exercise.gymSession
+        ? `Séance · ${escapeHtml(exercise.gymSession)}`
+        : 'Hors séance';
+    }
+
     if (!isTargetedExercise(exercise)) {
       return `Tous les utilisateurs · ${formatSchedule(exercise.schedule)}`;
     }
@@ -960,8 +986,9 @@ const AdminPage = (() => {
 
     const errorEl = document.getElementById('ex-form-error');
     const submitBtn = document.getElementById('ex-submit-btn');
+    const isGymExercise = currentExTab === 'gym';
     const isRunning = !!document.getElementById('ex-is-running')?.checked;
-    const isTargeted = !!document.getElementById('ex-audience-targeted')?.checked;
+    const isTargeted = !isGymExercise && !!document.getElementById('ex-audience-targeted')?.checked;
     const name = document.getElementById('ex-name')?.value.trim();
     const reps = isRunning
       ? (parseInt(document.getElementById('ex-cardio-target')?.value, 10) || 30)
@@ -976,7 +1003,7 @@ const AdminPage = (() => {
       return;
     }
 
-    const assignmentsData = isTargeted
+    const assignmentsData = !isGymExercise && isTargeted
       ? [...document.querySelectorAll('#ex-assign-users input[type="checkbox"]:checked')].map(input => {
           const userId = parseInt(input.value, 10);
           const picker = document.getElementById(`usp-${userId}`);
@@ -987,7 +1014,7 @@ const AdminPage = (() => {
         })
       : [];
 
-    if (isTargeted && assignmentsData.length === 0) {
+    if (!isGymExercise && isTargeted && assignmentsData.length === 0) {
       errorEl.textContent = 'Sélectionne au moins une personne.';
       return;
     }
@@ -1001,7 +1028,7 @@ const AdminPage = (() => {
         ? (document.querySelector('input[name="ex-cardio-metric"]:checked')?.value || 'min')
         : (document.getElementById('ex-unit')?.value.trim() || 'répétitions'),
       order_index: parseInt(document.getElementById('ex-order')?.value, 10) || 0,
-      schedule: isTargeted ? [] : getActiveDaysFrom(document.getElementById('ex-global-schedule')),
+      schedule: (!isGymExercise && !isTargeted) ? getActiveDaysFrom(document.getElementById('ex-global-schedule')) : [],
       is_running: isRunning,
       type: currentExTab,
       gym_session: currentExTab === 'gym' ? (document.getElementById('ex-gym-session')?.value || null) : null,
@@ -1022,7 +1049,7 @@ const AdminPage = (() => {
         App.showToast('✅ Exercice créé');
       }
 
-      if (savedExercise && savedExercise.id) {
+      if (!isGymExercise && savedExercise && savedExercise.id) {
         await API.adminAssignExercise(savedExercise.id, assignmentsData);
       }
 
@@ -1043,6 +1070,7 @@ const AdminPage = (() => {
   function deleteExercise(id) {
     const exercise = exercises.find(item => item.id === id);
     const isTargeted = exercise && isTargetedExercise(exercise);
+    const isGymExercise = (exercise?.type || currentExTab || 'home') === 'gym';
     const audienceText = !exercise
       ? 'tous les utilisateurs'
       : isTargeted
@@ -1050,7 +1078,9 @@ const AdminPage = (() => {
         : 'tous les utilisateurs';
     App.showConfirm(
       'Supprimer définitivement',
-      `Supprimer « ${exercise ? escapeHtml(exercise.name) : 'cet exercice'} » ? Cet exercice est partagé avec ${audienceText}. Si des complétions existent, la suppression sera bloquée — archivez-le plutot.`,
+      isGymExercise
+        ? `Supprimer « ${exercise ? escapeHtml(exercise.name) : 'cet exercice'} » ? Les historiques Salle déjà enregistrés seront conservés.`
+        : `Supprimer « ${exercise ? escapeHtml(exercise.name) : 'cet exercice'} » ? Cet exercice est partagé avec ${audienceText}. Si des complétions existent, la suppression sera bloquée — archivez-le plutot.`,
       async ok => {
         if (!ok) return;
         try {

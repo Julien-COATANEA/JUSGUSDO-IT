@@ -35,9 +35,54 @@ function normalizeZoneSetCount(value) {
   return Math.min(24, Math.max(1, parsed));
 }
 
+function normalizeEntityId(value) {
+  const parsed = parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function resolveGymExercise({ exerciseId, exerciseName, sessionName }) {
+  const normalizedExerciseId = normalizeEntityId(exerciseId);
+  if (normalizedExerciseId) {
+    const result = await db.query(
+      `SELECT id, name, gym_session
+         FROM exercises
+        WHERE id = $1 AND type = 'gym'
+        LIMIT 1`,
+      [normalizedExerciseId]
+    );
+    return result.rows[0] || null;
+  }
+
+  const trimmedName = String(exerciseName || '').trim();
+  const normalizedSessionName = typeof sessionName === 'string' && sessionName.trim()
+    ? sessionName.trim()
+    : null;
+  if (!trimmedName) return null;
+
+  const result = await db.query(
+    `SELECT id, name, gym_session
+       FROM exercises
+      WHERE type = 'gym'
+        AND name = $1
+        AND gym_session IS NOT DISTINCT FROM $2
+      ORDER BY id
+      LIMIT 2`,
+    [trimmedName, normalizedSessionName]
+  );
+
+  if (result.rowCount > 1) {
+    const err = new Error('Plusieurs exercices portent ce nom dans cette séance. exercise_id est requis.');
+    err.status = 409;
+    throw err;
+  }
+
+  return result.rows[0] || null;
+}
+
 function mapGymEntryRow(row) {
   return {
     ...row,
+    exercise_id: normalizeEntityId(row.exercise_id),
     performed_reps: normalizePerformedReps(row.performed_reps),
   };
 }
@@ -74,7 +119,14 @@ async function syncGymDayXp(userId, entryDate, wasActive) {
   };
 }
 
-async function saveGymChecklistEntry({ userId, exerciseName, sessionName, entryDate, completed, performedReps }) {
+async function saveGymChecklistEntry({ userId, exerciseId, exerciseName, sessionName, entryDate, completed, performedReps }) {
+  const normalizedExerciseId = normalizeEntityId(exerciseId);
+  if (!normalizedExerciseId) {
+    const err = new Error('exercise_id requis');
+    err.status = 400;
+    throw err;
+  }
+
   const nextPerformedReps = normalizePerformedReps(performedReps);
   const nextCompleted = !!completed || nextPerformedReps.length > 0;
   const wasActive = await getDayIsActive(userId, entryDate);
@@ -82,36 +134,39 @@ async function saveGymChecklistEntry({ userId, exerciseName, sessionName, entryD
   const existing = await db.query(
     `SELECT id, completed_at
        FROM gym_checklist_entries
-      WHERE user_id = $1 AND entry_date = $2 AND exercise_name = $3`,
-    [userId, entryDate, exerciseName]
+      WHERE user_id = $1 AND entry_date = $2 AND exercise_id = $3`,
+    [userId, entryDate, normalizedExerciseId]
   );
 
   if (existing.rows[0]) {
     await db.query(
       `UPDATE gym_checklist_entries
-          SET session_name = $1,
-              completed = $2,
+          SET exercise_id = $1,
+              exercise_name = $2,
+              session_name = $3,
+              completed = $4,
               completed_at = CASE
-                WHEN $2 THEN COALESCE(completed_at, NOW())
+                WHEN $4 THEN COALESCE(completed_at, NOW())
                 ELSE NULL
               END,
-              performed_reps = $3
-        WHERE id = $4`,
-      [sessionName, nextCompleted, nextPerformedReps, existing.rows[0].id]
+              performed_reps = $5
+        WHERE id = $6`,
+      [normalizedExerciseId, exerciseName, sessionName, nextCompleted, nextPerformedReps, existing.rows[0].id]
     );
   } else if (nextCompleted) {
     await db.query(
       `INSERT INTO gym_checklist_entries (
          user_id,
          entry_date,
+         exercise_id,
          exercise_name,
          session_name,
          completed,
          completed_at,
          performed_reps
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [userId, entryDate, exerciseName, sessionName, nextCompleted, nextCompleted ? new Date() : null, nextPerformedReps]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [userId, entryDate, normalizedExerciseId, exerciseName, sessionName, nextCompleted, nextCompleted ? new Date() : null, nextPerformedReps]
     );
   }
 
@@ -125,6 +180,9 @@ async function saveGymChecklistEntry({ userId, exerciseName, sessionName, entryD
   const xpResult = await syncGymDayXp(userId, entryDate, wasActive);
 
   return {
+    exercise_id: normalizedExerciseId,
+    exercise_name: exerciseName,
+    session_name: sessionName,
     completed: nextCompleted,
     performed_reps: nextPerformedReps,
     sessionDone: doneRes.rows[0]?.done || 0,
@@ -178,7 +236,7 @@ router.get('/', requireAuth, async (req, res) => {
   }
   try {
     const result = await db.query(
-      `SELECT id, entry_date, exercise_name, session_name, completed, completed_at, performed_reps
+      `SELECT id, entry_date, exercise_id, exercise_name, session_name, completed, completed_at, performed_reps
        FROM gym_checklist_entries
        WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3
        ORDER BY entry_date, session_name, exercise_name`,
@@ -192,11 +250,11 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 // POST /api/gym-checklist/toggle
-// body: { exercise_name, session_name, entry_date }
+// body: { exercise_id?, exercise_name?, session_name, entry_date }
 router.post('/toggle', requireAuth, async (req, res) => {
-  const { exercise_name, session_name, entry_date } = req.body;
-  if (!exercise_name || !session_name || !entry_date) {
-    return res.status(400).json({ error: 'exercise_name, session_name et entry_date requis' });
+  const { exercise_id, exercise_name, session_name, entry_date } = req.body;
+  if ((!exercise_id && !exercise_name) || !session_name || !entry_date) {
+    return res.status(400).json({ error: 'exercise_id ou exercise_name, session_name et entry_date requis' });
   }
   if (!DATE_REGEX.test(entry_date)) {
     return res.status(400).json({ error: 'Format de date invalide' });
@@ -206,16 +264,27 @@ router.post('/toggle', requireAuth, async (req, res) => {
   }
 
   try {
+    const exercise = await resolveGymExercise({
+      exerciseId: exercise_id,
+      exerciseName: exercise_name,
+      sessionName: session_name,
+    });
+    if (!exercise) {
+      return res.status(404).json({ error: 'Exercice introuvable' });
+    }
+
     const existing = await db.query(
-      `SELECT completed, performed_reps FROM gym_checklist_entries
-       WHERE user_id = $1 AND entry_date = $2 AND exercise_name = $3`,
-      [req.user.id, entry_date, exercise_name]
+      `SELECT completed, performed_reps
+         FROM gym_checklist_entries
+        WHERE user_id = $1 AND entry_date = $2 AND exercise_id = $3`,
+      [req.user.id, entry_date, exercise.id]
     );
 
     const result = await saveGymChecklistEntry({
       userId: req.user.id,
-      exerciseName: exercise_name,
-      sessionName: session_name,
+      exerciseId: exercise.id,
+      exerciseName: exercise.name,
+      sessionName: exercise.gym_session || session_name,
       entryDate: entry_date,
       completed: !(existing.rows[0]?.completed),
       performedReps: existing.rows[0]?.completed ? [] : existing.rows[0]?.performed_reps,
@@ -224,16 +293,16 @@ router.post('/toggle', requireAuth, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[gym] toggle', err);
-    res.status(500).json({ error: 'Erreur serveur' });
+    res.status(err.status || 500).json({ error: err.message || 'Erreur serveur' });
   }
 });
 
 // POST /api/gym-checklist/entry
-// body: { exercise_name, session_name, entry_date, completed, performed_reps }
+// body: { exercise_id?, exercise_name?, session_name, entry_date, completed, performed_reps }
 router.post('/entry', requireAuth, async (req, res) => {
-  const { exercise_name, session_name, entry_date } = req.body;
-  if (!exercise_name || !session_name || !entry_date) {
-    return res.status(400).json({ error: 'exercise_name, session_name et entry_date requis' });
+  const { exercise_id, exercise_name, session_name, entry_date } = req.body;
+  if ((!exercise_id && !exercise_name) || !session_name || !entry_date) {
+    return res.status(400).json({ error: 'exercise_id ou exercise_name, session_name et entry_date requis' });
   }
   if (!DATE_REGEX.test(entry_date)) {
     return res.status(400).json({ error: 'Format de date invalide' });
@@ -243,6 +312,15 @@ router.post('/entry', requireAuth, async (req, res) => {
   }
 
   try {
+    const exercise = await resolveGymExercise({
+      exerciseId: exercise_id,
+      exerciseName: exercise_name,
+      sessionName: session_name,
+    });
+    if (!exercise) {
+      return res.status(404).json({ error: 'Exercice introuvable' });
+    }
+
     const performedReps = normalizePerformedReps(req.body.performed_reps);
     const completed = typeof req.body.completed === 'boolean'
       ? req.body.completed
@@ -250,8 +328,9 @@ router.post('/entry', requireAuth, async (req, res) => {
 
     const result = await saveGymChecklistEntry({
       userId: req.user.id,
-      exerciseName: exercise_name,
-      sessionName: session_name,
+      exerciseId: exercise.id,
+      exerciseName: exercise.name,
+      sessionName: exercise.gym_session || session_name,
       entryDate: entry_date,
       completed,
       performedReps,
@@ -260,7 +339,7 @@ router.post('/entry', requireAuth, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[gym] entry save', err);
-    res.status(500).json({ error: 'Erreur serveur' });
+    res.status(err.status || 500).json({ error: err.message || 'Erreur serveur' });
   }
 });
 
@@ -635,7 +714,7 @@ router.get('/day/:userId/:date', requireAuth, async (req, res) => {
   try {
     const [exRes, zRes, restRes] = await Promise.all([
       db.query(
-        `SELECT exercise_name, session_name, completed_at, performed_reps
+        `SELECT exercise_id, exercise_name, session_name, completed_at, performed_reps
            FROM gym_checklist_entries
           WHERE user_id = $1 AND entry_date = $2 AND completed = TRUE
           ORDER BY completed_at NULLS LAST, exercise_name`,

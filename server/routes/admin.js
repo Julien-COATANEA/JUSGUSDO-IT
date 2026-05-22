@@ -93,19 +93,29 @@ router.put('/exercises/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/admin/exercises/:id — hard delete only if no user history
-// If checklist entries exist, refuse with 409 so callers know to archive instead.
+// DELETE /api/admin/exercises/:id — hard delete.
+// Home exercises stay protected by checklist history; gym exercises can be
+// deleted safely because gym history keeps its own snapshots.
 router.delete('/exercises/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   try {
-    const historyCheck = await db.query(
-      'SELECT COUNT(*) AS cnt FROM checklist_entries WHERE exercise_id = $1',
+    const existing = await db.query(
+      'SELECT id, type FROM exercises WHERE id = $1',
       [id]
     );
-    if (parseInt(historyCheck.rows[0].cnt, 10) > 0) {
-      return res.status(409).json({
-        error: 'Cet exercice a un historique utilisateur. Archivez-le plutôt que de le supprimer pour conserver les données.',
-      });
+    if (!existing.rows[0]) {
+      return res.status(404).json({ error: 'Exercice introuvable' });
+    }
+    if ((existing.rows[0].type || 'home') === 'home') {
+      const historyCheck = await db.query(
+        'SELECT COUNT(*) AS cnt FROM checklist_entries WHERE exercise_id = $1',
+        [id]
+      );
+      if (parseInt(historyCheck.rows[0].cnt, 10) > 0) {
+        return res.status(409).json({
+          error: 'Cet exercice a un historique utilisateur. Archivez-le plutôt que de le supprimer pour conserver les données.',
+        });
+      }
     }
     await db.query('DELETE FROM exercises WHERE id = $1', [id]);
     res.json({ ok: true });

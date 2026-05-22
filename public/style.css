@@ -4834,16 +4834,87 @@ html, body {
   border-left: 1px dashed rgba(255,255,255,0.1);
 }
 .gym-zone-inline-form {
-  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
-  padding: 6px 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px;
+  margin-top: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
 }
-.gym-zone-inline-form input[type="text"] { flex: 1 1 140px; min-width: 0; }
-.gym-zone-inline-form input[type="color"] { width: 36px; height: 32px; padding: 0; border: none; }
-.gym-zone-icon-input { width: 50px; text-align: center; }
-.gym-zone-order-input { width: 56px; }
-.gym-zone-form-actions { display: flex; gap: 6px; margin-left: auto; }
+.gym-zone-inline-form.child {
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.06);
+}
+.gym-zone-inline-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 150px;
+}
+.gym-zone-inline-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.gym-zone-inline-copy strong {
+  font-size: 13px;
+  color: var(--text);
+}
+.gym-zone-inline-fields {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 280px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.gym-zone-inline-fields input[type="text"] { flex: 1 1 180px; min-width: 0; }
+.gym-zone-inline-fields input[type="color"] { width: 28px; height: 28px; padding: 0; border: none; background: transparent; }
+.gym-zone-color-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+}
+.gym-zone-color-field span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.gym-zone-icon-input { width: 52px; text-align: center; }
+.gym-zone-order-input { width: 68px; }
+.gym-zone-form-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
 .gym-zone-form-actions .submit-btn,
 .gym-zone-form-actions .admin-secondary-btn { padding: 6px 12px; font-size: 12px; }
+@media (max-width: 720px) {
+  .gym-zone-inline-copy {
+    min-width: 0;
+    width: 100%;
+  }
+  .gym-zone-inline-fields {
+    width: 100%;
+  }
+  .gym-zone-form-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}
 
 /* === Salle: refactor (zones + day-actions sheet + rest day) ============== */
 
