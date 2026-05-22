@@ -5,10 +5,14 @@ const WorkoutPage = (() => {
 
   let weekOffset = 0;
   let exercises = [];
-  let entries = {}; // { 'YYYY-MM-DD_exerciseId': true/false }
+  let entries = {}; // { 'YYYY-MM-DD_exerciseId': { completed, performed_reps, performed_distance_km } }
+  let activeHomeEditorKey = null;
+  let homeEntryMutationQueueByKey = new Map();
+  let homeEntryMutationVersionByKey = new Map();
   let currentUser = null;
   let stats = { streak: 0, totalCompletedDays: 0 };
   let activeSheetDate = null;
+  const DEFAULT_HOME_RUNNING_DISTANCE_KM = 1;
 
   // ── Rest days (localStorage) ──────────────────────────────
   function _getRestDays() {
@@ -121,9 +125,183 @@ const WorkoutPage = (() => {
     return new Date(year, month - 1, day);
   }
 
+  function _homeEntryKey(dateStr, exerciseId) {
+    return `${dateStr}_${exerciseId}`;
+  }
+
+  function _clampHomeMetric(value, min, max, fallback) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isInteger(parsed)) return fallback;
+    return Math.min(max, Math.max(min, parsed));
+  }
+
+  function _normalizeHomeReps(value) {
+    const rawValues = Array.isArray(value)
+      ? value
+      : (typeof value === 'string' ? value.split(/[^0-9]+/) : []);
+
+    return rawValues
+      .map(item => parseInt(item, 10))
+      .filter(item => Number.isInteger(item) && item > 0 && item <= 9999)
+      .slice(0, 24);
+  }
+
+  function _normalizeHomeDistanceKm(value) {
+    if (value == null || value === '') return null;
+    const parsed = Number.parseFloat(String(value).replace(',', '.'));
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 999.9) return null;
+    return Math.round(parsed * 10) / 10;
+  }
+
+  function _formatHomeDistanceKm(value, includeUnit = true) {
+    const normalized = _normalizeHomeDistanceKm(value) ?? DEFAULT_HOME_RUNNING_DISTANCE_KM;
+    const text = Number.isInteger(normalized)
+      ? String(normalized)
+      : String(normalized).replace('.', ',');
+    return includeUnit ? `${text} km` : text;
+  }
+
+  function _buildHomeDefaultReps(exercise) {
+    const sets = _clampHomeMetric(exercise?.sets, 1, 24, 1);
+    const reps = _clampHomeMetric(exercise?.reps, 1, 9999, 10);
+    return Array.from({ length: sets }, () => reps);
+  }
+
+  function _buildHomeDefaultDistanceKm(exercise) {
+    if (exercise?.unit === 'km') {
+      return _normalizeHomeDistanceKm(exercise?.reps) ?? DEFAULT_HOME_RUNNING_DISTANCE_KM;
+    }
+    return DEFAULT_HOME_RUNNING_DISTANCE_KM;
+  }
+
+  function _getHomePerformanceState(performedReps, fallbackSets, fallbackReps) {
+    const normalized = _normalizeHomeReps(performedReps);
+    const plannedSets = _clampHomeMetric(fallbackSets, 1, 24, 1);
+    const plannedReps = _clampHomeMetric(fallbackReps, 1, 9999, 10);
+    const repsList = normalized.length ? normalized : Array.from({ length: plannedSets }, () => plannedReps);
+
+    return {
+      sets: _clampHomeMetric(repsList.length, 1, 24, plannedSets),
+      reps: _clampHomeMetric(repsList[0], 1, 9999, plannedReps),
+      repsList,
+      isUniform: repsList.every(value => value === repsList[0]),
+    };
+  }
+
+  function _formatHomePerformance(performedReps, fallbackSets, fallbackReps) {
+    const perf = _getHomePerformanceState(performedReps, fallbackSets, fallbackReps);
+    return perf.isUniform ? `${perf.sets} x ${perf.reps}` : perf.repsList.join(' • ');
+  }
+
+  function _changeHomePerformedSetCount(performedReps, delta, fallbackReps) {
+    const next = _normalizeHomeReps(performedReps);
+    const safeFallbackReps = _clampHomeMetric(fallbackReps, 1, 9999, 10);
+    if (!next.length) next.push(safeFallbackReps);
+
+    if (delta > 0) next.push(next[next.length - 1] || safeFallbackReps);
+    else if (delta < 0 && next.length > 1) next.pop();
+
+    return next.slice(0, 24);
+  }
+
+  function _changeHomePerformedSetReps(performedReps, setIndex, delta, fallbackReps) {
+    const next = _normalizeHomeReps(performedReps);
+    const safeFallbackReps = _clampHomeMetric(fallbackReps, 1, 9999, 10);
+    if (!next.length) next.push(safeFallbackReps);
+    if (setIndex < 0 || setIndex >= next.length) return next;
+
+    next[setIndex] = _clampHomeMetric((next[setIndex] || safeFallbackReps) + delta, 1, 9999, next[setIndex] || safeFallbackReps);
+    return next;
+  }
+
+  function _changeHomeDistanceKm(currentDistance, delta) {
+    const base = _normalizeHomeDistanceKm(currentDistance) ?? DEFAULT_HOME_RUNNING_DISTANCE_KM;
+    const next = Math.round((base + delta) * 10) / 10;
+    return Math.min(999.9, Math.max(0.5, next));
+  }
+
+  function _cloneHomeEntry(entry) {
+    return entry
+      ? {
+          ...entry,
+          completed: !!entry.completed,
+          performed_reps: _normalizeHomeReps(entry.performed_reps),
+          performed_distance_km: _normalizeHomeDistanceKm(entry.performed_distance_km),
+        }
+      : null;
+  }
+
+  function _getHomeEntry(dateStr, exerciseId) {
+    return _cloneHomeEntry(entries[_homeEntryKey(dateStr, exerciseId)]);
+  }
+
+  function _setHomeEntry(dateStr, exerciseId, entry) {
+    const key = _homeEntryKey(dateStr, exerciseId);
+    if (entry?.completed) entries[key] = _cloneHomeEntry(entry);
+    else delete entries[key];
+  }
+
+  function _getHomeEditorKey(dateStr, exerciseId) {
+    return `${dateStr}_home_${exerciseId}`;
+  }
+
+  function _getHomeMutationKey(dateStr, exerciseId) {
+    return `${dateStr}_home_mutation_${exerciseId}`;
+  }
+
+  function _beginHomeEntryMutation(dateStr, exerciseId) {
+    const key = _getHomeMutationKey(dateStr, exerciseId);
+    const nextVersion = (homeEntryMutationVersionByKey.get(key) || 0) + 1;
+    homeEntryMutationVersionByKey.set(key, nextVersion);
+    return { key, version: nextVersion };
+  }
+
+  function _isLatestHomeEntryMutation(mutation) {
+    return homeEntryMutationVersionByKey.get(mutation.key) === mutation.version;
+  }
+
+  function _queueHomeEntryMutation(dateStr, exerciseId, task) {
+    const key = _getHomeMutationKey(dateStr, exerciseId);
+    const previous = homeEntryMutationQueueByKey.get(key) || Promise.resolve();
+    let tracked = null;
+    const next = previous.catch(() => {}).then(task);
+    tracked = next.finally(() => {
+      if (homeEntryMutationQueueByKey.get(key) === tracked) homeEntryMutationQueueByKey.delete(key);
+    });
+    homeEntryMutationQueueByKey.set(key, tracked);
+    return tracked;
+  }
+
+  function _syncHomeEntryResult(dateStr, exerciseId, result) {
+    if (result?.completed) {
+      _setHomeEntry(dateStr, exerciseId, {
+        completed: true,
+        performed_reps: _normalizeHomeReps(result.performed_reps),
+        performed_distance_km: _normalizeHomeDistanceKm(result.performed_distance_km),
+      });
+    } else {
+      _setHomeEntry(dateStr, exerciseId, null);
+    }
+  }
+
+  function _syncHomeXp(result, anchorEl) {
+    if (result?.xp !== undefined) {
+      currentUser.xp = result.xp;
+      (localStorage.getItem('token') ? localStorage : sessionStorage).setItem('user', JSON.stringify(currentUser));
+      updateHUD();
+    }
+    if (result?.xpDelta) {
+      Gamification.spawnXPPopup(anchorEl || document.querySelector('#home-day-sheet .gym-day-sheet'), `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
+    }
+  }
+
+  function _getHomeExercise(exerciseId) {
+    return exercises.find(ex => ex.id === Number(exerciseId)) || null;
+  }
+
   function _dayCounts(dateStr) {
     const dayExercises = getExercisesForDay(_dateFromKey(dateStr));
-    const doneCount = dayExercises.filter(ex => entries[`${dateStr}_${ex.id}`] === true).length;
+    const doneCount = dayExercises.filter(ex => _getHomeEntry(dateStr, ex.id)?.completed).length;
     return { doneCount, total: dayExercises.length };
   }
 
@@ -143,7 +321,13 @@ const WorkoutPage = (() => {
         const dk = typeof e.entry_date === 'string'
           ? e.entry_date.split('T')[0]
           : new Date(e.entry_date).toISOString().split('T')[0];
-        entries[`${dk}_${e.exercise_id}`] = e.completed;
+        if (e.completed) {
+          entries[_homeEntryKey(dk, e.exercise_id)] = {
+            completed: true,
+            performed_reps: _normalizeHomeReps(e.performed_reps),
+            performed_distance_km: _normalizeHomeDistanceKm(e.performed_distance_km),
+          };
+        }
       });
       renderWeek(dates);
     } catch (err) {
@@ -316,6 +500,7 @@ const WorkoutPage = (() => {
     if (_dateFromKey(dateStr) > today) return;
 
     activeSheetDate = dateStr;
+  activeHomeEditorKey = null;
     let sheet = document.getElementById('home-day-sheet');
     if (!sheet) {
       sheet = document.createElement('div');
@@ -335,6 +520,7 @@ const WorkoutPage = (() => {
 
   function closeDayActionsSheet() {
     activeSheetDate = null;
+    activeHomeEditorKey = null;
     const sheet = document.getElementById('home-day-sheet');
     if (sheet) sheet.classList.remove('open');
     document.body.style.overflow = '';
@@ -362,10 +548,15 @@ const WorkoutPage = (() => {
   function _renderHomeReadOnlyExercises(exercises) {
     return exercises.map(exercise => {
       let metaTag = '<span class="exercise-tag sheet-tag-reps">Valide</span>';
-      if (exercise.is_running && exercise.reps != null) {
-        metaTag = `<span class="exercise-tag running sheet-tag-reps">${exercise.reps}&nbsp;${escapeHtml(exercise.unit || 'min')}</span>`;
+      if (exercise.is_running) {
+        metaTag = exercise.performed_distance_km != null
+          ? `<span class="exercise-tag running sheet-tag-reps">${_formatHomeDistanceKm(exercise.performed_distance_km)}</span>`
+          : `<span class="exercise-tag running sheet-tag-reps">${exercise.reps}&nbsp;${escapeHtml(exercise.unit || 'min')}</span>`;
       } else if (exercise.sets != null && exercise.reps != null) {
-        metaTag = `<span class="exercise-tag sheet-tag-reps">${exercise.sets}&nbsp;×&nbsp;${exercise.reps}&nbsp;rép.</span>`;
+        const performedSummary = _normalizeHomeReps(exercise.performed_reps).length
+          ? `${_formatHomePerformance(exercise.performed_reps, exercise.sets, exercise.reps)} rep`
+          : `${exercise.sets}&nbsp;×&nbsp;${exercise.reps}&nbsp;rép.`;
+        metaTag = `<span class="exercise-tag sheet-tag-reps">${performedSummary}</span>`;
       }
 
       return `
@@ -442,20 +633,102 @@ const WorkoutPage = (() => {
     }
 
     const exercisesHtml = getExercisesForDay(dateObj).map(ex => {
-      const checked = entries[`${requestedDate}_${ex.id}`] === true;
-      const metaTag = ex.is_running
+      const entry = _getHomeEntry(requestedDate, ex.id);
+      const checked = !!entry?.completed;
+      const editorKey = _getHomeEditorKey(requestedDate, ex.id);
+      const isEditorOpen = checked && activeHomeEditorKey === editorKey;
+      const safeName = escapeHtml(ex.name);
+      const plannedBadge = ex.is_running
         ? `<span class="exercise-tag running sheet-tag-reps">${ex.reps}&nbsp;${escapeHtml(ex.unit || 'min')}</span>`
         : `<span class="exercise-tag sheet-tag-reps">${ex.sets}&nbsp;×&nbsp;${ex.reps}&nbsp;rép.</span>`;
+
+      let editableBadge = plannedBadge;
+      let editorHtml = '';
+
+      if (checked && ex.is_running) {
+        const distanceKm = _normalizeHomeDistanceKm(entry?.performed_distance_km) ?? _buildHomeDefaultDistanceKm(ex);
+        const presetDistance = ex.unit === 'km' ? (_normalizeHomeDistanceKm(ex.reps) ?? _buildHomeDefaultDistanceKm(ex)) : null;
+        editableBadge = `<button type="button" class="exercise-tag running sheet-tag-reps sheet-tag-reps-btn${isEditorOpen ? ' active' : ''}"
+            onclick="event.stopPropagation();WorkoutPage.toggleHomeEditor('${requestedDate}', ${ex.id})"
+            aria-pressed="${isEditorOpen}">${_formatHomeDistanceKm(distanceKm)}<span class="editable-badge-icon" aria-hidden="true">✎</span></button>`;
+        editorHtml = isEditorOpen ? `
+          <div class="sheet-reps-editor" onclick="event.stopPropagation()">
+            <div class="sheet-reps-toolbar">
+              <div class="sheet-stepper-compact accent">
+                <span class="sheet-stepper-mini-label">Distance</span>
+                <div class="sheet-stepper-control compact">
+                  <button type="button" class="sheet-stepper-btn compact"
+                    onclick="event.stopPropagation();WorkoutPage.adjustHomeRunningDistance('${requestedDate}', ${ex.id}, -0.5, this)"
+                    aria-label="Retirer 0,5 km">−</button>
+                  <span class="sheet-stepper-value compact wide">${_formatHomeDistanceKm(distanceKm, false)}</span>
+                  <button type="button" class="sheet-stepper-btn compact"
+                    onclick="event.stopPropagation();WorkoutPage.adjustHomeRunningDistance('${requestedDate}', ${ex.id}, 0.5, this)"
+                    aria-label="Ajouter 0,5 km">+</button>
+                </div>
+              </div>
+              ${presetDistance != null ? `<button type="button" class="sheet-reps-preset${distanceKm === presetDistance ? ' active' : ''}"
+                onclick="event.stopPropagation();WorkoutPage.setHomeRunningDistance('${requestedDate}', ${ex.id}, ${presetDistance}, this)">Objectif ${_formatHomeDistanceKm(presetDistance)}</button>` : ''}
+            </div>
+            <div class="sheet-reps-help">Distance parcourue sur cette séance cardio.</div>
+          </div>` : '';
+      } else if (checked) {
+        const performedReps = _normalizeHomeReps(entry?.performed_reps);
+        const performance = _getHomePerformanceState(performedReps, ex.sets, ex.reps);
+        const plannedPerformance = _formatHomePerformance([], ex.sets, ex.reps);
+        const perfSummary = _formatHomePerformance(performedReps, ex.sets, ex.reps);
+        editableBadge = `<button type="button" class="exercise-tag sheet-tag-reps sheet-tag-reps-btn${isEditorOpen ? ' active' : ''}"
+            onclick="event.stopPropagation();WorkoutPage.toggleHomeEditor('${requestedDate}', ${ex.id})"
+            aria-pressed="${isEditorOpen}">${perfSummary} rep<span class="editable-badge-icon" aria-hidden="true">✎</span></button>`;
+        editorHtml = isEditorOpen ? `
+          <div class="sheet-reps-editor" onclick="event.stopPropagation()">
+            <div class="sheet-reps-toolbar">
+              <div class="sheet-stepper-compact">
+                <span class="sheet-stepper-mini-label">Séries</span>
+                <div class="sheet-stepper-control compact">
+                  <button type="button" class="sheet-stepper-btn compact"
+                    onclick="event.stopPropagation();WorkoutPage.changeHomeExerciseSetCount('${requestedDate}', ${ex.id}, -1, this)"
+                    aria-label="Retirer une série">−</button>
+                  <span class="sheet-stepper-value compact">${performance.sets}</span>
+                  <button type="button" class="sheet-stepper-btn compact"
+                    onclick="event.stopPropagation();WorkoutPage.changeHomeExerciseSetCount('${requestedDate}', ${ex.id}, 1, this)"
+                    aria-label="Ajouter une série">+</button>
+                </div>
+              </div>
+              <button type="button" class="sheet-reps-preset${perfSummary === plannedPerformance ? ' active' : ''}"
+                onclick="event.stopPropagation();WorkoutPage.setHomeExercisePerformance('${requestedDate}', ${ex.id}, this)">Prévu ${plannedPerformance}</button>
+            </div>
+            <div class="sheet-reps-sets">
+              ${performance.repsList.map((setReps, setIndex) => `
+                <div class="sheet-set-pill${setIndex === performance.repsList.length - 1 ? ' accent' : ''}">
+                  <span class="sheet-set-label">S${setIndex + 1}</span>
+                  <div class="sheet-stepper-control compact">
+                    <button type="button" class="sheet-stepper-btn compact"
+                      onclick="event.stopPropagation();WorkoutPage.adjustHomeExerciseSetReps('${requestedDate}', ${ex.id}, ${setIndex}, -1, this)"
+                      aria-label="Retirer une répétition sur la série ${setIndex + 1}">−</button>
+                    <span class="sheet-stepper-value compact wide">${setReps}</span>
+                    <button type="button" class="sheet-stepper-btn compact"
+                      onclick="event.stopPropagation();WorkoutPage.adjustHomeExerciseSetReps('${requestedDate}', ${ex.id}, ${setIndex}, 1, this)"
+                      aria-label="Ajouter une répétition sur la série ${setIndex + 1}">+</button>
+                  </div>
+                </div>`).join('')}
+            </div>
+            ${performance.isUniform ? '' : '<div class="sheet-reps-help">Tu peux varier les répétitions d’une série à l’autre.</div>'}
+          </div>` : '';
+      }
+
       return `
-        <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}"
-             onclick="WorkoutPage.toggleExercise('${requestedDate}', ${ex.id}, this)">
-          <div class="exercise-info">
-            <div class="exercise-name">${escapeHtml(ex.emoji || '💪')} ${escapeHtml(ex.name)}</div>
+        <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}${isEditorOpen ? ' has-reps-editor' : ''}">
+          <div class="sheet-ex-main"
+               onclick="WorkoutPage.toggleExercise('${requestedDate}', ${ex.id}, this.closest('.sheet-exercise-row'), event)">
+            <div class="exercise-info">
+              <div class="exercise-name">${escapeHtml(ex.emoji || '💪')} ${safeName}</div>
+            </div>
+            <div class="sheet-ex-right">
+              ${checked ? editableBadge : plannedBadge}
+              <span class="sheet-ex-check${checked ? ' on' : ''}">✓</span>
+            </div>
           </div>
-          <div class="sheet-ex-right">
-            ${metaTag}
-            <span class="sheet-ex-check${checked ? ' on' : ''}">✓</span>
-          </div>
+          ${editorHtml}
         </div>`;
     }).join('') || '<p class="exercise-inline-help" style="padding:8px 12px">Aucun exercice disponible</p>';
 
@@ -513,46 +786,142 @@ const WorkoutPage = (() => {
     document.getElementById('stat-total').textContent = stats.totalCompletedDays;
   }
 
-  async function toggleExercise(dateStr, exerciseId, el) {
+  function toggleHomeEditor(dateStr, exerciseId) {
+    const nextKey = _getHomeEditorKey(dateStr, exerciseId);
+    activeHomeEditorKey = activeHomeEditorKey === nextKey ? null : nextKey;
+    if (activeSheetDate === dateStr) _renderDayActionsSheet();
+  }
+
+  async function _persistHomeExercisePerformance(dateStr, exercise, nextPerformedReps, nextDistanceKm, anchorEl, previousEntry) {
+    const mutation = _beginHomeEntryMutation(dateStr, exercise.id);
+    _setHomeEntry(dateStr, exercise.id, {
+      completed: true,
+      performed_reps: exercise.is_running ? [] : nextPerformedReps,
+      performed_distance_km: exercise.is_running ? nextDistanceKm : null,
+    });
+    _refreshDayUI(dateStr);
+
+    return _queueHomeEntryMutation(dateStr, exercise.id, async () => {
+      try {
+        const result = await API.saveChecklistEntry(
+          exercise.id,
+          dateStr,
+          exercise.is_running ? [] : nextPerformedReps,
+          exercise.is_running ? nextDistanceKm : null
+        );
+
+        if (_isLatestHomeEntryMutation(mutation)) {
+          _syncHomeEntryResult(dateStr, exercise.id, result);
+          _syncHomeXp(result, anchorEl?.closest('.sheet-exercise-row') || anchorEl || document.querySelector('#home-day-sheet .gym-day-sheet'));
+          _refreshDayUI(dateStr);
+        }
+      } catch (err) {
+        if (_isLatestHomeEntryMutation(mutation)) {
+          _setHomeEntry(dateStr, exercise.id, previousEntry);
+          _refreshDayUI(dateStr);
+          App.showToast('Erreur : ' + err.message);
+        }
+        throw err;
+      }
+    }).catch(() => {});
+  }
+
+  async function changeHomeExerciseSetCount(dateStr, exerciseId, delta, anchorEl) {
+    const exercise = _getHomeExercise(exerciseId);
+    if (!exercise || exercise.is_running) return;
+    const previousEntry = _getHomeEntry(dateStr, exerciseId) || { completed: false, performed_reps: [] };
+    const currentPerformance = _getHomePerformanceState(previousEntry.performed_reps, exercise.sets, exercise.reps);
+    const nextPerformedReps = _changeHomePerformedSetCount(currentPerformance.repsList, delta, exercise.reps);
+    return _persistHomeExercisePerformance(dateStr, exercise, nextPerformedReps, null, anchorEl, previousEntry);
+  }
+
+  async function adjustHomeExerciseSetReps(dateStr, exerciseId, setIndex, delta, anchorEl) {
+    const exercise = _getHomeExercise(exerciseId);
+    if (!exercise || exercise.is_running) return;
+    const previousEntry = _getHomeEntry(dateStr, exerciseId) || { completed: false, performed_reps: [] };
+    const currentPerformance = _getHomePerformanceState(previousEntry.performed_reps, exercise.sets, exercise.reps);
+    const nextPerformedReps = _changeHomePerformedSetReps(currentPerformance.repsList, setIndex, delta, exercise.reps);
+    return _persistHomeExercisePerformance(dateStr, exercise, nextPerformedReps, null, anchorEl, previousEntry);
+  }
+
+  async function setHomeExercisePerformance(dateStr, exerciseId, anchorEl) {
+    const exercise = _getHomeExercise(exerciseId);
+    if (!exercise || exercise.is_running) return;
+    const previousEntry = _getHomeEntry(dateStr, exerciseId) || { completed: false, performed_reps: [] };
+    const nextPerformedReps = _buildHomeDefaultReps(exercise);
+    return _persistHomeExercisePerformance(dateStr, exercise, nextPerformedReps, null, anchorEl, previousEntry);
+  }
+
+  async function adjustHomeRunningDistance(dateStr, exerciseId, delta, anchorEl) {
+    const exercise = _getHomeExercise(exerciseId);
+    if (!exercise || !exercise.is_running) return;
+    const previousEntry = _getHomeEntry(dateStr, exerciseId) || { completed: false, performed_distance_km: _buildHomeDefaultDistanceKm(exercise) };
+    const nextDistanceKm = _changeHomeDistanceKm(previousEntry.performed_distance_km, delta);
+    return _persistHomeExercisePerformance(dateStr, exercise, [], nextDistanceKm, anchorEl, previousEntry);
+  }
+
+  async function setHomeRunningDistance(dateStr, exerciseId, distanceKm, anchorEl) {
+    const exercise = _getHomeExercise(exerciseId);
+    if (!exercise || !exercise.is_running) return;
+    const previousEntry = _getHomeEntry(dateStr, exerciseId) || { completed: false, performed_distance_km: _buildHomeDefaultDistanceKm(exercise) };
+    const nextDistanceKm = _normalizeHomeDistanceKm(distanceKm) ?? _buildHomeDefaultDistanceKm(exercise);
+    return _persistHomeExercisePerformance(dateStr, exercise, [], nextDistanceKm, anchorEl, previousEntry);
+  }
+
+  async function toggleExercise(dateStr, exerciseId, el, evt) {
+    if (evt?.target?.closest && evt.target.closest('.sheet-reps-editor, .sheet-tag-reps-btn')) return;
     const today = new Date(); today.setHours(0, 0, 0, 0);
     if (dateStr !== dateKey(today)) return;
 
-    const key = `${dateStr}_${exerciseId}`;
-    const wasChecked = entries[key] === true;
+    const exercise = _getHomeExercise(exerciseId);
+    if (!exercise) return;
 
-    entries[key] = !wasChecked;
+    const previousEntry = _getHomeEntry(dateStr, exerciseId);
+    const wasChecked = !!previousEntry?.completed;
+    const nextActive = !wasChecked;
+    const mutation = _beginHomeEntryMutation(dateStr, exerciseId);
+
+    if (wasChecked && activeHomeEditorKey === _getHomeEditorKey(dateStr, exerciseId)) {
+      activeHomeEditorKey = null;
+    }
+
+    _setHomeEntry(dateStr, exerciseId, nextActive ? {
+      completed: true,
+      performed_reps: exercise.is_running ? [] : _buildHomeDefaultReps(exercise),
+      performed_distance_km: exercise.is_running ? _buildHomeDefaultDistanceKm(exercise) : null,
+    } : null);
     _refreshDayUI(dateStr);
 
-    try {
-      const result = await API.toggleChecklist(exerciseId, dateStr);
+    return _queueHomeEntryMutation(dateStr, exerciseId, async () => {
+      try {
+        const prevXP = currentUser.xp || 0;
+        const result = await API.toggleChecklist(exerciseId, dateStr, nextActive);
+        if (!_isLatestHomeEntryMutation(mutation)) return;
 
-      entries[key] = result.completed;
+        _syncHomeEntryResult(dateStr, exerciseId, result);
+        _syncHomeXp(result, el || document.querySelector('#home-day-sheet .gym-day-sheet'));
 
-      const prevXP = currentUser.xp;
-      currentUser.xp = result.xp;
-      (localStorage.getItem('token') ? localStorage : sessionStorage).setItem('user', JSON.stringify(currentUser));
+        const prevRank = Gamification.getRank(prevXP);
+        const newRank = Gamification.getRank(result.xp || prevXP);
+        if (newRank.index > prevRank.index) {
+          setTimeout(() => App.showLevelUp(newRank), 600);
+        }
 
-      const prevRank = Gamification.getRank(prevXP);
-      const newRank = Gamification.getRank(result.xp);
-
-      if (result.xpDelta !== 0) {
-        Gamification.spawnXPPopup(el || document.querySelector('#home-day-sheet .gym-day-sheet'), `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
+        const statsData = await API.getStats();
+        if (_isLatestHomeEntryMutation(mutation)) {
+          stats = statsData;
+          updateHUD();
+          _refreshDayUI(dateStr);
+        }
+      } catch (err) {
+        if (_isLatestHomeEntryMutation(mutation)) {
+          _setHomeEntry(dateStr, exerciseId, previousEntry);
+          _refreshDayUI(dateStr);
+          App.showToast('Erreur : ' + err.message);
+        }
+        throw err;
       }
-
-      if (newRank.index > prevRank.index) {
-        setTimeout(() => App.showLevelUp(newRank), 600);
-      }
-
-      const statsData = await API.getStats();
-      stats = statsData;
-      updateHUD();
-      _refreshDayUI(dateStr);
-
-    } catch (err) {
-      entries[key] = wasChecked;
-      _refreshDayUI(dateStr);
-      App.showToast('Erreur : ' + err.message);
-    }
+    }).catch(() => {});
   }
 
   async function changeWeek(delta) {
@@ -587,5 +956,5 @@ const WorkoutPage = (() => {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  return { render, init, destroy, toggleDay, toggleExercise, changeWeek, renderWeekStrip, toggleRestDay, openDayActionsSheet, closeDayActionsSheet };
+  return { render, init, destroy, toggleDay, toggleExercise, toggleHomeEditor, changeHomeExerciseSetCount, adjustHomeExerciseSetReps, setHomeExercisePerformance, adjustHomeRunningDistance, setHomeRunningDistance, changeWeek, renderWeekStrip, toggleRestDay, openDayActionsSheet, closeDayActionsSheet };
 })();

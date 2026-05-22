@@ -67,15 +67,52 @@ function _devDateDaysAgo(daysAgo) {
 }
 
 let _devChecklistEntries = [
-  { id: 1, exercise_id: 1, entry_date: _devTodayStr(),      completed: true,  completed_at: new Date().toISOString() },
-  { id: 2, exercise_id: 2, entry_date: _devTodayStr(),      completed: false, completed_at: null },
-  { id: 3, exercise_id: 3, entry_date: _devTodayStr(),      completed: true,  completed_at: new Date().toISOString() },
-  { id: 4, exercise_id: 4, entry_date: _devTodayStr(),      completed: false, completed_at: null },
-  { id: 5, exercise_id: 1, entry_date: _devDateDaysAgo(1),  completed: true,  completed_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: 6, exercise_id: 2, entry_date: _devDateDaysAgo(1),  completed: true,  completed_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: 7, exercise_id: 3, entry_date: _devDateDaysAgo(1),  completed: true,  completed_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: 8, exercise_id: 4, entry_date: _devDateDaysAgo(1),  completed: true,  completed_at: new Date(Date.now() - 86400000).toISOString() },
+  { id: 1, exercise_id: 1, entry_date: _devTodayStr(),      completed: true,  completed_at: new Date().toISOString(), performed_reps: [20, 18, 15], performed_distance_km: null },
+  { id: 2, exercise_id: 2, entry_date: _devTodayStr(),      completed: false, completed_at: null, performed_reps: [], performed_distance_km: null },
+  { id: 3, exercise_id: 3, entry_date: _devTodayStr(),      completed: true,  completed_at: new Date().toISOString(), performed_reps: [45, 40, 35], performed_distance_km: null },
+  { id: 4, exercise_id: 4, entry_date: _devTodayStr(),      completed: false, completed_at: null, performed_reps: [], performed_distance_km: null },
+  { id: 5, exercise_id: 1, entry_date: _devDateDaysAgo(1),  completed: true,  completed_at: new Date(Date.now() - 86400000).toISOString(), performed_reps: [20, 20, 18], performed_distance_km: null },
+  { id: 6, exercise_id: 2, entry_date: _devDateDaysAgo(1),  completed: true,  completed_at: new Date(Date.now() - 86400000).toISOString(), performed_reps: [15, 15, 12, 12], performed_distance_km: null },
+  { id: 7, exercise_id: 3, entry_date: _devDateDaysAgo(1),  completed: true,  completed_at: new Date(Date.now() - 86400000).toISOString(), performed_reps: [45, 45, 45], performed_distance_km: null },
+  { id: 8, exercise_id: 4, entry_date: _devDateDaysAgo(1),  completed: true,  completed_at: new Date(Date.now() - 86400000).toISOString(), performed_reps: [], performed_distance_km: 5.4 },
 ];
+
+function _normalizeDevPerformedReps(value) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : (typeof value === 'string' ? value.split(/[^0-9]+/) : []);
+
+  return rawValues
+    .map(item => parseInt(item, 10))
+    .filter(item => Number.isInteger(item) && item > 0 && item <= 9999)
+    .slice(0, 24);
+}
+
+function _normalizeDevDistanceKm(value) {
+  if (value == null || value === '') return null;
+  const parsed = Number.parseFloat(String(value).replace(',', '.'));
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 999.9) return null;
+  return Math.round(parsed * 10) / 10;
+}
+
+function _buildDevDefaultHomeReps(exercise) {
+  const sets = Math.min(24, Math.max(1, parseInt(exercise?.sets, 10) || 1));
+  const reps = Math.min(9999, Math.max(1, parseInt(exercise?.reps, 10) || 10));
+  return Array.from({ length: sets }, () => reps);
+}
+
+function _buildDevDefaultHomeDistance(exercise) {
+  if (exercise?.unit === 'km') return _normalizeDevDistanceKm(exercise?.reps) || 1;
+  return 1;
+}
+
+function _cloneDevChecklistEntry(entry) {
+  return {
+    ...entry,
+    performed_reps: _normalizeDevPerformedReps(entry.performed_reps),
+    performed_distance_km: _normalizeDevDistanceKm(entry.performed_distance_km),
+  };
+}
 
 function _devActiveHomeExercises() {
   return DEV_FAKE_EXERCISES.filter(exercise => exercise.is_active !== false && (exercise.type || 'home') === 'home');
@@ -259,7 +296,7 @@ function _applyDevMock() {
   API.getChecklist  = async (start, end) => ({
     entries: _devChecklistEntries
       .filter(entry => (!start || entry.entry_date >= start) && (!end || entry.entry_date <= end))
-      .map(entry => ({ ...entry })),
+      .map(entry => _cloneDevChecklistEntry(entry)),
   });
   API.getHomeDayDetail = async (date) => {
     const exercises = _devChecklistEntries
@@ -277,6 +314,8 @@ function _applyDevMock() {
           sets: exercise?.sets ?? null,
           reps: exercise?.reps ?? null,
           unit: exercise?.unit || null,
+          performed_reps: _normalizeDevPerformedReps(entry.performed_reps),
+          performed_distance_km: _normalizeDevDistanceKm(entry.performed_distance_km),
           is_running: !!exercise?.is_running,
           is_active: exercise?.is_active !== false,
         };
@@ -284,7 +323,7 @@ function _applyDevMock() {
 
     return { date, exercises };
   };
-  API.toggleChecklist = async (exercise_id, entry_date) => {
+  API.toggleChecklist = async (exercise_id, entry_date, active) => {
     const today = _devTodayStr();
     if (entry_date > today) throw new Error('Impossible de cocher une date future');
 
@@ -294,19 +333,31 @@ function _applyDevMock() {
     const wasActive = _devIsHomeActive(entry_date);
     const idx = _devChecklistEntries.findIndex(entry => entry.entry_date === entry_date && entry.exercise_id === Number(exercise_id));
 
-    let completed;
-    if (idx >= 0) {
-      completed = !_devChecklistEntries[idx].completed;
-      _devChecklistEntries[idx].completed = completed;
-      _devChecklistEntries[idx].completed_at = completed ? new Date().toISOString() : null;
+    const existing = idx >= 0 ? _devChecklistEntries[idx] : null;
+    const nextActive = typeof active === 'boolean' ? active : !existing?.completed;
+    if (!nextActive) {
+      if (existing) {
+        existing.completed = false;
+        existing.completed_at = null;
+        existing.performed_reps = [];
+        existing.performed_distance_km = null;
+      }
+    } else if (existing?.completed) {
+      // keep current performance state
+    } else if (existing) {
+      existing.completed = true;
+      existing.completed_at = new Date().toISOString();
+      existing.performed_reps = exercise.is_running ? [] : _buildDevDefaultHomeReps(exercise);
+      existing.performed_distance_km = exercise.is_running ? _buildDevDefaultHomeDistance(exercise) : null;
     } else {
-      completed = true;
       _devChecklistEntries.push({
         id: Date.now(),
         exercise_id: Number(exercise_id),
         entry_date,
         completed: true,
         completed_at: new Date().toISOString(),
+        performed_reps: exercise.is_running ? [] : _buildDevDefaultHomeReps(exercise),
+        performed_distance_km: exercise.is_running ? _buildDevDefaultHomeDistance(exercise) : null,
       });
     }
 
@@ -315,8 +366,60 @@ function _applyDevMock() {
 
     DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
 
+    const current = _devChecklistEntries.find(entry => entry.entry_date === entry_date && entry.exercise_id === Number(exercise_id));
+
     return {
-      completed,
+      completed: !!current?.completed,
+      performed_reps: _normalizeDevPerformedReps(current?.performed_reps),
+      performed_distance_km: _normalizeDevDistanceKm(current?.performed_distance_km),
+      xp: DEV_FAKE_USER.xp,
+      xpDelta,
+      dayActive: isActive,
+      dayComplete: _devIsHomeComplete(entry_date),
+      bonusXP: 0,
+    };
+  };
+  API.saveChecklistEntry = async (exercise_id, entry_date, performed_reps, performed_distance_km) => {
+    const today = _devTodayStr();
+    if (entry_date > today) throw new Error('Impossible de cocher une date future');
+
+    const exercise = _devActiveHomeExercises().find(item => item.id === Number(exercise_id));
+    if (!exercise) throw new Error('Exercice introuvable');
+
+    const wasActive = _devIsHomeActive(entry_date);
+    const idx = _devChecklistEntries.findIndex(entry => entry.entry_date === entry_date && entry.exercise_id === Number(exercise_id));
+    const nextReps = exercise.is_running
+      ? []
+      : (_normalizeDevPerformedReps(performed_reps).length ? _normalizeDevPerformedReps(performed_reps) : _buildDevDefaultHomeReps(exercise));
+    const nextDistance = exercise.is_running
+      ? (_normalizeDevDistanceKm(performed_distance_km) || _buildDevDefaultHomeDistance(exercise))
+      : null;
+
+    if (idx >= 0) {
+      _devChecklistEntries[idx].completed = true;
+      _devChecklistEntries[idx].completed_at = _devChecklistEntries[idx].completed_at || new Date().toISOString();
+      _devChecklistEntries[idx].performed_reps = nextReps;
+      _devChecklistEntries[idx].performed_distance_km = nextDistance;
+    } else {
+      _devChecklistEntries.push({
+        id: Date.now(),
+        exercise_id: Number(exercise_id),
+        entry_date,
+        completed: true,
+        completed_at: new Date().toISOString(),
+        performed_reps: nextReps,
+        performed_distance_km: nextDistance,
+      });
+    }
+
+    const isActive = _devIsHomeActive(entry_date);
+    const xpDelta = (isActive && !wasActive) ? 30 : (!isActive && wasActive) ? -30 : 0;
+    DEV_FAKE_USER.xp = Math.max(0, DEV_FAKE_USER.xp + xpDelta);
+
+    return {
+      completed: true,
+      performed_reps: nextReps,
+      performed_distance_km: nextDistance,
       xp: DEV_FAKE_USER.xp,
       xpDelta,
       dayActive: isActive,

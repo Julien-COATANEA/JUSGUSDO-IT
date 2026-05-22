@@ -5285,6 +5285,9 @@ html, body {
 }
 .sheet-tag-reps-btn {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font: inherit;
   cursor: pointer;
   transition: opacity 0.16s, border-color 0.16s, background 0.16s, color 0.16s, transform 0.1s;
@@ -5866,6 +5869,9 @@ html, body {
 .zone-series-badge {
   align-self: flex-start;
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border: 1px solid color-mix(in srgb, var(--zc) 30%, rgba(255,255,255,0.08));
   background: color-mix(in srgb, var(--zc) 12%, rgba(255,255,255,0.03));
   color: var(--text);
@@ -5894,9 +5900,25 @@ html, body {
 
 .zone-series-badge.mini {
   width: 100%;
+  justify-content: center;
   text-align: center;
   border-radius: 10px;
   padding: 6px 8px;
+}
+
+.editable-badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.72;
+  transform: translateY(-0.5px);
+}
+
+.sheet-tag-reps-btn.active .editable-badge-icon,
+.zone-series-badge.active .editable-badge-icon {
+  opacity: 0.9;
 }
 
 .zone-series-editor {

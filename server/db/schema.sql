@@ -33,8 +33,13 @@ CREATE TABLE IF NOT EXISTS checklist_entries (
   entry_date DATE NOT NULL,
   completed BOOLEAN DEFAULT FALSE,
   completed_at TIMESTAMPTZ,
+  performed_reps INTEGER[] DEFAULT '{}',
+  performed_distance_km NUMERIC(6,2),
   UNIQUE(user_id, exercise_id, entry_date)
 );
+ALTER TABLE checklist_entries ADD COLUMN IF NOT EXISTS performed_reps INTEGER[] DEFAULT '{}';
+ALTER TABLE checklist_entries ADD COLUMN IF NOT EXISTS performed_distance_km NUMERIC(6,2);
+ALTER TABLE checklist_entries ALTER COLUMN performed_reps SET DEFAULT '{}';
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_checklist_user_date ON checklist_entries(user_id, entry_date);

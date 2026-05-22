@@ -4,6 +4,7 @@ const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 const DAILY_XP_TARGET = 30;
+const DEFAULT_HOME_RUNNING_DISTANCE_KM = 1;
 const HOME_DAY_ACTIVE_SQL = `
   SELECT EXISTS(
     SELECT 1
@@ -62,6 +63,122 @@ async function syncHomeDayXp(userId, entryDate, wasActive) {
   };
 }
 
+function normalizePositiveInt(value, fallback) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isInteger(parsed)) return fallback;
+  return Math.min(9999, Math.max(1, parsed));
+}
+
+function normalizePerformedReps(value) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : (typeof value === 'string' ? value.split(/[^0-9]+/) : []);
+
+  return rawValues
+    .map(item => parseInt(item, 10))
+    .filter(item => Number.isInteger(item) && item > 0 && item <= 9999)
+    .slice(0, 24);
+}
+
+function normalizePerformedDistanceKm(value) {
+  if (value == null || value === '') return null;
+  const parsed = Number.parseFloat(String(value).replace(',', '.'));
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 999.9) return null;
+  return Math.round(parsed * 10) / 10;
+}
+
+function buildDefaultHomePerformedReps(exerciseRow) {
+  const sets = normalizePositiveInt(exerciseRow?.sets, 1);
+  const reps = normalizePositiveInt(exerciseRow?.reps, 10);
+  return Array.from({ length: Math.min(24, sets) }, () => reps);
+}
+
+function buildDefaultHomeDistanceKm(exerciseRow) {
+  if (exerciseRow?.unit === 'km') {
+    return normalizePerformedDistanceKm(exerciseRow?.reps) ?? DEFAULT_HOME_RUNNING_DISTANCE_KM;
+  }
+  return DEFAULT_HOME_RUNNING_DISTANCE_KM;
+}
+
+function mapChecklistEntryRow(row) {
+  return {
+    ...row,
+    performed_reps: normalizePerformedReps(row.performed_reps),
+    performed_distance_km: normalizePerformedDistanceKm(row.performed_distance_km),
+  };
+}
+
+function resolveHomePerformance(exerciseRow, performedReps, performedDistanceKm) {
+  if (exerciseRow?.is_running) {
+    return {
+      performedReps: [],
+      performedDistanceKm: normalizePerformedDistanceKm(performedDistanceKm) ?? buildDefaultHomeDistanceKm(exerciseRow),
+    };
+  }
+
+  const nextPerformedReps = normalizePerformedReps(performedReps);
+  return {
+    performedReps: nextPerformedReps.length ? nextPerformedReps : buildDefaultHomePerformedReps(exerciseRow),
+    performedDistanceKm: null,
+  };
+}
+
+async function saveChecklistEntry({ userId, exerciseRow, entryDate, completed, performedReps, performedDistanceKm }) {
+  const nextCompleted = !!completed;
+  const wasActive = await getHomeDayIsActive(userId, entryDate);
+  const performance = nextCompleted
+    ? resolveHomePerformance(exerciseRow, performedReps, performedDistanceKm)
+    : { performedReps: [], performedDistanceKm: null };
+
+  const existing = await db.query(
+    `SELECT id
+       FROM checklist_entries
+      WHERE user_id = $1 AND exercise_id = $2 AND entry_date = $3`,
+    [userId, exerciseRow.id, entryDate]
+  );
+
+  if (existing.rows[0]) {
+    await db.query(
+      `UPDATE checklist_entries
+          SET completed = $1,
+              completed_at = CASE WHEN $1 THEN COALESCE(completed_at, NOW()) ELSE NULL END,
+              performed_reps = $2,
+              performed_distance_km = $3
+        WHERE id = $4`,
+      [nextCompleted, performance.performedReps, performance.performedDistanceKm, existing.rows[0].id]
+    );
+  } else if (nextCompleted) {
+    await db.query(
+      `INSERT INTO checklist_entries (
+         user_id,
+         exercise_id,
+         entry_date,
+         completed,
+         completed_at,
+         performed_reps,
+         performed_distance_km
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, exerciseRow.id, entryDate, true, new Date(), performance.performedReps, performance.performedDistanceKm]
+    );
+  }
+
+  const [progress, xpResult] = await Promise.all([
+    getDayProgress(userId, entryDate),
+    syncHomeDayXp(userId, entryDate, wasActive),
+  ]);
+
+  return {
+    completed: nextCompleted,
+    performed_reps: performance.performedReps,
+    performed_distance_km: performance.performedDistanceKm,
+    xp: xpResult.xp,
+    xpDelta: xpResult.xpDelta,
+    dayActive: xpResult.isActive,
+    dayComplete: progress.totalEx > 0 && progress.doneCnt === progress.totalEx,
+    bonusXP: 0,
+  };
+}
+
 // GET /api/exercises — list all active HOME exercises.
 // Maison activity is no longer filtered by per-user assignment.
 router.get('/', requireAuth, async (req, res) => {
@@ -103,14 +220,15 @@ router.get('/checklist', requireAuth, async (req, res) => {
 
   try {
     const result = await db.query(
-      `SELECT ce.id, ce.exercise_id, ce.entry_date, ce.completed, ce.completed_at
+      `SELECT ce.id, ce.exercise_id, ce.entry_date, ce.completed, ce.completed_at,
+              ce.performed_reps, ce.performed_distance_km
        FROM checklist_entries ce
        WHERE ce.user_id = $1
          AND ce.entry_date BETWEEN $2 AND $3
        ORDER BY ce.entry_date, ce.exercise_id`,
       [req.user.id, start, end]
     );
-    res.json({ entries: result.rows });
+    res.json({ entries: result.rows.map(mapChecklistEntryRow) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -133,6 +251,8 @@ router.get('/checklist/day/:date', requireAuth, async (req, res) => {
               ce.entry_date,
               ce.completed,
               ce.completed_at,
+              ce.performed_reps,
+              ce.performed_distance_km,
               COALESCE(e.name, 'Exercice supprimé') AS name,
               COALESCE(e.emoji, '💪') AS emoji,
               e.sets,
@@ -151,7 +271,7 @@ router.get('/checklist/day/:date', requireAuth, async (req, res) => {
 
     res.json({
       date: entryDate,
-      exercises: result.rows,
+      exercises: result.rows.map(mapChecklistEntryRow),
     });
   } catch (err) {
     console.error(err);
@@ -178,52 +298,110 @@ router.post('/checklist/toggle', requireAuth, async (req, res) => {
   }
 
   try {
-    const wasActive = await getHomeDayIsActive(req.user.id, entry_date);
-
     // Verify exercise exists and is active
     const exCheck = await db.query(
-      `SELECT id FROM exercises
+      `SELECT id, sets, reps, unit, COALESCE(is_running, FALSE) AS is_running FROM exercises
        WHERE id = $1 AND is_active = TRUE AND (type IS NULL OR type = 'home')`,
       [exercise_id]
     );
-    if (!exCheck.rows[0]) {
+    const exerciseRow = exCheck.rows[0];
+    if (!exerciseRow) {
       return res.status(404).json({ error: 'Exercice introuvable' });
     }
 
-    // Upsert entry
     const existing = await db.query(
-      'SELECT id, completed FROM checklist_entries WHERE user_id = $1 AND exercise_id = $2 AND entry_date = $3',
+      `SELECT id, completed, performed_reps, performed_distance_km
+         FROM checklist_entries
+        WHERE user_id = $1 AND exercise_id = $2 AND entry_date = $3`,
       [req.user.id, exercise_id, entry_date]
     );
+    const wantsActive = typeof req.body.active === 'boolean' ? req.body.active : !existing.rows[0]?.completed;
 
-    let newCompleted;
-    if (existing.rows[0]) {
-      newCompleted = !existing.rows[0].completed;
-      await db.query(
-        'UPDATE checklist_entries SET completed = $1, completed_at = $2 WHERE id = $3',
-        [newCompleted, newCompleted ? new Date() : null, existing.rows[0].id]
-      );
-    } else {
-      newCompleted = true;
-      await db.query(
-        'INSERT INTO checklist_entries (user_id, exercise_id, entry_date, completed, completed_at) VALUES ($1, $2, $3, TRUE, NOW())',
-        [req.user.id, exercise_id, entry_date]
-      );
+    if (!wantsActive) {
+      const result = await saveChecklistEntry({
+        userId: req.user.id,
+        exerciseRow,
+        entryDate: entry_date,
+        completed: false,
+        performedReps: [],
+        performedDistanceKm: null,
+      });
+      return res.json(result);
     }
 
-    const [progress, xpResult] = await Promise.all([
-      getDayProgress(req.user.id, entry_date),
-      syncHomeDayXp(req.user.id, entry_date, wasActive),
-    ]);
+    if (existing.rows[0]?.completed) {
+      const wasActive = await getHomeDayIsActive(req.user.id, entry_date);
+      const [progress, xpResult] = await Promise.all([
+        getDayProgress(req.user.id, entry_date),
+        syncHomeDayXp(req.user.id, entry_date, wasActive),
+      ]);
 
-    res.json({
-      completed: newCompleted,
-      xp: xpResult.xp,
-      xpDelta: xpResult.xpDelta,
-      dayActive: xpResult.isActive,
-      dayComplete: progress.totalEx > 0 && progress.doneCnt === progress.totalEx,
-      bonusXP: 0,
+      return res.json({
+        completed: true,
+        performed_reps: normalizePerformedReps(existing.rows[0].performed_reps),
+        performed_distance_km: normalizePerformedDistanceKm(existing.rows[0].performed_distance_km),
+        xp: xpResult.xp,
+        xpDelta: xpResult.xpDelta,
+        dayActive: xpResult.isActive,
+        dayComplete: progress.totalEx > 0 && progress.doneCnt === progress.totalEx,
+        bonusXP: 0,
+      });
+    }
+
+    const result = await saveChecklistEntry({
+      userId: req.user.id,
+      exerciseRow,
+      entryDate: entry_date,
+      completed: true,
+      performedReps: buildDefaultHomePerformedReps(exerciseRow),
+      performedDistanceKm: buildDefaultHomeDistanceKm(exerciseRow),
     });
+
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/exercises/checklist/entry
+// body: { exercise_id, entry_date, performed_reps, performed_distance_km }
+router.post('/checklist/entry', requireAuth, async (req, res) => {
+  const { exercise_id, entry_date } = req.body;
+
+  if (!exercise_id || !entry_date) {
+    return res.status(400).json({ error: 'exercise_id et entry_date requis' });
+  }
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(entry_date)) {
+    return res.status(400).json({ error: 'Format de date invalide' });
+  }
+  if (entry_date > new Date().toISOString().split('T')[0]) {
+    return res.status(400).json({ error: 'Impossible de cocher une date future' });
+  }
+
+  try {
+    const exCheck = await db.query(
+      `SELECT id, sets, reps, unit, COALESCE(is_running, FALSE) AS is_running
+         FROM exercises
+        WHERE id = $1 AND is_active = TRUE AND (type IS NULL OR type = 'home')`,
+      [exercise_id]
+    );
+    const exerciseRow = exCheck.rows[0];
+    if (!exerciseRow) {
+      return res.status(404).json({ error: 'Exercice introuvable' });
+    }
+
+    const result = await saveChecklistEntry({
+      userId: req.user.id,
+      exerciseRow,
+      entryDate: entry_date,
+      completed: true,
+      performedReps: req.body.performed_reps,
+      performedDistanceKm: req.body.performed_distance_km,
+    });
+
+    res.json(result);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });

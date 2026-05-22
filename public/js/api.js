@@ -47,8 +47,10 @@ const API = (() => {
     getExercises: () => request('GET', '/exercises'),
     getChecklist: (start, end) => request('GET', `/exercises/checklist?start=${start}&end=${end}`),
     getHomeDayDetail: (date) => request('GET', `/exercises/checklist/day/${date}`),
-    toggleChecklist: (exercise_id, entry_date) =>
-      request('POST', '/exercises/checklist/toggle', { exercise_id, entry_date }),
+    toggleChecklist: (exercise_id, entry_date, active) =>
+      request('POST', '/exercises/checklist/toggle', { exercise_id, entry_date, active }),
+    saveChecklistEntry: (exercise_id, entry_date, performed_reps, performed_distance_km) =>
+      request('POST', '/exercises/checklist/entry', { exercise_id, entry_date, performed_reps, performed_distance_km }),
     getStats: () => request('GET', '/exercises/stats'),
 
     // Admin

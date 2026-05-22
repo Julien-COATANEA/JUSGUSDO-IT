@@ -865,7 +865,7 @@ const MuscuPage = (() => {
             const repsBadge = checked
               ? `<button type="button" class="exercise-tag sheet-tag-reps sheet-tag-reps-btn${isEditorOpen ? ' active' : ''}"
                    onclick="event.stopPropagation();MuscuPage.toggleGymRepsEditor('${safeEx}','${safeSes}','${dateStr}')"
-                   aria-pressed="${isEditorOpen}">${perfSummary} rep</button>`
+                  aria-pressed="${isEditorOpen}">${perfSummary} rep<span class="editable-badge-icon" aria-hidden="true">✎</span></button>`
               : setsRepsTag;
             const repsEditor = isEditorOpen ? `
               <div class="sheet-reps-editor" onclick="event.stopPropagation()">
@@ -955,7 +955,7 @@ const MuscuPage = (() => {
                 <span class="zone-card-state">${on ? '✓' : ''}</span>
               </button>
               ${on ? `<button type="button" class="zone-series-badge${isEditorOpen ? ' active' : ''}" style="--zc:${color}"
-                onclick="event.stopPropagation();MuscuPage.toggleGymZoneSeriesEditor('${dateStr}', ${p.id})">${setCount} série${setCount > 1 ? 's' : ''}</button>` : ''}
+                onclick="event.stopPropagation();MuscuPage.toggleGymZoneSeriesEditor('${dateStr}', ${p.id})">${setCount} série${setCount > 1 ? 's' : ''}<span class="editable-badge-icon" aria-hidden="true">✎</span></button>` : ''}
               ${isEditorOpen ? _renderGymZoneSeriesEditor(p, dateStr, setCount, color) : ''}
             </div>`;
           }
@@ -987,7 +987,7 @@ const MuscuPage = (() => {
                 <span class="zone-tile-check" aria-hidden="true">${on ? '✓' : ''}</span>
               </button>
               ${on ? `<button type="button" class="zone-series-badge mini${isEditorOpen ? ' active' : ''}" style="--zc:${zoneColor}"
-                onclick="event.stopPropagation();MuscuPage.toggleGymZoneSeriesEditor('${dateStr}', ${z.id})">${setCount} série${setCount > 1 ? 's' : ''}</button>` : ''}
+                onclick="event.stopPropagation();MuscuPage.toggleGymZoneSeriesEditor('${dateStr}', ${z.id})">${setCount} série${setCount > 1 ? 's' : ''}<span class="editable-badge-icon" aria-hidden="true">✎</span></button>` : ''}
             </div>`;
           }).join('');
 
