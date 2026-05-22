@@ -3,14 +3,17 @@ const ProfilePage = (() => {
   let _profileUserId  = null;
   let _isOwnProfile   = false;
   let _globalCalendarWeeks = [];
+  let _globalCalendarByDate = new Map();
   let _globalCalPage       = 0;
   let _globalCalPageSize   = 4;
+  let _globalDayOpen       = null;
   let _calendarWeeks  = [];
   let _calPage        = 0; // 0 = most recent N weeks, higher = older
   let _calPageSize     = 4; // computed dynamically from card width
   let _activeStatsTab = 'maison'; // 'maison' | 'salle'
   let _gymCalendarWeeks = [];
   let _gymCalPage       = 0;
+  let _gymDayOpen       = null;
   let _globalCalendarResizeFrame = 0;
   let _globalCalendarResizeBound = false;
   let _homeCalendarResizeFrame = 0;
@@ -229,22 +232,22 @@ const ProfilePage = (() => {
     return ordered.map(day => {
       const homeActive = day.homeDone > 0;
       const gymActive = (day.gymExercises + day.gymZones) > 0;
+      const hasActivity = homeActive || gymActive;
       const isDoubleActive = homeActive && gymActive;
       const isRest = !homeActive && !gymActive && (day.homeRest || day.gymRest);
       const state = day.date > today
         ? 'future'
-        : isDoubleActive
-          ? 'full'
-          : homeActive || gymActive
-            ? 'active'
-            : isRest
-              ? 'rest'
-              : 'empty';
+        : hasActivity
+          ? 'active'
+          : isRest
+            ? 'rest'
+            : 'empty';
 
       return {
         ...day,
         homeActive,
         gymActive,
+        hasActivity,
         isDoubleActive,
         isRest,
         state,
@@ -255,6 +258,8 @@ const ProfilePage = (() => {
   function _renderGlobalCalendar(stats, gymStats, gymStatsError = null) {
     const mergedCalendar = _buildGlobalCalendar(stats, gymStats);
     if (!mergedCalendar.length) return '';
+    _globalCalendarByDate = new Map(mergedCalendar.map(day => [day.date, day]));
+    _globalDayOpen = null;
 
     const today = new Date().toISOString().split('T')[0];
     const DAY_LABELS = ['L','M','M','J','V','S','D'];
@@ -277,6 +282,7 @@ const ProfilePage = (() => {
           gymRest: false,
           homeActive: false,
           gymActive: false,
+          hasActivity: false,
           isDoubleActive: false,
           isRest: false,
           state: 'empty',
@@ -319,11 +325,11 @@ const ProfilePage = (() => {
           </div>
         </div>
         <div class="cal-legend profile-overview-legend">
-          <div class="cal-cell full" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Maison + Salle</span>
-          <div class="cal-cell active" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Une activité</span>
+          <div class="cal-cell active" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Activité sportive</span>
           <div class="cal-cell rest" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Repos</span>
           <div class="cal-cell empty" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Inactif</span>
         </div>
+        <div id="global-day-detail" class="gym-day-detail" aria-live="polite"></div>
       </section>`;
   }
 
@@ -349,16 +355,23 @@ const ProfilePage = (() => {
         if (day.homeActive) tipParts.push(`${day.homeDone} exercice${day.homeDone !== 1 ? 's' : ''} maison`);
         if (day.gymExercises > 0) tipParts.push(`${day.gymExercises} ex salle`);
         if (day.gymZones > 0) tipParts.push(`${day.gymZones} zone${day.gymZones !== 1 ? 's' : ''}`);
-        const tooltip = day.state === 'full'
-          ? `${day.date} · Maison + Salle · ${tipParts.filter(Boolean).join(' · ')}`
-          : day.state === 'active'
-            ? `${day.date} · ${tipParts.filter(Boolean).join(' · ') || 'Activité enregistrée'}`
-            : day.state === 'rest'
-              ? `${day.date} · Jour de repos`
-              : day.date > today
-                ? `${day.date} · À venir`
-                : `${day.date} · Inactif`;
-        return `<div class="cal-cell ${day.state}${day.date === today ? ' cal-today' : ''}" title="${tooltip}"></div>`;
+        const activityLabel = day.isDoubleActive
+          ? 'Maison + Salle'
+          : day.homeActive
+            ? 'Maison'
+            : 'Salle';
+        const tooltip = day.state === 'active'
+          ? `${day.date} · ${activityLabel}${tipParts.length ? ` · ${tipParts.join(' · ')}` : ''}`
+          : day.state === 'rest'
+            ? `${day.date} · Jour de repos`
+            : day.date > today
+              ? `${day.date} · À venir`
+              : `${day.date} · Inactif`;
+        const clickable = day.state === 'active';
+        const attrs = clickable
+          ? `role="button" tabindex="0" onclick="ProfilePage.openGlobalDay('${day.date}', this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ProfilePage.openGlobalDay('${day.date}', this);}"`
+          : '';
+        return `<div class="cal-cell ${day.state}${day.date === today ? ' cal-today' : ''}${clickable ? ' clickable' : ''}" data-date="${day.date}" title="${tooltip}" ${attrs}></div>`;
       }).join('');
       return `<div class="cal-week-col"><div class="cal-month-label">${monthLabel}</div>${cells}</div>`;
     }).join('');
@@ -413,6 +426,174 @@ const ProfilePage = (() => {
     const nextBtn = document.getElementById('global-cal-next');
     if (prevBtn) prevBtn.disabled = _globalCalPage >= maxPage;
     if (nextBtn) nextBtn.disabled = _globalCalPage <= 0;
+  }
+
+  function _clearSelectedCalendarCells(rowId) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    row.querySelectorAll('.cal-cell.cal-selected').forEach(el => el.classList.remove('cal-selected'));
+  }
+
+  function _formatProfileDayLabel(date) {
+    const niceDate = new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    });
+    return niceDate.charAt(0).toUpperCase() + niceDate.slice(1);
+  }
+
+  function _formatSetSummary(values) {
+    const performedReps = Array.isArray(values)
+      ? values.map(v => parseInt(v, 10)).filter(v => Number.isInteger(v) && v > 0)
+      : [];
+    if (!performedReps.length) return '';
+    if (performedReps.every(v => v === performedReps[0])) {
+      return `${performedReps.length} x ${performedReps[0]}`;
+    }
+    return `${performedReps.join(' / ')} rép.`;
+  }
+
+  async function openGlobalDay(date, cellEl) {
+    const panel = document.getElementById('global-day-detail');
+    if (!panel) return;
+
+    if (_globalDayOpen === date) {
+      panel.innerHTML = '';
+      panel.classList.remove('open');
+      _globalDayOpen = null;
+      _clearSelectedCalendarCells('global-cal-weeks-row');
+      return;
+    }
+
+    const day = _globalCalendarByDate.get(date);
+    if (!day || !day.hasActivity) return;
+
+    _globalDayOpen = date;
+    _clearSelectedCalendarCells('global-cal-weeks-row');
+    if (cellEl) cellEl.classList.add('cal-selected');
+
+    panel.classList.add('open');
+    panel.innerHTML = `
+      <div class="gym-day-detail-head">
+        <div class="gym-day-detail-title">${_formatProfileDayLabel(date)}</div>
+        <button class="gym-day-detail-close" onclick="ProfilePage.openGlobalDay('${date}')" title="Fermer">✕</button>
+      </div>
+      <div class="gym-day-detail-body"><p style="color:var(--text3);text-align:center;padding:12px 0">Chargement…</p></div>`;
+
+    try {
+      const [homeResult, gymResult] = await Promise.allSettled([
+        day.homeActive
+          ? API.getHomeDayDetail(date, _profileUserId)
+          : Promise.resolve({ date, exercises: [] }),
+        day.gymActive
+          ? API.getGymDayDetail(_profileUserId, date)
+          : Promise.resolve({ date, is_rest: false, exercises: [], zones: [] }),
+      ]);
+
+      if (_globalDayOpen !== date) return;
+
+      const homeData = homeResult.status === 'fulfilled'
+        ? homeResult.value
+        : { date, exercises: [] };
+      const gymData = gymResult.status === 'fulfilled'
+        ? gymResult.value
+        : { date, is_rest: false, exercises: [], zones: [] };
+      const homeExercises = Array.isArray(homeData?.exercises) ? homeData.exercises : [];
+      const gymExercises = Array.isArray(gymData?.exercises) ? gymData.exercises : [];
+      const gymZones = Array.isArray(gymData?.zones) ? gymData.zones : [];
+
+      let bodyHtml = '';
+
+      if (day.homeActive) {
+        const homeCount = homeExercises.length || day.homeDone || 0;
+        bodyHtml += `<div class="gym-day-section-title">🏠 Maison (${homeCount})</div>`;
+        if (homeExercises.length) {
+          bodyHtml += `<ul class="gym-day-list">
+            ${homeExercises.map(exercise => {
+              const metric = exercise.is_running && exercise.performed_distance_km != null
+                ? `${String(exercise.performed_distance_km).replace('.', ',')} km`
+                : _formatSetSummary(exercise.performed_reps);
+              return `<li>${_escape(`${exercise.emoji || '💪'} ${exercise.name || 'Exercice supprimé'}`)}${metric ? ` <small>(${metric})</small>` : ''}</li>`;
+            }).join('')}
+          </ul>`;
+        } else {
+          bodyHtml += `<ul class="gym-day-list"><li>${homeCount} exercice${homeCount !== 1 ? 's' : ''} maison enregistré${homeCount !== 1 ? 's' : ''}.</li></ul>`;
+        }
+      }
+
+      if (day.gymActive) {
+        if (gymExercises.length) {
+          const bySession = {};
+          gymExercises.forEach(exercise => {
+            const key = exercise.session_name || 'Autre';
+            if (!bySession[key]) bySession[key] = [];
+            bySession[key].push(exercise);
+          });
+          bodyHtml += `<div class="gym-day-section-title">🏋️ Salle · Exercices (${gymExercises.length})</div>`;
+          bodyHtml += Object.entries(bySession).map(([sessionName, items]) => `
+            <div class="gym-day-group">
+              <div class="gym-day-group-label">${_escape(sessionName)}</div>
+              <ul class="gym-day-list">
+                ${items.map(exercise => {
+                  const metric = _formatSetSummary(exercise.performed_reps);
+                  return `<li>${_escape(exercise.exercise_name || 'Exercice supprimé')}${metric ? ` <small>(${metric})</small>` : ''}</li>`;
+                }).join('')}
+              </ul>
+            </div>`).join('');
+        } else if (day.gymExercises > 0) {
+          bodyHtml += `<div class="gym-day-section-title">🏋️ Salle · Exercices (${day.gymExercises})</div>`;
+          bodyHtml += `<ul class="gym-day-list"><li>${day.gymExercises} exercice${day.gymExercises !== 1 ? 's' : ''} salle enregistré${day.gymExercises !== 1 ? 's' : ''}.</li></ul>`;
+        }
+
+        if (gymZones.length) {
+          const soloZones = gymZones.filter(zone => !zone.parent_name);
+          const byParent = {};
+          gymZones.forEach(zone => {
+            if (!zone.parent_name) return;
+            const key = zone.parent_name;
+            if (!byParent[key]) {
+              byParent[key] = { icon: zone.parent_icon || zone.icon, items: [] };
+            }
+            byParent[key].items.push(zone);
+          });
+
+          bodyHtml += `<div class="gym-day-section-title">🎯 Salle · Zones (${gymZones.length})</div>`;
+          if (soloZones.length) {
+            bodyHtml += `<div class="gym-day-zone-chips">${soloZones.map(zone => `
+              <span class="gym-day-zone-chip" style="--zc:${zone.color || '#888'}">
+                <span>${zone.icon || '•'}</span>${_escape(zone.name)}
+              </span>`).join('')}</div>`;
+          }
+          Object.entries(byParent).forEach(([parent, info]) => {
+            if (!info.items.length) return;
+            bodyHtml += `
+              <div class="gym-day-group">
+                <div class="gym-day-group-label">${info.icon || '•'} ${_escape(parent)}</div>
+                <div class="gym-day-zone-chips">
+                  ${info.items.map(zone => `
+                    <span class="gym-day-zone-chip" style="--zc:${zone.color || '#888'}">
+                      <span>${zone.icon || '•'}</span>${_escape(zone.name)}
+                    </span>`).join('')}
+                </div>
+              </div>`;
+          });
+        } else if (day.gymZones > 0) {
+          bodyHtml += `<div class="gym-day-section-title">🎯 Salle · Zones (${day.gymZones})</div>`;
+          bodyHtml += `<ul class="gym-day-list"><li>${day.gymZones} zone${day.gymZones !== 1 ? 's' : ''} travaillée${day.gymZones !== 1 ? 's' : ''}.</li></ul>`;
+        }
+      }
+
+      if (!bodyHtml) {
+        bodyHtml = `<p class="gym-day-empty">Aucune activité détaillée disponible ce jour-là.</p>`;
+      }
+
+      const body = panel.querySelector('.gym-day-detail-body');
+      if (body) body.innerHTML = bodyHtml;
+    } catch (err) {
+      if (_globalDayOpen !== date) return;
+      const body = panel.querySelector('.gym-day-detail-body');
+      if (body) body.innerHTML = `<p style="color:#ef4444;text-align:center;padding:12px 0">⚠️ Erreur de chargement</p>`;
+      console.error('[Profile] openGlobalDay failed:', err);
+    }
   }
 
   // ── Gym (salle) stats renderer ─────────────────────────────
@@ -684,7 +865,6 @@ const ProfilePage = (() => {
   }
 
   // ── Gym day detail (click on a calendar cell) ───────────────
-  let _gymDayOpen = null; // currently open date, or null
   async function openGymDay(date, cellEl) {
     const panel = document.getElementById('gym-day-detail');
     if (!panel) return;
@@ -694,28 +874,26 @@ const ProfilePage = (() => {
       panel.innerHTML = '';
       panel.classList.remove('open');
       _gymDayOpen = null;
-      document.querySelectorAll('.cal-cell.cal-selected').forEach(el => el.classList.remove('cal-selected'));
+      _clearSelectedCalendarCells('gym-cal-weeks-row');
       return;
     }
     _gymDayOpen = date;
 
     // Highlight the selected cell
-    document.querySelectorAll('.cal-cell.cal-selected').forEach(el => el.classList.remove('cal-selected'));
+    _clearSelectedCalendarCells('gym-cal-weeks-row');
     if (cellEl) cellEl.classList.add('cal-selected');
 
-    const niceDate = new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-    });
     panel.classList.add('open');
     panel.innerHTML = `
       <div class="gym-day-detail-head">
-        <div class="gym-day-detail-title">${niceDate.charAt(0).toUpperCase() + niceDate.slice(1)}</div>
+        <div class="gym-day-detail-title">${_formatProfileDayLabel(date)}</div>
         <button class="gym-day-detail-close" onclick="ProfilePage.openGymDay('${date}')" title="Fermer">✕</button>
       </div>
       <div class="gym-day-detail-body"><p style="color:var(--text3);text-align:center;padding:12px 0">Chargement…</p></div>`;
 
     try {
       const data = await API.getGymDayDetail(_profileUserId, date);
+      if (_gymDayOpen !== date) return;
       const ex   = data.exercises || [];
       const zns  = data.zones || [];
       const isRest = !!data.is_rest;
@@ -750,13 +928,9 @@ const ProfilePage = (() => {
               <div class="gym-day-group-label">${_escape(sess)}</div>
               <ul class="gym-day-list">
                 ${items.map(e => {
-                  const performedReps = Array.isArray(e.performed_reps)
-                    ? e.performed_reps.map(v => parseInt(v, 10)).filter(v => Number.isInteger(v) && v > 0)
-                    : [];
-                  const reps = performedReps.length
-                    ? ` <small>(${performedReps.every(v => v === performedReps[0])
-                        ? `${performedReps.length} x ${performedReps[0]}`
-                        : performedReps.join(' / ')}${performedReps.every(v => v === performedReps[0]) ? '' : ' rép.'})</small>`
+                  const repsLabel = _formatSetSummary(e.performed_reps);
+                  const reps = repsLabel
+                    ? ` <small>(${repsLabel})</small>`
                     : '';
                   return `<li>${_escape(e.exercise_name)}${reps}</li>`;
                 }).join('')}
@@ -793,6 +967,7 @@ const ProfilePage = (() => {
       const body = panel.querySelector('.gym-day-detail-body');
       if (body) body.innerHTML = bodyHtml;
     } catch (err) {
+      if (_gymDayOpen !== date) return;
       const body = panel.querySelector('.gym-day-detail-body');
       if (body) body.innerHTML = `<p style="color:#ef4444;text-align:center;padding:12px 0">⚠️ Erreur de chargement</p>`;
       console.error('[Profile] getGymDayDetail failed:', err);
@@ -1031,6 +1206,11 @@ const ProfilePage = (() => {
       window.removeEventListener('resize', _queueHomeCalendarAutoSize);
       _homeCalendarResizeBound = false;
     }
+    _globalCalendarWeeks = [];
+    _globalCalendarByDate = new Map();
+    _globalDayOpen = null;
+    _gymCalendarWeeks = [];
+    _gymDayOpen = null;
   }
 
   // ── 4. Graphique XP 30 jours (SVG inline) ──────────────────
@@ -1417,6 +1597,6 @@ const ProfilePage = (() => {
     }
   }
 
-  return { render, init, destroy, switchStatsTab, globalCalPage, calPage, gymCalPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar, openGymDay };
+  return { render, init, destroy, switchStatsTab, globalCalPage, calPage, gymCalPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar, openGlobalDay, openGymDay };
 })();
 

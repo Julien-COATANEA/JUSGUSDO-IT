@@ -326,7 +326,7 @@ function _applyDevMock() {
       .filter(entry => (!start || entry.entry_date >= start) && (!end || entry.entry_date <= end))
       .map(entry => _cloneDevChecklistEntry(entry)),
   });
-  API.getHomeDayDetail = async (date) => {
+  API.getHomeDayDetail = async (date, _userId = null) => {
     const exercises = _devChecklistEntries
       .filter(entry => entry.entry_date === date && entry.completed)
       .map(entry => {

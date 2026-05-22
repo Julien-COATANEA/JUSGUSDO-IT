@@ -108,6 +108,37 @@ function mapChecklistEntryRow(row) {
   };
 }
 
+async function getHomeDayDetailForUser(userId, entryDate) {
+  const result = await db.query(
+    `SELECT ce.id,
+            ce.exercise_id,
+            ce.entry_date,
+            ce.completed,
+            ce.completed_at,
+            ce.performed_reps,
+            ce.performed_distance_km,
+            COALESCE(e.name, 'Exercice supprimé') AS name,
+            COALESCE(e.emoji, '💪') AS emoji,
+            e.sets,
+            e.reps,
+            e.unit,
+            COALESCE(e.is_running, FALSE) AS is_running,
+            COALESCE(e.is_active, FALSE) AS is_active
+     FROM checklist_entries ce
+     LEFT JOIN exercises e ON e.id = ce.exercise_id
+     WHERE ce.user_id = $1
+       AND ce.entry_date = $2
+       AND ce.completed = TRUE
+     ORDER BY ce.completed_at NULLS LAST, ce.id`,
+    [userId, entryDate]
+  );
+
+  return {
+    date: entryDate,
+    exercises: result.rows.map(mapChecklistEntryRow),
+  };
+}
+
 function resolveHomePerformance(exerciseRow, performedReps, performedDistanceKm) {
   if (exerciseRow?.is_running) {
     return {
@@ -237,6 +268,25 @@ router.get('/checklist', requireAuth, async (req, res) => {
 
 // GET /api/exercises/checklist/day/:date
 // Returns the exact completed HOME activity for a given day, including archived exercises.
+router.get('/checklist/day/user/:userId/:date', requireAuth, async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  const entryDate = String(req.params.date || '').trim();
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!userId || isNaN(userId)) {
+    return res.status(400).json({ error: 'ID invalide' });
+  }
+  if (!dateRegex.test(entryDate)) {
+    return res.status(400).json({ error: 'Format de date invalide' });
+  }
+
+  try {
+    res.json(await getHomeDayDetailForUser(userId, entryDate));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 router.get('/checklist/day/:date', requireAuth, async (req, res) => {
   const entryDate = String(req.params.date || '').trim();
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -245,34 +295,7 @@ router.get('/checklist/day/:date', requireAuth, async (req, res) => {
   }
 
   try {
-    const result = await db.query(
-      `SELECT ce.id,
-              ce.exercise_id,
-              ce.entry_date,
-              ce.completed,
-              ce.completed_at,
-              ce.performed_reps,
-              ce.performed_distance_km,
-              COALESCE(e.name, 'Exercice supprimé') AS name,
-              COALESCE(e.emoji, '💪') AS emoji,
-              e.sets,
-              e.reps,
-              e.unit,
-              COALESCE(e.is_running, FALSE) AS is_running,
-              COALESCE(e.is_active, FALSE) AS is_active
-       FROM checklist_entries ce
-       LEFT JOIN exercises e ON e.id = ce.exercise_id
-       WHERE ce.user_id = $1
-         AND ce.entry_date = $2
-         AND ce.completed = TRUE
-       ORDER BY ce.completed_at NULLS LAST, ce.id`,
-      [req.user.id, entryDate]
-    );
-
-    res.json({
-      date: entryDate,
-      exercises: result.rows.map(mapChecklistEntryRow),
-    });
+    res.json(await getHomeDayDetailForUser(req.user.id, entryDate));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });
