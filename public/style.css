@@ -5088,10 +5088,11 @@ html, body {
 }
 .gym-zone-inline-form {
   display: grid;
-  grid-template-columns: minmax(148px, 190px) minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 14px;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  align-items: stretch;
+  min-width: 0;
+  padding: 12px;
   margin-top: 8px;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px;
@@ -5105,7 +5106,7 @@ html, body {
 .gym-zone-inline-copy {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
 }
 .gym-zone-inline-kicker {
@@ -5126,13 +5127,18 @@ html, body {
   font-weight: 700;
   color: var(--text);
   line-height: 1.2;
+  word-break: break-word;
 }
 .gym-zone-inline-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 56px auto 70px;
+  grid-template-columns: 56px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   min-width: 0;
+}
+.gym-zone-name-input {
+  grid-column: 1 / -1;
+  font-weight: 600;
 }
 .gym-zone-inline-fields input[type="text"],
 .gym-zone-inline-fields input[type="number"] {
@@ -5161,25 +5167,26 @@ html, body {
   box-shadow: 0 0 0 3px rgba(255,255,255,0.05);
   background: rgba(14,18,28,0.44);
 }
-.gym-zone-name-input {
-  font-weight: 600;
-}
 .gym-zone-icon-input {
+  grid-column: 1;
   width: 56px;
   padding: 0;
   text-align: center;
   font-size: 20px;
 }
 .gym-zone-order-input {
-  width: 70px;
+  grid-column: 1 / -1;
+  width: 82px;
   text-align: center;
   font-weight: 700;
 }
 .gym-zone-color-field {
+  grid-column: 2;
   display: inline-flex;
   align-items: center;
   gap: 10px;
   height: 42px;
+  min-width: 0;
   padding: 0 12px;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.08);
@@ -5203,38 +5210,60 @@ html, body {
   cursor: pointer;
 }
 .gym-zone-form-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
 }
 .gym-zone-form-actions .submit-btn,
 .gym-zone-form-actions .admin-secondary-btn {
+  width: 100%;
   min-height: 42px;
   padding: 0 14px;
   border-radius: 12px;
   font-size: 12px;
+  min-width: 0;
 }
-@media (max-width: 860px) {
+@media (min-width: 560px) {
+  .gym-zone-inline-fields {
+    grid-template-columns: minmax(0, 1fr) 56px auto 72px;
+  }
+  .gym-zone-name-input {
+    grid-column: 1;
+  }
+  .gym-zone-icon-input {
+    grid-column: 2;
+  }
+  .gym-zone-color-field {
+    grid-column: 3;
+  }
+  .gym-zone-order-input {
+    grid-column: 4;
+    width: 72px;
+  }
+}
+@media (min-width: 860px) {
   .gym-zone-inline-form {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(148px, 190px) minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 14px;
   }
   .gym-zone-inline-copy,
   .gym-zone-inline-fields,
   .gym-zone-form-actions {
-    width: 100%;
+    width: auto;
   }
   .gym-zone-form-actions {
-    justify-content: flex-start;
+    display: flex;
+    width: auto;
+    justify-content: flex-end;
   }
-}
-@media (max-width: 560px) {
-  .gym-zone-inline-fields {
-    grid-template-columns: minmax(0, 1fr) 56px;
-  }
-  .gym-zone-color-field,
-  .gym-zone-order-input {
-    width: 100%;
+  .gym-zone-form-actions .submit-btn,
+  .gym-zone-form-actions .admin-secondary-btn {
+    width: auto;
   }
 }
 
