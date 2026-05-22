@@ -2446,13 +2446,7 @@ html, body {
   margin-bottom: 12px;
 }
 .profile-overview-title {
-  margin-bottom: 6px;
-}
-.profile-overview-subtitle {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text3);
+  margin-bottom: 0;
 }
 .profile-overview-sources {
   display: flex;
@@ -2491,9 +2485,16 @@ html, body {
 .profile-global-heatmap .cal-cell.full,
 .profile-overview-legend .cal-cell.full {
   background:
-    linear-gradient(135deg, rgba(148, 224, 255, 0.92), rgba(114, 255, 187, 0.92));
+    linear-gradient(135deg, rgba(114, 255, 187, 0.96), rgba(20, 184, 166, 0.96));
   border-color: rgba(179, 255, 223, 0.9);
   box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 0 14px rgba(95, 255, 198, 0.18);
+}
+.profile-global-heatmap .cal-cell.active,
+.profile-overview-legend .cal-cell.active {
+  background:
+    linear-gradient(135deg, rgba(255, 196, 76, 0.94), rgba(249, 115, 22, 0.94));
+  border-color: rgba(255, 205, 96, 0.84);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 0 10px rgba(249, 115, 22, 0.16);
 }
 
 @media (min-width: 560px) {

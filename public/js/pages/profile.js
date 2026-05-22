@@ -288,9 +288,6 @@ const ProfilePage = (() => {
 
     const weeksSlice = _globalCalendarWeeks;
     const pagerLabel = _globalCalPagerLabel(weeksSlice);
-    const subtitle = gymStatsError
-      ? 'Vue globale Maison disponible. Les stats Salle seront ajoutées dès que le chargement sera rétabli.'
-      : 'Vue fusionnée Maison + Salle pour repérer tes journées les plus complètes en un coup d’œil.';
     const dayLabelsHtml = `<div class="cal-day-labels">
       <div class="cal-month-spacer"></div>
       ${DAY_LABELS.map(label => `<div class="cal-day-lbl">${label}</div>`).join('')}
@@ -301,7 +298,6 @@ const ProfilePage = (() => {
         <div class="profile-overview-head">
           <div>
             <div class="profile-section-title profile-overview-title">Vue globale</div>
-            <p class="profile-overview-subtitle">${subtitle}</p>
           </div>
           <div class="profile-overview-sources" aria-label="Sources de la vue globale">
             <span class="profile-overview-chip">🏠 Maison</span>
