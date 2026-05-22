@@ -2,12 +2,17 @@
 const ProfilePage = (() => {
   let _profileUserId  = null;
   let _isOwnProfile   = false;
+  let _globalCalendarWeeks = [];
+  let _globalCalPage       = 0;
+  let _globalCalPageSize   = 4;
   let _calendarWeeks  = [];
   let _calPage        = 0; // 0 = most recent N weeks, higher = older
   let _calPageSize     = 4; // computed dynamically from card width
   let _activeStatsTab = 'maison'; // 'maison' | 'salle'
   let _gymCalendarWeeks = [];
   let _gymCalPage       = 0;
+  let _globalCalendarResizeFrame = 0;
+  let _globalCalendarResizeBound = false;
   let _homeCalendarResizeFrame = 0;
   let _homeCalendarResizeBound = false;
 
@@ -68,8 +73,10 @@ const ProfilePage = (() => {
       const gymSessions = gymSessionsRes?.sessions || [];
 
       container.innerHTML = _renderAll(user, stats, gymStats, gymStatsError, gymRecords, gymSessions);
-  _bindHomeCalendarResize();
-  _queueHomeCalendarAutoSize();
+        _bindGlobalCalendarResize();
+        _queueGlobalCalendarAutoSize();
+        _bindHomeCalendarResize();
+        _queueHomeCalendarAutoSize();
       requestAnimationFrame(_autoSizeGymCalendar);
 
       // Initialise notification status UI
@@ -89,6 +96,7 @@ const ProfilePage = (() => {
 
     return `
       ${_renderHero(avatar, name, rank, progress, user.tokens)}
+      ${_renderGlobalCalendar(stats, gymStats, gymStatsError)}
 
       <div id="profile-panel-stats">
         <div class="profile-stats-tab-bar">
@@ -145,6 +153,20 @@ const ProfilePage = (() => {
     });
   }
 
+  function _queueGlobalCalendarAutoSize() {
+    if (_globalCalendarResizeFrame) cancelAnimationFrame(_globalCalendarResizeFrame);
+    _globalCalendarResizeFrame = requestAnimationFrame(() => {
+      _globalCalendarResizeFrame = 0;
+      requestAnimationFrame(_autoSizeGlobalCalendar);
+    });
+  }
+
+  function _bindGlobalCalendarResize() {
+    if (_globalCalendarResizeBound) return;
+    window.addEventListener('resize', _queueGlobalCalendarAutoSize);
+    _globalCalendarResizeBound = true;
+  }
+
   function _bindHomeCalendarResize() {
     if (_homeCalendarResizeBound) return;
     window.addEventListener('resize', _queueHomeCalendarAutoSize);
@@ -167,6 +189,236 @@ const ProfilePage = (() => {
     return Math.max(1, Math.floor((availableWidth + gap) / (weekWidth + gap)));
   }
 
+  function _buildGlobalCalendar(homeStats, gymStats) {
+    const homeCalendar = Array.isArray(homeStats?.calendar) ? homeStats.calendar : [];
+    const gymCalendar = Array.isArray(gymStats?.calendar) ? gymStats.calendar : [];
+    if (!homeCalendar.length && !gymCalendar.length) return [];
+
+    const homeRestDays = _getHomeRestDays();
+    const byDate = new Map();
+
+    homeCalendar.forEach(day => {
+      byDate.set(day.date, {
+        date: day.date,
+        homeDone: day.done || 0,
+        gymExercises: 0,
+        gymZones: 0,
+        homeRest: homeRestDays.has(day.date) && (day.done || 0) === 0,
+        gymRest: false,
+      });
+    });
+
+    gymCalendar.forEach(day => {
+      const current = byDate.get(day.date) || {
+        date: day.date,
+        homeDone: 0,
+        gymExercises: 0,
+        gymZones: 0,
+        homeRest: false,
+        gymRest: false,
+      };
+      current.gymExercises = day.exercises_done || 0;
+      current.gymZones = day.zones_done || 0;
+      current.gymRest = !!day.is_rest;
+      byDate.set(day.date, current);
+    });
+
+    const ordered = Array.from(byDate.values()).sort((left, right) => left.date.localeCompare(right.date));
+    const today = new Date().toISOString().split('T')[0];
+
+    return ordered.map(day => {
+      const homeActive = day.homeDone > 0;
+      const gymActive = (day.gymExercises + day.gymZones) > 0;
+      const isDoubleActive = homeActive && gymActive;
+      const isRest = !homeActive && !gymActive && (day.homeRest || day.gymRest);
+      const state = day.date > today
+        ? 'future'
+        : isDoubleActive
+          ? 'full'
+          : homeActive || gymActive
+            ? 'active'
+            : isRest
+              ? 'rest'
+              : 'empty';
+
+      return {
+        ...day,
+        homeActive,
+        gymActive,
+        isDoubleActive,
+        isRest,
+        state,
+      };
+    });
+  }
+
+  function _renderGlobalCalendar(stats, gymStats, gymStatsError = null) {
+    const mergedCalendar = _buildGlobalCalendar(stats, gymStats);
+    if (!mergedCalendar.length) return '';
+
+    const today = new Date().toISOString().split('T')[0];
+    const DAY_LABELS = ['L','M','M','J','V','S','D'];
+
+    _globalCalendarWeeks = [];
+    for (let i = 0; i < mergedCalendar.length; i += 7) {
+      _globalCalendarWeeks.push(mergedCalendar.slice(i, i + 7));
+    }
+    while (_globalCalendarWeeks.length < 4) {
+      const firstDate = new Date(_globalCalendarWeeks[0][0].date + 'T12:00:00');
+      const padWeek = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(firstDate);
+        date.setDate(firstDate.getDate() - 7 + index);
+        return {
+          date: date.toISOString().split('T')[0],
+          homeDone: 0,
+          gymExercises: 0,
+          gymZones: 0,
+          homeRest: false,
+          gymRest: false,
+          homeActive: false,
+          gymActive: false,
+          isDoubleActive: false,
+          isRest: false,
+          state: 'empty',
+        };
+      });
+      _globalCalendarWeeks.unshift(padWeek);
+    }
+    _globalCalPage = 0;
+
+    const weeksSlice = _globalCalendarWeeks;
+    const pagerLabel = _globalCalPagerLabel(weeksSlice);
+    const subtitle = gymStatsError
+      ? 'Vue globale Maison disponible. Les stats Salle seront ajoutées dès que le chargement sera rétabli.'
+      : 'Vue fusionnée Maison + Salle pour repérer tes journées les plus complètes en un coup d’œil.';
+    const dayLabelsHtml = `<div class="cal-day-labels">
+      <div class="cal-month-spacer"></div>
+      ${DAY_LABELS.map(label => `<div class="cal-day-lbl">${label}</div>`).join('')}
+    </div>`;
+
+    return `
+      <section class="profile-section profile-overview-section" style="animation:fadeIn 0.3s ease 0.03s both" id="profile-global-overview">
+        <div class="profile-overview-head">
+          <div>
+            <div class="profile-section-title profile-overview-title">Vue globale</div>
+            <p class="profile-overview-subtitle">${subtitle}</p>
+          </div>
+          <div class="profile-overview-sources" aria-label="Sources de la vue globale">
+            <span class="profile-overview-chip">🏠 Maison</span>
+            <span class="profile-overview-chip">🏋️ Salle</span>
+          </div>
+        </div>
+        <div class="cal-section-header profile-overview-calendar-head">
+          <div class="profile-overview-kicker">Heatmap d'activité combinée</div>
+          <div class="cal-pager">
+            <button class="cal-pager-btn" id="global-cal-prev" onclick="ProfilePage.globalCalPage(1)" title="Semaines précédentes" disabled>‹</button>
+            <span class="cal-pager-label" id="global-cal-pager-label">${pagerLabel}</span>
+            <button class="cal-pager-btn" id="global-cal-next" onclick="ProfilePage.globalCalPage(-1)" title="Semaines suivantes" disabled>›</button>
+          </div>
+        </div>
+        <div class="cal-heatmap-wrap cal-sz-lg profile-global-heatmap" id="global-cal-heatmap-wrap">
+          ${dayLabelsHtml}
+          <div class="cal-weeks-row" id="global-cal-weeks-row">
+            ${_renderGlobalWeeks(weeksSlice, today)}
+          </div>
+        </div>
+        <div class="cal-legend profile-overview-legend">
+          <div class="cal-cell full" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Maison + Salle</span>
+          <div class="cal-cell active" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Une activité</span>
+          <div class="cal-cell rest" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Repos</span>
+          <div class="cal-cell empty" style="width:14px;height:14px;border-radius:4px;flex-shrink:0"></div><span>Inactif</span>
+        </div>
+      </section>`;
+  }
+
+  function _globalCalWeeksForPage(page) {
+    const total = _globalCalendarWeeks.length;
+    const end = total - page * _globalCalPageSize;
+    const start = Math.max(0, end - _globalCalPageSize);
+    return _globalCalendarWeeks.slice(start, Math.max(0, end));
+  }
+
+  function _renderGlobalWeeks(weeks, today) {
+    let lastMonth = null;
+    return weeks.map(week => {
+      const firstDay = new Date(week[0].date + 'T12:00:00');
+      const monthKey = `${firstDay.getFullYear()}-${firstDay.getMonth()}`;
+      let monthLabel = '';
+      if (monthKey !== lastMonth) {
+        lastMonth = monthKey;
+        monthLabel = firstDay.toLocaleDateString('fr-FR', { month: 'short' });
+      }
+      const cells = week.map(day => {
+        const tipParts = [];
+        if (day.homeActive) tipParts.push(`${day.homeDone} exercice${day.homeDone !== 1 ? 's' : ''} maison`);
+        if (day.gymExercises > 0) tipParts.push(`${day.gymExercises} ex salle`);
+        if (day.gymZones > 0) tipParts.push(`${day.gymZones} zone${day.gymZones !== 1 ? 's' : ''}`);
+        const tooltip = day.state === 'full'
+          ? `${day.date} · Maison + Salle · ${tipParts.filter(Boolean).join(' · ')}`
+          : day.state === 'active'
+            ? `${day.date} · ${tipParts.filter(Boolean).join(' · ') || 'Activité enregistrée'}`
+            : day.state === 'rest'
+              ? `${day.date} · Jour de repos`
+              : day.date > today
+                ? `${day.date} · À venir`
+                : `${day.date} · Inactif`;
+        return `<div class="cal-cell ${day.state}${day.date === today ? ' cal-today' : ''}" title="${tooltip}"></div>`;
+      }).join('');
+      return `<div class="cal-week-col"><div class="cal-month-label">${monthLabel}</div>${cells}</div>`;
+    }).join('');
+  }
+
+  function _globalCalPagerLabel(weeks) {
+    if (!weeks.length) return '';
+    const firstDay = weeks[0][0].date;
+    const lastWeek = weeks[weeks.length - 1];
+    const lastDay = lastWeek[lastWeek.length - 1].date;
+    const options = { day: 'numeric', month: 'short' };
+    const first = new Date(firstDay + 'T12:00:00').toLocaleDateString('fr-FR', options);
+    const last = new Date(lastDay + 'T12:00:00').toLocaleDateString('fr-FR', options);
+    return `${first} – ${last}`;
+  }
+
+  function _autoSizeGlobalCalendar() {
+    const wrap = document.getElementById('global-cal-heatmap-wrap');
+    if (!wrap || !_globalCalendarWeeks.length) return;
+    if (wrap.clientWidth === 0 || wrap.offsetParent === null) return;
+
+    const weeksRow = document.getElementById('global-cal-weeks-row');
+    if (!weeksRow) return;
+
+    _globalCalPageSize = _measureCalendarPageSize(wrap, weeksRow);
+    _globalCalPage = 0;
+    const today = new Date().toISOString().split('T')[0];
+    const weeksSlice = _globalCalWeeksForPage(0);
+    const maxPage = Math.max(0, Math.ceil(_globalCalendarWeeks.length / _globalCalPageSize) - 1);
+    weeksRow.innerHTML = _renderGlobalWeeks(weeksSlice, today);
+
+    const labelEl = document.getElementById('global-cal-pager-label');
+    if (labelEl) labelEl.textContent = _globalCalPagerLabel(weeksSlice);
+    const prevBtn = document.getElementById('global-cal-prev');
+    const nextBtn = document.getElementById('global-cal-next');
+    if (prevBtn) prevBtn.disabled = maxPage === 0;
+    if (nextBtn) nextBtn.disabled = true;
+  }
+
+  function globalCalPage(delta) {
+    const maxPage = Math.max(0, Math.ceil(_globalCalendarWeeks.length / _globalCalPageSize) - 1);
+    _globalCalPage = Math.max(0, Math.min(maxPage, _globalCalPage + delta));
+
+    const weeksSlice = _globalCalWeeksForPage(_globalCalPage);
+    const today = new Date().toISOString().split('T')[0];
+    const weeksRow = document.getElementById('global-cal-weeks-row');
+    if (weeksRow) weeksRow.innerHTML = _renderGlobalWeeks(weeksSlice, today);
+
+    const labelEl = document.getElementById('global-cal-pager-label');
+    if (labelEl) labelEl.textContent = _globalCalPagerLabel(weeksSlice);
+    const prevBtn = document.getElementById('global-cal-prev');
+    const nextBtn = document.getElementById('global-cal-next');
+    if (prevBtn) prevBtn.disabled = _globalCalPage >= maxPage;
+    if (nextBtn) nextBtn.disabled = _globalCalPage <= 0;
+  }
+
   // ── Gym (salle) stats renderer ─────────────────────────────
   function _renderGymStats(gymStats) {
     const totalActivities = (gymStats.total_exercises || gymStats.total_completed || 0) + (gymStats.total_zones || 0);
@@ -178,9 +430,9 @@ const ProfilePage = (() => {
       { label: 'Série actuelle',   value: (gymStats.current_streak || 0) + ' j', icon: '⚡' },
     ];
 
-    const statsGridHtml = `<div class="profile-stats-grid" style="animation:fadeIn 0.3s ease 0.02s both">
+    const statsGridHtml = `<div class="profile-stats-grid profile-stats-grid--compact" style="animation:fadeIn 0.3s ease 0.02s both">
       ${simpleCards.map(c => `
-        <div class="profile-stat-card">
+        <div class="profile-stat-card profile-stat-card--compact">
           <span class="profile-stat-icon">${c.icon}</span>
           <span class="profile-stat-value">${c.value}</span>
           <span class="profile-stat-label">${c.label}</span>
@@ -583,9 +835,9 @@ const ProfilePage = (() => {
       { label: 'Jours actifs',    value: stats.active_days,                icon: '📅' },
       { label: 'Série actuelle',  value: stats.current_streak + '\u202fj', icon: '⚡' },
     ];
-    return `<div class="profile-stats-grid" style="animation:fadeIn 0.3s ease 0.02s both">
+    return `<div class="profile-stats-grid profile-stats-grid--compact" style="animation:fadeIn 0.3s ease 0.02s both">
       ${cards.map(c => `
-        <div class="profile-stat-card">
+        <div class="profile-stat-card profile-stat-card--compact">
           <span class="profile-stat-icon">${c.icon}</span>
           <span class="profile-stat-value">${c.value}</span>
           <span class="profile-stat-label">${c.label}</span>
@@ -767,6 +1019,14 @@ const ProfilePage = (() => {
   }
 
   function destroy() {
+    if (_globalCalendarResizeFrame) {
+      cancelAnimationFrame(_globalCalendarResizeFrame);
+      _globalCalendarResizeFrame = 0;
+    }
+    if (_globalCalendarResizeBound) {
+      window.removeEventListener('resize', _queueGlobalCalendarAutoSize);
+      _globalCalendarResizeBound = false;
+    }
     if (_homeCalendarResizeFrame) {
       cancelAnimationFrame(_homeCalendarResizeFrame);
       _homeCalendarResizeFrame = 0;
@@ -1161,6 +1421,6 @@ const ProfilePage = (() => {
     }
   }
 
-  return { render, init, destroy, switchStatsTab, calPage, gymCalPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar, openGymDay };
+  return { render, init, destroy, switchStatsTab, globalCalPage, calPage, gymCalPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar, openGymDay };
 })();
 
