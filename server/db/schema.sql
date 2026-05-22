@@ -224,7 +224,7 @@ ALTER TABLE exercises ADD COLUMN IF NOT EXISTS gym_session VARCHAR(50);
 
 -- Seed gym exercises (from _MUSCU_SESSIONS definition in frontend)
 INSERT INTO exercises (name, emoji, sets, reps, unit, xp_reward, order_index, schedule, is_active, type, gym_session)
-SELECT seed.name, seed.emoji, seed.sets, seed.reps, seed.unit, seed.xp_reward, seed.order_index, seed.schedule, seed.is_active, seed.type, seed.gym_session
+SELECT seed.name, seed.emoji, seed.sets, seed.reps, seed.unit, seed.xp_reward, seed.order_index, seed.schedule::INTEGER[], seed.is_active, seed.type, seed.gym_session
 FROM (VALUES
   -- Pecs Triceps
   ('Développé Couché Haltères',              '💪', 3, 10, 'répétitions', 10, 100, '{}', TRUE, 'gym', 'Pecs Triceps'),
