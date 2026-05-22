@@ -717,9 +717,9 @@ const WorkoutPage = (() => {
       }
 
       return `
-        <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}${isEditorOpen ? ' has-reps-editor' : ''}">
-          <div class="sheet-ex-main"
-               onclick="WorkoutPage.toggleExercise('${requestedDate}', ${ex.id}, this.closest('.sheet-exercise-row'), event)">
+        <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}${isEditorOpen ? ' has-reps-editor' : ''}"
+             onclick="WorkoutPage.toggleExercise('${requestedDate}', ${ex.id}, this, event)">
+          <div class="sheet-ex-main">
             <div class="exercise-info">
               <div class="exercise-name">${escapeHtml(ex.emoji || '💪')} ${safeName}</div>
             </div>
