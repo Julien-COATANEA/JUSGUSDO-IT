@@ -4,7 +4,7 @@ const MuscuPage = (() => {
   let _customSessionExercises = {}; // { [sessionName]: string[] } – stored in localStorage
   let _activeTab = 'planning';  // 'records' | 'planning'
   let _gymWeekOffset = 0;          // week offset (0 = current week)
-  let _gymEntries = {};            // 'YYYY-MM-DD_id_123' → { exercise_id, exercise_name, completed, session_name, performed_reps }
+  let _gymEntries = {};            // 'YYYY-MM-DD_id_123' → { exercise_id, exercise_name, completed, session_name, performed_reps, performed_distance_km }
   let _gymSessionsCatalog = [];    // [{ name, icon, color, exercises: [{id,name,emoji,sets,reps,unit}] }]
   let _gymZones = [];              // [{ id, parent_id, name, icon, color, order_index }]
   let _gymZoneEntriesByDate = {};  // 'YYYY-MM-DD' → Map<zone_id, set_count>
@@ -68,6 +68,66 @@ const MuscuPage = (() => {
       .slice(0, 24);
   }
 
+  function _normalizeGymDistanceKm(value) {
+    if (value == null || value === '') return null;
+    const parsed = Number.parseFloat(String(value).replace(',', '.'));
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 999.9) return null;
+    return Math.round(parsed * 10) / 10;
+  }
+
+  function _formatGymDistanceKm(value, includeUnit = true) {
+    const normalized = _normalizeGymDistanceKm(value) ?? 1;
+    const text = Number.isInteger(normalized)
+      ? String(normalized)
+      : String(normalized).replace('.', ',');
+    return includeUnit ? `${text} km` : text;
+  }
+
+  function _normalizeGymCardioUnit(unit) {
+    return unit === 'km' ? 'km' : 'min';
+  }
+
+  function _normalizeGymClassicUnit(unit) {
+    const raw = String(unit || '').trim();
+    if (!raw) return 'rép.';
+    const lower = raw.toLowerCase();
+    if (['rep', 'reps', 'rép', 'réps', 'rép.', 'réps.', 'répétition', 'répétitions'].includes(lower)) return 'rép.';
+    if (['sec', 'secs', 'seconde', 'secondes'].includes(lower)) return 'sec';
+    if (['min', 'mins', 'minute', 'minutes'].includes(lower)) return 'min';
+    return raw;
+  }
+
+  function _isGymClassicRepsUnit(unit) {
+    return _normalizeGymClassicUnit(unit) === 'rép.';
+  }
+
+  function _buildGymCardioMetric(value, fallbackValue) {
+    return [_clampGymMetric(value, 1, 9999, _clampGymMetric(fallbackValue, 1, 9999, 30))];
+  }
+
+  function _buildGymCardioDistanceKm(value, fallbackValue) {
+    return _normalizeGymDistanceKm(value) ?? _normalizeGymDistanceKm(fallbackValue) ?? 1;
+  }
+
+  function _getGymCardioMetricValue(performedReps, fallbackValue) {
+    const normalized = _normalizeGymReps(performedReps);
+    return _clampGymMetric(normalized[0], 1, 9999, _clampGymMetric(fallbackValue, 1, 9999, 30));
+  }
+
+  function _changeGymDistanceKm(currentDistance, delta) {
+    const base = _normalizeGymDistanceKm(currentDistance) ?? 1;
+    const next = Math.round((base + delta) * 10) / 10;
+    return Math.min(999.9, Math.max(0.5, next));
+  }
+
+  function _formatGymCardioPerformance(performedReps, performedDistanceKm, fallbackValue, unit) {
+    if (_normalizeGymCardioUnit(unit) === 'km') {
+      return _formatGymDistanceKm(performedDistanceKm ?? fallbackValue);
+    }
+    const value = _getGymCardioMetricValue(performedReps, fallbackValue);
+    return `${value} min`;
+  }
+
   function _normalizeGymExerciseId(value) {
     const parsed = parseInt(value, 10);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
@@ -83,6 +143,16 @@ const MuscuPage = (() => {
     return _gymEntries[_getGymEntryKey(dateStr, exerciseId, exerciseName)] || null;
   }
 
+  function _getGymCatalogExercise(sessionName, exerciseId, exerciseName) {
+    const normalizedExerciseId = _normalizeGymExerciseId(exerciseId);
+    const session = (_gymSessionsCatalog || []).find(item => item.name === sessionName);
+    if (!session || !Array.isArray(session.exercises)) return null;
+    return session.exercises.find(item => {
+      if (normalizedExerciseId && _normalizeGymExerciseId(item.id) === normalizedExerciseId) return true;
+      return String(item.name || '').trim().toLowerCase() === String(exerciseName || '').trim().toLowerCase();
+    }) || null;
+  }
+
   function _setGymEntry(dateStr, entry) {
     if (!entry) return;
     const key = _getGymEntryKey(dateStr, entry.exercise_id, entry.exercise_name);
@@ -92,6 +162,7 @@ const MuscuPage = (() => {
       session_name: entry.session_name || 'Séance',
       completed: !!entry.completed,
       performed_reps: _normalizeGymReps(entry.performed_reps),
+      performed_distance_km: _normalizeGymDistanceKm(entry.performed_distance_km),
     };
   }
 
@@ -150,12 +221,33 @@ const MuscuPage = (() => {
     return perf.isUniform ? `${perf.sets} x ${perf.reps}` : perf.repsList.join(' • ');
   }
 
+  function _formatGymClassicPerformance(performedReps, fallbackSets, fallbackReps, unit) {
+    const perf = _getGymPerformanceState(performedReps, fallbackSets, fallbackReps);
+    const displayUnit = _normalizeGymClassicUnit(unit);
+    if (_isGymClassicRepsUnit(displayUnit)) {
+      return perf.isUniform ? `${perf.sets} x ${perf.reps}` : perf.repsList.join(' • ');
+    }
+    return perf.isUniform
+      ? `${perf.sets} x ${perf.reps} ${displayUnit}`
+      : `${perf.repsList.join(' • ')} ${displayUnit}`;
+  }
+
+  function _formatGymClassicPlannedPerformance(sets, reps, unit) {
+    const safeSets = _clampGymMetric(sets, 1, 24, 3);
+    const safeReps = _clampGymMetric(reps, 1, 9999, 10);
+    const displayUnit = _normalizeGymClassicUnit(unit);
+    return _isGymClassicRepsUnit(displayUnit)
+      ? `${safeSets} x ${safeReps}`
+      : `${safeSets} x ${safeReps} ${displayUnit}`;
+  }
+
   function _cloneGymEntry(entry) {
     return entry
       ? {
           ...entry,
           exercise_id: _normalizeGymExerciseId(entry.exercise_id),
           performed_reps: _normalizeGymReps(entry.performed_reps),
+          performed_distance_km: _normalizeGymDistanceKm(entry.performed_distance_km),
         }
       : null;
   }
@@ -423,12 +515,11 @@ const MuscuPage = (() => {
     return { exDone, zonesDone };
   }
 
-  function _formatGymHistoryPerformance(performedReps) {
-    const normalized = _normalizeGymReps(performedReps);
-    if (!normalized.length) return 'Valide';
-    return normalized.every(value => value === normalized[0])
-      ? `${normalized.length} x ${normalized[0]}`
-      : normalized.join(' • ');
+  function _formatGymHistoryPerformance(performedReps, options = {}) {
+    if (options.isRunning) {
+      return _formatGymCardioPerformance(performedReps, options.performedDistanceKm, options.targetValue, options.unit);
+    }
+    return _formatGymClassicPerformance(performedReps, options.targetSets, options.targetValue, options.unit);
   }
 
   function _renderGymDaySheetShell(title, subtitle, bodyHtml) {
@@ -461,6 +552,10 @@ const MuscuPage = (() => {
     exercises.forEach(entry => {
       const sessionName = entry.session_name || 'Séance';
       const sessionMeta = sessionMetaByName.get(sessionName) || null;
+      const exerciseMeta = (sessionMeta?.exercises || []).find(ex => {
+        if (entry.exercise_id && _normalizeGymExerciseId(ex.id) === _normalizeGymExerciseId(entry.exercise_id)) return true;
+        return String(ex.name || '').trim().toLowerCase() === String(entry.exercise_name || '').trim().toLowerCase();
+      }) || null;
 
       const group = grouped.get(sessionName) || {
         sessionName,
@@ -470,7 +565,13 @@ const MuscuPage = (() => {
 
       group.items.push({
         name: entry.exercise_name || 'Exercice',
-        performance: _formatGymHistoryPerformance(entry.performed_reps),
+        performance: _formatGymHistoryPerformance(entry.performed_reps, {
+          isRunning: !!exerciseMeta?.is_running,
+          unit: exerciseMeta?.unit,
+          targetSets: exerciseMeta?.sets,
+          targetValue: exerciseMeta?.reps,
+          performedDistanceKm: entry.performed_distance_km,
+        }),
         completedAt: entry.completed_at || null,
       });
 
@@ -875,25 +976,63 @@ const MuscuPage = (() => {
             const exEmoji = ex.emoji || '💪';
             const exSets  = ex.sets || null;
             const exReps  = ex.reps || null;
+            const isRunning = !!ex.is_running;
+            const cardioUnit = _normalizeGymCardioUnit(ex.unit);
+            const classicUnit = _normalizeGymClassicUnit(ex.unit);
+            const isClassicReps = _isGymClassicRepsUnit(ex.unit);
             const entry = _getGymEntry(dateStr, exId, exName);
             const checked = !!entry?.completed;
             const performedReps = _normalizeGymReps(entry?.performed_reps);
+            const performedDistanceKm = _normalizeGymDistanceKm(entry?.performed_distance_km);
             const performance = _getGymPerformanceState(performedReps, exSets, exReps);
-            const plannedPerformance = _formatGymPerformance([], exSets, exReps);
+            const plannedPerformance = isRunning
+              ? _formatGymCardioPerformance([], exReps, exReps, cardioUnit)
+              : _formatGymClassicPlannedPerformance(exSets, exReps, ex.unit);
             const editorKey = _getGymEditorKey(dateStr, session.name, exId, exName);
             const isEditorOpen = checked && _activeGymRepsEditorKey === editorKey;
-            const setsRepsTag = exSets
-              ? `<span class="exercise-tag sheet-tag-reps">${exSets}&nbsp;×&nbsp;${exReps}&nbsp;rép.</span>`
-              : '';
+            const setsRepsTag = isRunning
+              ? `<span class="exercise-tag sheet-tag-reps">${plannedPerformance}</span>`
+              : (exSets
+                ? `<span class="exercise-tag sheet-tag-reps">${_escape(plannedPerformance)}</span>`
+                : '');
             const safeExId = exId || 'null';
             const safeEx  = _escape(exName).replace(/'/g, "\\'");
-            const perfSummary = _formatGymPerformance(performedReps, exSets, exReps);
+            const perfSummary = isRunning
+              ? _formatGymCardioPerformance(performedReps, performedDistanceKm, exReps, cardioUnit)
+              : _formatGymClassicPerformance(performedReps, exSets, exReps, ex.unit);
             const repsBadge = checked
               ? `<button type="button" class="exercise-tag sheet-tag-reps sheet-tag-reps-btn${isEditorOpen ? ' active' : ''}"
                    onclick="event.stopPropagation();MuscuPage.toggleGymRepsEditor(${safeExId},'${safeEx}','${safeSes}','${dateStr}')"
-                  aria-pressed="${isEditorOpen}">${perfSummary} rep<span class="editable-badge-icon" aria-hidden="true">✎</span></button>`
+                    aria-pressed="${isEditorOpen}">${perfSummary}<span class="editable-badge-icon" aria-hidden="true">✎</span></button>`
               : setsRepsTag;
-            const repsEditor = isEditorOpen ? `
+              const repsEditor = isEditorOpen ? (isRunning ? `
+                <div class="sheet-reps-editor" onclick="event.stopPropagation()">
+                  <div class="sheet-reps-toolbar">
+                    <div class="sheet-stepper-compact">
+                      <span class="sheet-stepper-mini-label">${cardioUnit === 'km' ? 'Distance' : 'Durée'}</span>
+                      <div class="sheet-stepper-control compact">
+                        <button type="button" class="sheet-stepper-btn compact"
+                          onclick="event.stopPropagation();${cardioUnit === 'km'
+                            ? `MuscuPage.adjustGymCardioDistance(${safeExId},'${safeEx}','${safeSes}','${dateStr}',${Number(exReps) || 0},-0.5,this)`
+                            : `MuscuPage.adjustGymCardioMetric(${safeExId},'${safeEx}','${safeSes}','${dateStr}',${parseInt(exReps, 10) || 0},-1,this)`}"
+                          aria-label="Retirer ${cardioUnit === 'km' ? '0,5 kilometre' : 'une minute'}">−</button>
+                        <span class="sheet-stepper-value compact wide">${cardioUnit === 'km' ? _formatGymDistanceKm(performedDistanceKm ?? exReps, false) : _getGymCardioMetricValue(performedReps, exReps)}</span>
+                        <button type="button" class="sheet-stepper-btn compact"
+                          onclick="event.stopPropagation();${cardioUnit === 'km'
+                            ? `MuscuPage.adjustGymCardioDistance(${safeExId},'${safeEx}','${safeSes}','${dateStr}',${Number(exReps) || 0},0.5,this)`
+                            : `MuscuPage.adjustGymCardioMetric(${safeExId},'${safeEx}','${safeSes}','${dateStr}',${parseInt(exReps, 10) || 0},1,this)`}"
+                          aria-label="Ajouter ${cardioUnit === 'km' ? '0,5 kilometre' : 'une minute'}">+</button>
+                      </div>
+                    </div>
+                    <button type="button" class="sheet-reps-preset${perfSummary === plannedPerformance ? ' active' : ''}"
+                      onclick="event.stopPropagation();${cardioUnit === 'km'
+                        ? `MuscuPage.setGymCardioDistance(${safeExId},'${safeEx}','${safeSes}','${dateStr}',${Number(exReps) || 0},this)`
+                        : `MuscuPage.setGymCardioMetric(${safeExId},'${safeEx}','${safeSes}','${dateStr}',${parseInt(exReps, 10) || 0},this)`}">
+                      Prévu ${plannedPerformance}
+                    </button>
+                  </div>
+                  <div class="sheet-reps-help">Renseigne la ${cardioUnit === 'km' ? 'distance' : 'durée'} réellement effectuée.</div>
+                </div>` : `
               <div class="sheet-reps-editor" onclick="event.stopPropagation()">
                 <div class="sheet-reps-toolbar">
                   <div class="sheet-stepper-compact">
@@ -916,20 +1055,20 @@ const MuscuPage = (() => {
                 <div class="sheet-reps-sets">
                   ${performance.repsList.map((setReps, setIndex) => `
                     <div class="sheet-set-pill${setIndex === performance.repsList.length - 1 ? ' accent' : ''}">
-                      <span class="sheet-set-label">S${setIndex + 1}</span>
+                      <span class="sheet-set-label">S${setIndex + 1}${isClassicReps ? '' : ` · ${classicUnit}`}</span>
                       <div class="sheet-stepper-control compact">
                         <button type="button" class="sheet-stepper-btn compact"
                           onclick="event.stopPropagation();MuscuPage.adjustGymExerciseSetReps(${safeExId},'${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},${setIndex},-1,this)"
-                          aria-label="Retirer une répétition sur la série ${setIndex + 1}">−</button>
+                          aria-label="Retirer ${isClassicReps ? 'une répétition' : `une unité de ${classicUnit}`} sur la série ${setIndex + 1}">−</button>
                         <span class="sheet-stepper-value compact wide">${setReps}</span>
                         <button type="button" class="sheet-stepper-btn compact"
                           onclick="event.stopPropagation();MuscuPage.adjustGymExerciseSetReps(${safeExId},'${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},${setIndex},1,this)"
-                          aria-label="Ajouter une répétition sur la série ${setIndex + 1}">+</button>
+                          aria-label="Ajouter ${isClassicReps ? 'une répétition' : `une unité de ${classicUnit}`} sur la série ${setIndex + 1}">+</button>
                       </div>
                     </div>`).join('')}
                 </div>
-                ${performance.isUniform ? '' : '<div class="sheet-reps-help">Tu peux donc faire 10 • 8 • 6 sur le meme exercice.</div>'}
-              </div>` : '';
+                ${performance.isUniform ? '' : `<div class="sheet-reps-help">Tu peux varier les ${isClassicReps ? 'répétitions' : classicUnit} d'une série à l'autre.</div>`}
+              </div>`) : '';
             return `
               <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}${isEditorOpen ? ' has-reps-editor' : ''}"
                    >
@@ -1260,16 +1399,19 @@ const MuscuPage = (() => {
     if (container) _loadGymWeek(container);
   }
 
-  async function _persistGymExercisePerformance(exerciseId, exerciseName, sessionName, dateStr, nextPerformedReps, anchorEl, previousEntry) {
+  async function _persistGymExercisePerformance(exerciseId, exerciseName, sessionName, dateStr, nextPerformedReps, nextDistanceKm, anchorEl, previousEntry) {
     const normalizedExerciseId = _normalizeGymExerciseId(exerciseId);
     const entryKey = _getGymEntryKey(dateStr, normalizedExerciseId, exerciseName);
+    const normalizedReps = _normalizeGymReps(nextPerformedReps);
+    const normalizedDistanceKm = _normalizeGymDistanceKm(nextDistanceKm);
 
     _gymEntries[entryKey] = {
       exercise_id: normalizedExerciseId,
       exercise_name: exerciseName,
       session_name: sessionName,
-      completed: nextPerformedReps.length > 0,
-      performed_reps: _normalizeGymReps(nextPerformedReps),
+      completed: normalizedReps.length > 0 || normalizedDistanceKm != null,
+      performed_reps: normalizedReps,
+      performed_distance_km: normalizedDistanceKm,
     };
 
     try {
@@ -1277,8 +1419,9 @@ const MuscuPage = (() => {
         normalizedExerciseId,
         sessionName,
         dateStr,
-        nextPerformedReps.length > 0,
-        nextPerformedReps,
+        normalizedReps.length > 0 || normalizedDistanceKm != null,
+        normalizedReps,
+        normalizedDistanceKm,
         exerciseName
       );
       const syncedKey = _getGymEntryKey(dateStr, result.exercise_id || normalizedExerciseId, result.exercise_name || exerciseName);
@@ -1289,6 +1432,7 @@ const MuscuPage = (() => {
         session_name: result.session_name || sessionName,
         completed: !!result.completed,
         performed_reps: _normalizeGymReps(result.performed_reps),
+        performed_distance_km: _normalizeGymDistanceKm(result.performed_distance_km),
       };
       _syncGymXp(result, anchorEl);
       _refreshDayUI(dateStr);
@@ -1311,22 +1455,79 @@ const MuscuPage = (() => {
     const entryKey = _getGymEntryKey(dateStr, exerciseId, exerciseName);
     const wasChecked = _gymEntries[entryKey]?.completed || false;
     const previousEntry = _cloneGymEntry(_gymEntries[entryKey]);
+    const exerciseMeta = _getGymCatalogExercise(sessionName, exerciseId, exerciseName);
+    const isRunning = !!exerciseMeta?.is_running;
+    const usesDistanceKm = isRunning && _normalizeGymCardioUnit(exerciseMeta?.unit) === 'km';
     const currentPerformance = _getGymPerformanceState(previousEntry?.performed_reps, plannedSets, plannedReps);
     const nextPerformedReps = !wasChecked
-      ? currentPerformance.repsList
+      ? (isRunning
+        ? (usesDistanceKm ? [] : _buildGymCardioMetric(previousEntry?.performed_reps?.[0], exerciseMeta?.reps ?? plannedReps))
+        : currentPerformance.repsList)
       : [];
+    const nextDistanceKm = !wasChecked && usesDistanceKm
+      ? _buildGymCardioDistanceKm(previousEntry?.performed_distance_km, exerciseMeta?.reps ?? plannedReps)
+      : null;
 
     if (wasChecked && _activeGymRepsEditorKey === _getGymEditorKey(dateStr, sessionName, exerciseId, exerciseName)) {
       _activeGymRepsEditorKey = null;
     }
 
-    await _persistGymExercisePerformance(exerciseId, exerciseName, sessionName, dateStr, nextPerformedReps, el, previousEntry);
+    await _persistGymExercisePerformance(exerciseId, exerciseName, sessionName, dateStr, nextPerformedReps, nextDistanceKm, el, previousEntry);
   }
 
   function toggleGymRepsEditor(exerciseId, exerciseName, sessionName, dateStr) {
     const nextKey = _getGymEditorKey(dateStr, sessionName, exerciseId, exerciseName);
     _activeGymRepsEditorKey = _activeGymRepsEditorKey === nextKey ? null : nextKey;
     if (_activeSheetDate === dateStr) _renderDayActionsSheet();
+  }
+
+  async function adjustGymCardioMetric(exerciseId, exerciseName, sessionName, dateStr, plannedMetric, delta, anchorEl) {
+    const entryKey = _getGymEntryKey(dateStr, exerciseId, exerciseName);
+    const previousEntry = _cloneGymEntry(_gymEntries[entryKey]) || {
+      exercise_id: _normalizeGymExerciseId(exerciseId),
+      exercise_name: exerciseName,
+      session_name: sessionName,
+      completed: false,
+      performed_reps: [],
+      performed_distance_km: null,
+    };
+    const nextValue = _getGymCardioMetricValue(previousEntry.performed_reps, plannedMetric) + delta;
+    const nextPerformedReps = _buildGymCardioMetric(nextValue, plannedMetric);
+
+    await _persistGymExercisePerformance(
+      exerciseId,
+      exerciseName,
+      sessionName,
+      dateStr,
+      nextPerformedReps,
+      null,
+      anchorEl?.closest('.sheet-exercise-row') || anchorEl,
+      previousEntry
+    );
+  }
+
+  async function adjustGymCardioDistance(exerciseId, exerciseName, sessionName, dateStr, plannedMetric, delta, anchorEl) {
+    const entryKey = _getGymEntryKey(dateStr, exerciseId, exerciseName);
+    const previousEntry = _cloneGymEntry(_gymEntries[entryKey]) || {
+      exercise_id: _normalizeGymExerciseId(exerciseId),
+      exercise_name: exerciseName,
+      session_name: sessionName,
+      completed: false,
+      performed_reps: [],
+      performed_distance_km: null,
+    };
+    const nextDistanceKm = _changeGymDistanceKm(previousEntry.performed_distance_km ?? plannedMetric, delta);
+
+    await _persistGymExercisePerformance(
+      exerciseId,
+      exerciseName,
+      sessionName,
+      dateStr,
+      [],
+      nextDistanceKm,
+      anchorEl?.closest('.sheet-exercise-row') || anchorEl,
+      previousEntry
+    );
   }
 
   function toggleGymZoneSeriesEditor(dateStr, zoneId) {
@@ -1375,6 +1576,7 @@ const MuscuPage = (() => {
       session_name: sessionName,
       completed: false,
       performed_reps: [],
+      performed_distance_km: null,
     };
     const currentPerformance = _getGymPerformanceState(previousEntry.performed_reps, plannedSets, plannedReps);
     const nextPerformedReps = _changeGymPerformedSetCount(currentPerformance.repsList, delta, plannedReps);
@@ -1385,6 +1587,7 @@ const MuscuPage = (() => {
       sessionName,
       dateStr,
       nextPerformedReps,
+      null,
       anchorEl?.closest('.sheet-exercise-row') || anchorEl,
       previousEntry
     );
@@ -1398,6 +1601,7 @@ const MuscuPage = (() => {
       session_name: sessionName,
       completed: false,
       performed_reps: [],
+      performed_distance_km: null,
     };
     const currentPerformance = _getGymPerformanceState(previousEntry.performed_reps, plannedSets, plannedReps);
     const nextPerformedReps = _changeGymPerformedSetReps(currentPerformance.repsList, setIndex, delta, plannedReps);
@@ -1408,6 +1612,7 @@ const MuscuPage = (() => {
       sessionName,
       dateStr,
       nextPerformedReps,
+      null,
       anchorEl?.closest('.sheet-exercise-row') || anchorEl,
       previousEntry
     );
@@ -1421,6 +1626,7 @@ const MuscuPage = (() => {
       session_name: sessionName,
       completed: false,
       performed_reps: [],
+      performed_distance_km: null,
     };
     const nextPerformedReps = _buildGymPerformedReps(plannedSets, plannedReps);
 
@@ -1430,6 +1636,55 @@ const MuscuPage = (() => {
       sessionName,
       dateStr,
       nextPerformedReps,
+      null,
+      anchorEl?.closest('.sheet-exercise-row') || anchorEl,
+      previousEntry
+    );
+  }
+
+  async function setGymCardioMetric(exerciseId, exerciseName, sessionName, dateStr, plannedMetric, anchorEl) {
+    const entryKey = _getGymEntryKey(dateStr, exerciseId, exerciseName);
+    const previousEntry = _cloneGymEntry(_gymEntries[entryKey]) || {
+      exercise_id: _normalizeGymExerciseId(exerciseId),
+      exercise_name: exerciseName,
+      session_name: sessionName,
+      completed: false,
+      performed_reps: [],
+      performed_distance_km: null,
+    };
+    const nextPerformedReps = _buildGymCardioMetric(plannedMetric, plannedMetric);
+
+    await _persistGymExercisePerformance(
+      exerciseId,
+      exerciseName,
+      sessionName,
+      dateStr,
+      nextPerformedReps,
+      null,
+      anchorEl?.closest('.sheet-exercise-row') || anchorEl,
+      previousEntry
+    );
+  }
+
+  async function setGymCardioDistance(exerciseId, exerciseName, sessionName, dateStr, plannedMetric, anchorEl) {
+    const entryKey = _getGymEntryKey(dateStr, exerciseId, exerciseName);
+    const previousEntry = _cloneGymEntry(_gymEntries[entryKey]) || {
+      exercise_id: _normalizeGymExerciseId(exerciseId),
+      exercise_name: exerciseName,
+      session_name: sessionName,
+      completed: false,
+      performed_reps: [],
+      performed_distance_km: null,
+    };
+    const nextDistanceKm = _buildGymCardioDistanceKm(plannedMetric, plannedMetric);
+
+    await _persistGymExercisePerformance(
+      exerciseId,
+      exerciseName,
+      sessionName,
+      dateStr,
+      [],
+      nextDistanceKm,
       anchorEl?.closest('.sheet-exercise-row') || anchorEl,
       previousEntry
     );
@@ -1897,5 +2152,5 @@ const MuscuPage = (() => {
     _refresh();
   }
 
-  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, toggleGymRepsEditor, toggleGymZoneSeriesEditor, changeGymExerciseSetCount, adjustGymExerciseSetReps, setGymExercisePerformance, adjustGymZoneSetCount, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
+  return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, toggleGymRepsEditor, toggleGymZoneSeriesEditor, changeGymExerciseSetCount, adjustGymExerciseSetReps, setGymExercisePerformance, adjustGymCardioMetric, adjustGymCardioDistance, setGymCardioMetric, setGymCardioDistance, adjustGymZoneSetCount, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
 })();

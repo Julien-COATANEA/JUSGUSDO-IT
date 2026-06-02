@@ -624,17 +624,19 @@ function _applyDevMock() {
 
   // Gym checklist (salle de sport)
   let _devGymEntries = [
-    { id: 1, entry_date: new Date().toISOString().split('T')[0], exercise_id: 110, exercise_name: 'Tirage Bucheron', session_name: 'Dos Biceps', completed: true, completed_at: new Date().toISOString(), performed_reps: [12, 10, 8] },
-    { id: 2, entry_date: new Date().toISOString().split('T')[0], exercise_id: 111, exercise_name: 'Tirage Verticale', session_name: 'Dos Biceps', completed: false, completed_at: null, performed_reps: [] },
+    { id: 1, entry_date: new Date().toISOString().split('T')[0], exercise_id: 110, exercise_name: 'Tirage Bucheron', session_name: 'Dos Biceps', completed: true, completed_at: new Date().toISOString(), performed_reps: [12, 10, 8], performed_distance_km: null },
+    { id: 2, entry_date: new Date().toISOString().split('T')[0], exercise_id: 111, exercise_name: 'Tirage Verticale', session_name: 'Dos Biceps', completed: false, completed_at: null, performed_reps: [], performed_distance_km: null },
   ];
   const _normalizeDevGymReps = (value) => (Array.isArray(value) ? value : (typeof value === 'string' ? value.split(/[^0-9]+/) : []))
     .map(v => parseInt(v, 10))
     .filter(v => Number.isInteger(v) && v > 0 && v <= 9999)
     .slice(0, 24);
+  const _buildDevDefaultGymDistanceKm = (exercise) => _normalizeDevDistanceKm(exercise?.reps) || 1;
+  const _buildDevDefaultGymCardioReps = (exercise) => [_normalizeDevGymReps([exercise?.reps])[0] || 30];
   API.getGymChecklist = async (start, end) => ({
     entries: _devGymEntries
       .filter(e => e.entry_date >= start && e.entry_date <= end)
-      .map(e => ({ ...e, performed_reps: _normalizeDevGymReps(e.performed_reps) })),
+      .map(e => ({ ...e, performed_reps: _normalizeDevGymReps(e.performed_reps), performed_distance_km: _normalizeDevDistanceKm(e.performed_distance_km) })),
   });
   const _devDayIsActive = (date) =>
     _devGymEntries.some(e => e.entry_date === date && e.completed) ||
@@ -655,7 +657,14 @@ function _applyDevMock() {
       _devGymEntries[idx].exercise_name = exercise.name;
       _devGymEntries[idx].session_name = exercise.gym_session || session_name;
       _devGymEntries[idx].completed_at = newCompleted ? (_devGymEntries[idx].completed_at || new Date().toISOString()) : null;
-      _devGymEntries[idx].performed_reps = newCompleted ? _normalizeDevGymReps(_devGymEntries[idx].performed_reps) : [];
+      _devGymEntries[idx].performed_reps = newCompleted
+        ? (exercise.is_running && exercise.unit !== 'km'
+          ? (_normalizeDevGymReps(_devGymEntries[idx].performed_reps).length ? _normalizeDevGymReps(_devGymEntries[idx].performed_reps) : _buildDevDefaultGymCardioReps(exercise))
+          : _normalizeDevGymReps(_devGymEntries[idx].performed_reps))
+        : [];
+      _devGymEntries[idx].performed_distance_km = newCompleted && exercise.is_running && exercise.unit === 'km'
+        ? (_normalizeDevDistanceKm(_devGymEntries[idx].performed_distance_km) || _buildDevDefaultGymDistanceKm(exercise))
+        : null;
     } else {
       newCompleted = true;
       _devGymEntries.push({
@@ -666,7 +675,8 @@ function _applyDevMock() {
         session_name: exercise.gym_session || session_name,
         completed: true,
         completed_at: new Date().toISOString(),
-        performed_reps: [],
+        performed_reps: exercise.is_running && exercise.unit !== 'km' ? _buildDevDefaultGymCardioReps(exercise) : [],
+        performed_distance_km: exercise.is_running && exercise.unit === 'km' ? _buildDevDefaultGymDistanceKm(exercise) : null,
       });
     }
     const isActive = _devDayIsActive(entry_date);
@@ -681,19 +691,25 @@ function _applyDevMock() {
       exercise_name: current.exercise_name,
       session_name: current.session_name,
       performed_reps: _normalizeDevGymReps(current.performed_reps),
+      performed_distance_km: _normalizeDevDistanceKm(current.performed_distance_km),
       xp: DEV_FAKE_USER.xp,
       xpDelta,
       sessionDone: doneNow,
       sessionTotal: 0,
     };
   };
-  API.saveGymChecklistEntry = async (exercise_id, session_name, entry_date, completed, performed_reps, exercise_name) => {
+  API.saveGymChecklistEntry = async (exercise_id, session_name, entry_date, completed, performed_reps, performed_distance_km, exercise_name) => {
     const today = new Date().toISOString().split('T')[0];
     if (entry_date > today) throw new Error('Impossible de cocher une date future');
     const exercise = findDevGymExercise(exercise_id, exercise_name, session_name);
     if (!exercise) throw new Error('Exercice introuvable');
-    const reps = _normalizeDevGymReps(performed_reps);
-    const nextCompleted = !!completed || reps.length > 0;
+    const reps = exercise.is_running && exercise.unit === 'km'
+      ? []
+      : (exercise.is_running ? (_normalizeDevGymReps(performed_reps).length ? _normalizeDevGymReps(performed_reps) : _buildDevDefaultGymCardioReps(exercise)) : _normalizeDevGymReps(performed_reps));
+    const distanceKm = exercise.is_running && exercise.unit === 'km'
+      ? (_normalizeDevDistanceKm(performed_distance_km) || _buildDevDefaultGymDistanceKm(exercise))
+      : null;
+    const nextCompleted = !!completed || reps.length > 0 || distanceKm != null;
     const wasActive = _devDayIsActive(entry_date);
     const idx = _devGymEntries.findIndex(e => e.entry_date === entry_date && e.exercise_id === exercise.id);
 
@@ -704,6 +720,7 @@ function _applyDevMock() {
       _devGymEntries[idx].completed = nextCompleted;
       _devGymEntries[idx].completed_at = nextCompleted ? (_devGymEntries[idx].completed_at || new Date().toISOString()) : null;
       _devGymEntries[idx].performed_reps = reps;
+      _devGymEntries[idx].performed_distance_km = distanceKm;
     } else if (nextCompleted) {
       _devGymEntries.push({
         id: Date.now(),
@@ -714,6 +731,7 @@ function _applyDevMock() {
         completed: true,
         completed_at: new Date().toISOString(),
         performed_reps: reps,
+        performed_distance_km: distanceKm,
       });
     }
 
@@ -730,6 +748,7 @@ function _applyDevMock() {
       exercise_name: current?.exercise_name || exercise.name,
       session_name: current?.session_name || exercise.gym_session || session_name,
       performed_reps: reps,
+      performed_distance_km: distanceKm,
       xp: DEV_FAKE_USER.xp,
       xpDelta,
       sessionDone: doneNow,
@@ -785,6 +804,10 @@ function _applyDevMock() {
         session_name: e.session_name,
         completed_at: e.completed_at || null,
         performed_reps: _normalizeDevGymReps(e.performed_reps),
+        performed_distance_km: _normalizeDevDistanceKm(e.performed_distance_km),
+        is_running: !!findDevGymExercise(e.exercise_id, e.exercise_name, e.session_name)?.is_running,
+        unit: findDevGymExercise(e.exercise_id, e.exercise_name, e.session_name)?.unit || null,
+        emoji: findDevGymExercise(e.exercise_id, e.exercise_name, e.session_name)?.emoji || '💪',
       }));
     const zones = _devGymZoneEntries
       .filter(z => z.entry_date === date)
@@ -1029,7 +1052,7 @@ function _applyDevMock() {
       order_index: idx,
       exercises: DEV_FAKE_EXERCISES
         .filter(e => e.gym_session === name && e.is_active !== false && e.type === 'gym')
-        .map(e => ({ id: e.id, name: e.name, emoji: e.emoji || '💪', sets: e.sets, reps: e.reps })),
+        .map(e => ({ id: e.id, name: e.name, emoji: e.emoji || '💪', sets: e.sets, reps: e.reps, unit: e.unit, is_running: !!e.is_running })),
     }));
     return { sessions };
   };

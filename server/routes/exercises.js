@@ -486,7 +486,7 @@ router.get('/gym-sessions-all', requireAuth, async (req, res) => {
       `SELECT gs.name, gs.icon, gs.color, gs.order_index,
               COALESCE(
                 json_agg(
-                  json_build_object('id', e.id, 'name', e.name, 'emoji', e.emoji, 'sets', e.sets, 'reps', e.reps)
+                  json_build_object('id', e.id, 'name', e.name, 'emoji', e.emoji, 'sets', e.sets, 'reps', e.reps, 'unit', e.unit, 'is_running', COALESCE(e.is_running, FALSE))
                   ORDER BY e.order_index, e.id
                 ) FILTER (WHERE e.id IS NOT NULL),
                 '[]'::json

@@ -452,6 +452,81 @@ const ProfilePage = (() => {
     return `${performedReps.join(' / ')} rép.`;
   }
 
+  function _normalizeProfileUnit(unit) {
+    const raw = String(unit || '').trim();
+    if (!raw) return 'rép.';
+    const lower = raw.toLowerCase();
+    if (['rep', 'reps', 'rép', 'réps', 'rép.', 'réps.', 'répétition', 'répétitions'].includes(lower)) return 'rép.';
+    if (['sec', 'secs', 'seconde', 'secondes'].includes(lower)) return 'sec';
+    if (['min', 'mins', 'minute', 'minutes'].includes(lower)) return 'min';
+    return raw;
+  }
+
+  function _formatProfileUnitSummary(values, unit, fallbackSets, fallbackValue) {
+    const performedValues = Array.isArray(values)
+      ? values.map(v => parseInt(v, 10)).filter(v => Number.isInteger(v) && v > 0)
+      : [];
+    const displayUnit = _normalizeProfileUnit(unit);
+    const safeSets = Math.max(1, parseInt(fallbackSets, 10) || 1);
+    const safeValue = Math.max(1, parseInt(fallbackValue, 10) || 1);
+    const list = performedValues.length ? performedValues : Array.from({ length: safeSets }, () => safeValue);
+    if (displayUnit === 'rép.') return _formatSetSummary(list);
+    if (list.every(v => v === list[0])) return `${list.length} x ${list[0]} ${displayUnit}`;
+    return `${list.join(' / ')} ${displayUnit}`;
+  }
+
+  function _normalizeProfileDistanceKm(value) {
+    if (value == null || value === '') return null;
+    const parsed = Number.parseFloat(String(value).replace(',', '.'));
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 999.9) return null;
+    return Math.round(parsed * 10) / 10;
+  }
+
+  function _formatProfileDistanceKm(value) {
+    const normalized = _normalizeProfileDistanceKm(value);
+    if (normalized == null) return '';
+    const text = Number.isInteger(normalized)
+      ? String(normalized)
+      : String(normalized).replace('.', ',');
+    return `${text} km`;
+  }
+
+  function _getProfileCardioActivityLabel(exercise) {
+    const name = String(exercise?.exercise_name || exercise?.name || '').trim();
+    const lowerName = name.toLowerCase();
+    const emoji = String(exercise?.emoji || '').trim();
+    if (lowerName.includes('marche')) return 'Marche';
+    if (lowerName.includes('velo') || lowerName.includes('vélo') || ['🚴', '🚵', '🛵'].includes(emoji)) return 'Vélo';
+    if (lowerName.includes('rameur') || ['🚣', '🚣‍♂️', '🚣‍♀️'].includes(emoji)) return 'Rameur';
+    return 'Course à pied';
+  }
+
+  function _formatProfileGymMetric(exercise) {
+    if (exercise?.is_running && exercise?.unit === 'km') {
+      return _formatProfileDistanceKm(exercise.performed_distance_km) || _formatProfileDistanceKm(exercise.reps);
+    }
+    if (exercise?.is_running) {
+      const performedReps = Array.isArray(exercise?.performed_reps)
+        ? exercise.performed_reps.map(v => parseInt(v, 10)).filter(v => Number.isInteger(v) && v > 0)
+        : [];
+      return performedReps[0] ? `${performedReps[0]} min` : '';
+    }
+    return _formatProfileUnitSummary(exercise?.performed_reps, exercise?.unit, exercise?.sets, exercise?.reps);
+  }
+
+  function _formatProfileGymExerciseLabel(exercise) {
+    const baseName = String(exercise?.exercise_name || exercise?.name || 'Exercice supprimé').trim();
+    if (!exercise?.is_running) return baseName || 'Exercice supprimé';
+    const cardioLabel = _getProfileCardioActivityLabel(exercise);
+    if (!baseName) return cardioLabel;
+    const lowerName = baseName.toLowerCase();
+    const lowerLabel = cardioLabel.toLowerCase();
+    if (lowerName.includes(lowerLabel) || (cardioLabel === 'Course à pied' && lowerName.includes('course'))) {
+      return baseName;
+    }
+    return `${cardioLabel} · ${baseName}`;
+  }
+
   async function openGlobalDay(date, cellEl) {
     const panel = document.getElementById('global-day-detail');
     if (!panel) return;
@@ -534,8 +609,8 @@ const ProfilePage = (() => {
               <div class="gym-day-group-label">${_escape(sessionName)}</div>
               <ul class="gym-day-list">
                 ${items.map(exercise => {
-                  const metric = _formatSetSummary(exercise.performed_reps);
-                  return `<li>${_escape(exercise.exercise_name || 'Exercice supprimé')}${metric ? ` <small>(${metric})</small>` : ''}</li>`;
+                  const metric = _formatProfileGymMetric(exercise);
+                  return `<li>${_escape(_formatProfileGymExerciseLabel(exercise))}${metric ? ` <small>(${metric})</small>` : ''}</li>`;
                 }).join('')}
               </ul>
             </div>`).join('');
@@ -928,11 +1003,11 @@ const ProfilePage = (() => {
               <div class="gym-day-group-label">${_escape(sess)}</div>
               <ul class="gym-day-list">
                 ${items.map(e => {
-                  const repsLabel = _formatSetSummary(e.performed_reps);
+                  const repsLabel = _formatProfileGymMetric(e);
                   const reps = repsLabel
                     ? ` <small>(${repsLabel})</small>`
                     : '';
-                  return `<li>${_escape(e.exercise_name)}${reps}</li>`;
+                  return `<li>${_escape(_formatProfileGymExerciseLabel(e))}${reps}</li>`;
                 }).join('')}
               </ul>
             </div>`).join('');

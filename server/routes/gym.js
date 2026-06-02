@@ -7,6 +7,7 @@ const router = express.Router();
 const DAILY_GYM_XP = 30;
 const ZONE_XP = 30;
 const DEFAULT_GYM_ZONE_SETS = 3;
+const DEFAULT_GYM_RUNNING_DISTANCE_KM = 1;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const GYM_DAY_ACTIVE_SQL = `
   SELECT (
@@ -29,6 +30,13 @@ function normalizePerformedReps(value) {
     .slice(0, 24);
 }
 
+function normalizePerformedDistanceKm(value) {
+  if (value == null || value === '') return null;
+  const parsed = Number.parseFloat(String(value).replace(',', '.'));
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 999.9) return null;
+  return Math.round(parsed * 10) / 10;
+}
+
 function normalizeZoneSetCount(value) {
   const parsed = parseInt(value, 10);
   if (!Number.isInteger(parsed)) return DEFAULT_GYM_ZONE_SETS;
@@ -44,7 +52,7 @@ async function resolveGymExercise({ exerciseId, exerciseName, sessionName }) {
   const normalizedExerciseId = normalizeEntityId(exerciseId);
   if (normalizedExerciseId) {
     const result = await db.query(
-      `SELECT id, name, gym_session
+      `SELECT id, name, gym_session, unit, COALESCE(is_running, FALSE) AS is_running, emoji
          FROM exercises
         WHERE id = $1 AND type = 'gym'
         LIMIT 1`,
@@ -60,7 +68,7 @@ async function resolveGymExercise({ exerciseId, exerciseName, sessionName }) {
   if (!trimmedName) return null;
 
   const result = await db.query(
-    `SELECT id, name, gym_session
+    `SELECT id, name, gym_session, unit, COALESCE(is_running, FALSE) AS is_running, emoji
        FROM exercises
       WHERE type = 'gym'
         AND name = $1
@@ -84,6 +92,7 @@ function mapGymEntryRow(row) {
     ...row,
     exercise_id: normalizeEntityId(row.exercise_id),
     performed_reps: normalizePerformedReps(row.performed_reps),
+    performed_distance_km: normalizePerformedDistanceKm(row.performed_distance_km),
   };
 }
 
@@ -119,7 +128,7 @@ async function syncGymDayXp(userId, entryDate, wasActive) {
   };
 }
 
-async function saveGymChecklistEntry({ userId, exerciseId, exerciseName, sessionName, entryDate, completed, performedReps }) {
+async function saveGymChecklistEntry({ userId, exercise, exerciseId, exerciseName, sessionName, entryDate, completed, performedReps, performedDistanceKm }) {
   const normalizedExerciseId = normalizeEntityId(exerciseId);
   if (!normalizedExerciseId) {
     const err = new Error('exercise_id requis');
@@ -127,8 +136,13 @@ async function saveGymChecklistEntry({ userId, exerciseId, exerciseName, session
     throw err;
   }
 
-  const nextPerformedReps = normalizePerformedReps(performedReps);
-  const nextCompleted = !!completed || nextPerformedReps.length > 0;
+  const isRunning = !!exercise?.is_running;
+  const usesDistanceKm = isRunning && exercise?.unit === 'km';
+  const nextPerformedReps = usesDistanceKm ? [] : normalizePerformedReps(performedReps);
+  const nextPerformedDistanceKm = usesDistanceKm
+    ? (normalizePerformedDistanceKm(performedDistanceKm) ?? normalizePerformedDistanceKm(exercise?.reps) ?? DEFAULT_GYM_RUNNING_DISTANCE_KM)
+    : null;
+  const nextCompleted = !!completed || nextPerformedReps.length > 0 || nextPerformedDistanceKm != null;
   const wasActive = await getDayIsActive(userId, entryDate);
 
   const existing = await db.query(
@@ -149,9 +163,10 @@ async function saveGymChecklistEntry({ userId, exerciseId, exerciseName, session
                 WHEN $4 THEN COALESCE(completed_at, NOW())
                 ELSE NULL
               END,
-              performed_reps = $5
-        WHERE id = $6`,
-      [normalizedExerciseId, exerciseName, sessionName, nextCompleted, nextPerformedReps, existing.rows[0].id]
+              performed_reps = $5,
+              performed_distance_km = $6
+        WHERE id = $7`,
+      [normalizedExerciseId, exerciseName, sessionName, nextCompleted, nextPerformedReps, nextPerformedDistanceKm, existing.rows[0].id]
     );
   } else if (nextCompleted) {
     await db.query(
@@ -163,10 +178,11 @@ async function saveGymChecklistEntry({ userId, exerciseId, exerciseName, session
          session_name,
          completed,
          completed_at,
-         performed_reps
+         performed_reps,
+         performed_distance_km
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [userId, entryDate, normalizedExerciseId, exerciseName, sessionName, nextCompleted, nextCompleted ? new Date() : null, nextPerformedReps]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [userId, entryDate, normalizedExerciseId, exerciseName, sessionName, nextCompleted, nextCompleted ? new Date() : null, nextPerformedReps, nextPerformedDistanceKm]
     );
   }
 
@@ -185,6 +201,7 @@ async function saveGymChecklistEntry({ userId, exerciseId, exerciseName, session
     session_name: sessionName,
     completed: nextCompleted,
     performed_reps: nextPerformedReps,
+    performed_distance_km: nextPerformedDistanceKm,
     sessionDone: doneRes.rows[0]?.done || 0,
     sessionTotal: 0,
     ...xpResult,
@@ -237,6 +254,7 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await db.query(
       `SELECT id, entry_date, exercise_id, exercise_name, session_name, completed, completed_at, performed_reps
+              , performed_distance_km
        FROM gym_checklist_entries
        WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3
        ORDER BY entry_date, session_name, exercise_name`,
@@ -274,7 +292,7 @@ router.post('/toggle', requireAuth, async (req, res) => {
     }
 
     const existing = await db.query(
-      `SELECT completed, performed_reps
+      `SELECT completed, performed_reps, performed_distance_km
          FROM gym_checklist_entries
         WHERE user_id = $1 AND entry_date = $2 AND exercise_id = $3`,
       [req.user.id, entry_date, exercise.id]
@@ -282,12 +300,14 @@ router.post('/toggle', requireAuth, async (req, res) => {
 
     const result = await saveGymChecklistEntry({
       userId: req.user.id,
+      exercise,
       exerciseId: exercise.id,
       exerciseName: exercise.name,
       sessionName: exercise.gym_session || session_name,
       entryDate: entry_date,
       completed: !(existing.rows[0]?.completed),
       performedReps: existing.rows[0]?.completed ? [] : existing.rows[0]?.performed_reps,
+      performedDistanceKm: existing.rows[0]?.completed ? null : existing.rows[0]?.performed_distance_km,
     });
 
     res.json(result);
@@ -298,7 +318,7 @@ router.post('/toggle', requireAuth, async (req, res) => {
 });
 
 // POST /api/gym-checklist/entry
-// body: { exercise_id?, exercise_name?, session_name, entry_date, completed, performed_reps }
+// body: { exercise_id?, exercise_name?, session_name, entry_date, completed, performed_reps, performed_distance_km }
 router.post('/entry', requireAuth, async (req, res) => {
   const { exercise_id, exercise_name, session_name, entry_date } = req.body;
   if ((!exercise_id && !exercise_name) || !session_name || !entry_date) {
@@ -322,18 +342,21 @@ router.post('/entry', requireAuth, async (req, res) => {
     }
 
     const performedReps = normalizePerformedReps(req.body.performed_reps);
+    const performedDistanceKm = normalizePerformedDistanceKm(req.body.performed_distance_km);
     const completed = typeof req.body.completed === 'boolean'
       ? req.body.completed
-      : performedReps.length > 0;
+      : performedReps.length > 0 || performedDistanceKm != null;
 
     const result = await saveGymChecklistEntry({
       userId: req.user.id,
+      exercise,
       exerciseId: exercise.id,
       exerciseName: exercise.name,
       sessionName: exercise.gym_session || session_name,
       entryDate: entry_date,
       completed,
       performedReps,
+      performedDistanceKm,
     });
 
     res.json(result);
@@ -714,9 +737,18 @@ router.get('/day/:userId/:date', requireAuth, async (req, res) => {
   try {
     const [exRes, zRes, restRes] = await Promise.all([
       db.query(
-        `SELECT exercise_id, exercise_name, session_name, completed_at, performed_reps
+        `SELECT ge.exercise_id,
+                ge.exercise_name,
+                ge.session_name,
+                ge.completed_at,
+                ge.performed_reps,
+                ge.performed_distance_km,
+                COALESCE(e.is_running, FALSE) AS is_running,
+                e.unit,
+                e.emoji
            FROM gym_checklist_entries
-          WHERE user_id = $1 AND entry_date = $2 AND completed = TRUE
+      LEFT JOIN exercises e ON e.id = ge.exercise_id
+          WHERE ge.user_id = $1 AND ge.entry_date = $2 AND ge.completed = TRUE
           ORDER BY completed_at NULLS LAST, exercise_name`,
         [userId, date]
       ),

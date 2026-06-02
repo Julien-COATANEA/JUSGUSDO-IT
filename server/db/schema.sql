@@ -177,6 +177,7 @@ ALTER TABLE gym_checklist_entries
   ADD COLUMN IF NOT EXISTS exercise_id INTEGER REFERENCES exercises(id) ON DELETE SET NULL;
 ALTER TABLE gym_checklist_entries ADD COLUMN IF NOT EXISTS performed_reps INTEGER[] DEFAULT '{}';
 ALTER TABLE gym_checklist_entries ALTER COLUMN performed_reps SET DEFAULT '{}';
+ALTER TABLE gym_checklist_entries ADD COLUMN IF NOT EXISTS performed_distance_km NUMERIC(6,2);
 DO $$
 BEGIN
   UPDATE gym_checklist_entries ge
