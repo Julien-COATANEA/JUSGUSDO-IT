@@ -1,5 +1,5 @@
 // ── Service Worker — JuGus Do-It ─────────────────────────────
-const CACHE_NAME = 'jugus-v2';
+const CACHE_NAME = 'jugus-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

@@ -1538,6 +1538,7 @@ const AdminPage = (() => {
     deleteGymZone,
   };
 })();
+window.AdminPage = AdminPage;
 
 // Close exercise card overflow menus when clicking outside
 document.addEventListener('click', e => {

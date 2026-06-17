@@ -958,3 +958,4 @@ const WorkoutPage = (() => {
 
   return { render, init, destroy, toggleDay, toggleExercise, toggleHomeEditor, changeHomeExerciseSetCount, adjustHomeExerciseSetReps, setHomeExercisePerformance, adjustHomeRunningDistance, setHomeRunningDistance, changeWeek, renderWeekStrip, toggleRestDay, openDayActionsSheet, closeDayActionsSheet };
 })();
+window.WorkoutPage = WorkoutPage;

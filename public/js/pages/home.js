@@ -311,3 +311,4 @@ const HomePage = (() => {
 
   return { render, init, logout, destroy, openWizzSheet, sendWizz, closeWizzSheet, WIZZ_MSGS };
 })();
+window.HomePage = HomePage;

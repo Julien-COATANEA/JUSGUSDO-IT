@@ -19,21 +19,27 @@ const Router = (() => {
     profile: 'ProfilePage',
   };
 
+  // Helper: get a top-level global regardless of const/var/let
+  function _getGlobal(name) {
+    try { return (0, eval)(name); } catch (_) { return null; }
+  }
+
   function _loadPageScript(route) {
     if (_pageCache.has(route)) return Promise.resolve(_pageCache.get(route));
     const src = PAGE_SRC[route];
     if (!src) return Promise.reject(new Error(`Unknown route: ${route}`));
-    // If already loaded via static script tag, use it
+    // If already loaded (static script tag or previous dynamic load)
     const globalName = PAGE_GLOBALS[route];
-    if (globalName && window[globalName]) {
-      _pageCache.set(route, window[globalName]);
-      return Promise.resolve(window[globalName]);
+    const existing = globalName ? _getGlobal(globalName) : null;
+    if (existing) {
+      _pageCache.set(route, existing);
+      return Promise.resolve(existing);
     }
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = src;
       script.onload = () => {
-        const mod = window[globalName];
+        const mod = globalName ? _getGlobal(globalName) : null;
         if (mod) {
           _pageCache.set(route, mod);
           resolve(mod);

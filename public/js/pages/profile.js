@@ -1674,4 +1674,5 @@ const ProfilePage = (() => {
 
   return { render, init, destroy, switchStatsTab, globalCalPage, calPage, gymCalPage, setCalFilter, toggleNotif, saveNotifTime, testNotif, openAvatarPicker, selectAvatar, openGlobalDay, openGymDay };
 })();
+window.ProfilePage = ProfilePage;
 

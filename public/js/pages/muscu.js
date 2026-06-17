@@ -2154,3 +2154,4 @@ const MuscuPage = (() => {
 
   return { render, init, showAddRecordForm, showEditRecordForm, cancelRecordForm, openSessionRecord, saveRecord, deleteRecord, toggleAddExerciseInput, cancelAddExercise, confirmAddExercise, removeExerciseFromSession, switchMuscuTab, gymChangeWeek, toggleGymExercise, toggleGymRepsEditor, toggleGymZoneSeriesEditor, changeGymExerciseSetCount, adjustGymExerciseSetReps, setGymExercisePerformance, adjustGymCardioMetric, adjustGymCardioDistance, setGymCardioMetric, setGymCardioDistance, adjustGymZoneSetCount, toggleGymZone, bulkToggleZones, toggleGymRestDay, openDayActionsSheet, closeDayActionsSheet };
 })();
+window.MuscuPage = MuscuPage;

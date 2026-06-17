@@ -136,3 +136,4 @@ const LoginPage = (() => {
 
   return { render, switchTab, submitLogin, submitRegister };
 })();
+window.LoginPage = LoginPage;
