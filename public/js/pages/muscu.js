@@ -1209,10 +1209,15 @@ const MuscuPage = (() => {
 
     // Restore scroll position and accordion open state
     const _newBody = sheet.querySelector('.sheet-body');
-    if (_newBody && _savedScroll > 0) _newBody.scrollTop = _savedScroll;
     if (_openAccordions.size > 0) {
       sheet.querySelectorAll('details.sheet-accordion').forEach((el, i) => {
         if (_openAccordions.has(i)) el.open = true;
+      });
+    }
+    // Defer scroll restore until after browser lays out the new content
+    if (_newBody && _savedScroll > 0) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { _newBody.scrollTop = _savedScroll; });
       });
     }
     // Re-attach swipe handler since innerHTML was replaced

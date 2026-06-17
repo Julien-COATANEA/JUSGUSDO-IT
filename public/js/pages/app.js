@@ -576,6 +576,10 @@ const WorkoutPage = (() => {
     const sheet = document.getElementById('home-day-sheet');
     if (!sheet || !activeSheetDate) return;
 
+    // Preserve scroll position before full re-render
+    const _prevBody = sheet.querySelector('.sheet-body');
+    const _savedScroll = _prevBody ? _prevBody.scrollTop : 0;
+
     const requestedDate = activeSheetDate;
     const dateObj = _dateFromKey(requestedDate);
     const title = `${DAYS_FR[dateObj.getDay()]} ${dateObj.getDate()} ${MONTHS_FR[dateObj.getMonth()]}`;
@@ -753,9 +757,15 @@ const WorkoutPage = (() => {
           <div class="sheet-acc-body">${exercisesHtml}</div>
         </section>`
     );
-  }
 
-  function _refreshDayUI(dateStr) {
+    // Restore scroll position after DOM replacement
+    const _newBody = sheet.querySelector('.sheet-body');
+    if (_newBody && _savedScroll > 0) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { _newBody.scrollTop = _savedScroll; });
+      });
+    }
+  }
     const dates = getWeekDates(weekOffset);
     const oldCard = document.getElementById(`day-${dateStr}`);
     if (oldCard) {
