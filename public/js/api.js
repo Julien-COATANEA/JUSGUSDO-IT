@@ -1,6 +1,7 @@
 // ── API helper ──────────────────────────────────────────────
 const API = (() => {
   const BASE = '/api';
+  const TIMEOUT_MS = 15000;
 
   function getToken() {
     return localStorage.getItem('token') || sessionStorage.getItem('token');
@@ -11,21 +12,35 @@ const API = (() => {
     const token = getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch(BASE + path, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    // AbortController for timeout on mobile networks
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-    const data = await res.json().catch(() => ({}));
+    try {
+      const res = await fetch(BASE + path, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
 
-    if (!res.ok) {
-      const msg = data.detail
-        ? `${data.error || 'Erreur'} (${res.status}) — ${data.detail}`
-        : (data.error || `Erreur ${res.status}`);
-      throw new Error(msg);
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const msg = data.detail
+          ? `${data.error || 'Erreur'} (${res.status}) — ${data.detail}`
+          : (data.error || `Erreur ${res.status}`);
+        throw new Error(msg);
+      }
+      return data;
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        throw new Error('⏳ Problème de connexion — le serveur ne répond pas. Vérifie ton réseau mobile.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
-    return data;
   }
 
   return {

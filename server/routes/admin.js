@@ -4,27 +4,34 @@ const { requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
-// GET /api/admin/exercises — all exercises with assigned user ids and per-user schedules
+// GET /api/admin/exercises — all exercises (paginated)
 router.get('/exercises', requireAdmin, async (req, res) => {
   try {
-    const result = await db.query(
-      `SELECT e.*,
-              COALESCE(
-                ARRAY_AGG(uea.user_id) FILTER (WHERE uea.user_id IS NOT NULL),
-                '{}'::integer[]
-              ) AS assigned_users,
-              COALESCE(
-                JSON_AGG(
-                  JSON_BUILD_OBJECT('user_id', uea.user_id, 'schedule', COALESCE(uea.schedule, '{}'))
-                ) FILTER (WHERE uea.user_id IS NOT NULL),
-                '[]'::json
-              ) AS assignments
-       FROM exercises e
-       LEFT JOIN user_exercise_assignments uea ON uea.exercise_id = e.id
-       GROUP BY e.id
-       ORDER BY e.order_index ASC, e.id ASC`
-    );
-    res.json({ exercises: result.rows });
+    const limit = Math.min(parseInt(req.query.limit) || 200, 1000);
+    const offset = parseInt(req.query.offset) || 0;
+    const [countRes, result] = await Promise.all([
+      db.query('SELECT COUNT(*)::int AS total FROM exercises'),
+      db.query(
+        `SELECT e.*,
+                COALESCE(
+                  ARRAY_AGG(uea.user_id) FILTER (WHERE uea.user_id IS NOT NULL),
+                  '{}'::integer[]
+                ) AS assigned_users,
+                COALESCE(
+                  JSON_AGG(
+                    JSON_BUILD_OBJECT('user_id', uea.user_id, 'schedule', COALESCE(uea.schedule, '{}'))
+                  ) FILTER (WHERE uea.user_id IS NOT NULL),
+                  '[]'::json
+                ) AS assignments
+         FROM exercises e
+         LEFT JOIN user_exercise_assignments uea ON uea.exercise_id = e.id
+         GROUP BY e.id
+         ORDER BY e.order_index ASC, e.id ASC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      ),
+    ]);
+    res.json({ exercises: result.rows, total: countRes.rows[0].total, limit, offset });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -125,13 +132,19 @@ router.delete('/exercises/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// GET /api/admin/users — all users
+// GET /api/admin/users — all users (paginated)
 router.get('/users', requireAdmin, async (req, res) => {
   try {
-    const result = await db.query(
-      'SELECT id, username, is_admin, xp, created_at FROM users ORDER BY xp DESC'
-    );
-    res.json({ users: result.rows });
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const offset = parseInt(req.query.offset) || 0;
+    const [countRes, result] = await Promise.all([
+      db.query('SELECT COUNT(*)::int AS total FROM users'),
+      db.query(
+        'SELECT id, username, is_admin, xp, created_at FROM users ORDER BY xp DESC LIMIT $1 OFFSET $2',
+        [limit, offset]
+      ),
+    ]);
+    res.json({ users: result.rows, total: countRes.rows[0].total, limit, offset });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });

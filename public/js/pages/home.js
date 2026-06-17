@@ -2,6 +2,7 @@
 const HomePage = (() => {
   let _refreshTimer  = null;
   let _todayStatus   = null;
+  let _visHandler    = null;  // visibilitychange handler ref for cleanup
 
   // Wizz message catalogue (also referenced in profile.js)
   const WIZZ_MSGS = {
@@ -62,6 +63,22 @@ const HomePage = (() => {
         `<p style="color:var(--text3);text-align:center;padding:40px 0">Erreur de chargement</p>`;
     }
     clearInterval(_refreshTimer);
+    _startPolling(today);
+
+    // Pause polling when app is backgrounded (save battery & data)
+    if (_visHandler) document.removeEventListener('visibilitychange', _visHandler);
+    _visHandler = () => {
+      if (document.hidden) {
+        clearInterval(_refreshTimer);
+        _refreshTimer = null;
+      } else {
+        if (!_refreshTimer) _startPolling(today);
+      }
+    };
+    document.addEventListener('visibilitychange', _visHandler);
+  }
+
+  function _startPolling(today) {
     _refreshTimer = setInterval(async () => {
       if (!document.getElementById('players-grid')) { clearInterval(_refreshTimer); return; }
       try {
@@ -283,7 +300,14 @@ const HomePage = (() => {
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  function destroy() { clearInterval(_refreshTimer); }
+  function destroy() {
+    clearInterval(_refreshTimer);
+    _refreshTimer = null;
+    if (_visHandler) {
+      document.removeEventListener('visibilitychange', _visHandler);
+      _visHandler = null;
+    }
+  }
 
   return { render, init, logout, destroy, openWizzSheet, sendWizz, closeWizzSheet, WIZZ_MSGS };
 })();

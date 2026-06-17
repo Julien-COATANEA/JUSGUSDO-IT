@@ -61,18 +61,13 @@
     </div>
   </div>
 
-  <script src="/js/notifications.js"></script>
-  <script src="/js/api.js"></script>
-  <!-- <script src="/js/dev-mock.js"></script> -->
-  <script src="/js/gamification.js"></script>
-  <script src="/js/minigame.js"></script>
-  <script src="/js/pages/login.js"></script>
-  <script src="/js/pages/home.js"></script>
-  <script src="/js/pages/app.js"></script>
-  <script src="/js/pages/admin.js"></script>
-  <script src="/js/pages/profile.js"></script>
-  <script src="/js/pages/muscu.js"></script>
-  <script src="/js/router.js"></script>
+  <script src="/js/notifications.js" defer></script>
+  <script src="/js/api.js" defer></script>
+  <!-- <script src="/js/dev-mock.js" defer></script> -->
+  <script src="/js/gamification.js" defer></script>
+  <script src="/js/minigame.js" defer></script>
+  <!-- Pages loaded dynamically by router.js -->
+  <script src="/js/router.js" defer></script>
 
   <!-- ── Wizz notification splash ──────────────────────────── -->
   <div id="wizz-splash" style="display:none" onclick="this.style.display='none'">
@@ -80,10 +75,12 @@
       <div class="wizz-splash-label">⚡ T'AS REÇU UN WIZZ</div>
       <div class="wizz-splash-from" id="wizz-splash-from"></div>
       <div class="wizz-splash-gif-wrap">
-        <img class="wizz-splash-gif" id="wizz-splash-img"
-          src="https://media.giphy.com/media/OUwzqE4ZOk5Bm/giphy.gif"
-          alt="miam miam"
-          onerror="this.src='https://media.giphy.com/media/xT9DPJVjlYHwWsZRxm/giphy.gif'" />
+        <div class="wizz-splash-anim" aria-label="Animation wizz">
+          <span class="wizz-anim-emoji">⚡</span>
+          <span class="wizz-anim-spark spark-1"></span>
+          <span class="wizz-anim-spark spark-2"></span>
+          <span class="wizz-anim-spark spark-3"></span>
+        </div>
       </div>
       <div class="wizz-splash-msg">t'as intérêt à aller t'entraîner 😏</div>
       <button class="wizz-splash-close" onclick="document.getElementById('wizz-splash').style.display='none'">OK j'y vais 💪</button>

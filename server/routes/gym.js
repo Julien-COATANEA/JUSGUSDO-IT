@@ -746,7 +746,7 @@ router.get('/day/:userId/:date', requireAuth, async (req, res) => {
                 COALESCE(e.is_running, FALSE) AS is_running,
                 e.unit,
                 e.emoji
-           FROM gym_checklist_entries
+           FROM gym_checklist_entries ge
       LEFT JOIN exercises e ON e.id = ge.exercise_id
           WHERE ge.user_id = $1 AND ge.entry_date = $2 AND ge.completed = TRUE
           ORDER BY completed_at NULLS LAST, exercise_name`,

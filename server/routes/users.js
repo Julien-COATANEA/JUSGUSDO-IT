@@ -13,15 +13,27 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   }
 }
 
-// GET /api/users — all users with avatar
+// GET /api/users — all users with avatar (paginated)
 router.get('/', async (req, res) => {
   try {
-    const result = await db.query(
-      `SELECT id, username, is_admin, xp, avatar, tokens
-       FROM users
-       ORDER BY username ASC`
-    );
-    res.json({ users: result.rows });
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    const offset = parseInt(req.query.offset) || 0;
+    const [countRes, result] = await Promise.all([
+      db.query('SELECT COUNT(*)::int AS total FROM users'),
+      db.query(
+        `SELECT id, username, is_admin, xp, avatar, tokens
+         FROM users
+         ORDER BY username ASC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      ),
+    ]);
+    res.json({
+      users: result.rows,
+      total: countRes.rows[0].total,
+      limit,
+      offset,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -40,16 +52,54 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
     );
     if (!userRes.rows[0]) return res.status(404).json({ error: 'Utilisateur introuvable' });
 
-    // Totals
-    const totalsRes = await db.query(
-      `SELECT COUNT(*) AS total_completed,
-              COUNT(DISTINCT entry_date) AS active_days
-       FROM checklist_entries ce
-       JOIN exercises e ON e.id = ce.exercise_id
-       WHERE ce.user_id = $1 AND ce.completed = TRUE
-         AND COALESCE(e.type, 'home') = 'home'`,
+    // ── Consolidated stats query (5 queries → 1 CTE) ──────
+    const statsRes = await db.query(
+      `WITH home_ex AS (
+         SELECT id, name FROM exercises
+         WHERE is_active = TRUE AND COALESCE(type, 'home') = 'home'
+       ),
+       completed AS (
+         SELECT ce.entry_date, e.name
+         FROM checklist_entries ce
+         JOIN home_ex e ON e.id = ce.exercise_id
+         WHERE ce.user_id = $1 AND ce.completed = TRUE
+       ),
+       totals AS (
+         SELECT COUNT(*)::int AS total_completed,
+                COUNT(DISTINCT entry_date)::int AS active_days
+         FROM completed
+       ),
+       dates_list AS (
+         SELECT entry_date FROM completed
+         GROUP BY entry_date ORDER BY entry_date
+       ),
+       top_ex AS (
+         SELECT name, COUNT(*)::int AS times
+         FROM completed
+         GROUP BY name ORDER BY times DESC LIMIT 5
+       ),
+       today_done AS (
+         SELECT COUNT(*)::int AS done
+         FROM completed WHERE entry_date = CURRENT_DATE
+       ),
+       xp_dates AS (
+         SELECT entry_date FROM completed
+         WHERE entry_date >= CURRENT_DATE - 29
+         GROUP BY entry_date ORDER BY entry_date
+       )
+       SELECT (SELECT row_to_json(totals.*) FROM totals) AS totals,
+              (SELECT json_agg(entry_date ORDER BY entry_date) FROM dates_list) AS dates,
+              (SELECT json_agg(row_to_json(top_ex.*) ORDER BY times DESC) FROM top_ex) AS top_exercises,
+              (SELECT done FROM today_done) AS today_done,
+              (SELECT json_agg(entry_date ORDER BY entry_date) FROM xp_dates) AS xp_dates`,
       [userId]
     );
+
+    const st = statsRes.rows[0];
+    const totals       = st.totals || { total_completed: 0, active_days: 0 };
+    const dates        = st.dates || [];
+    const topExercises = st.top_exercises || [];
+    const todayDone    = st.today_done || 0;
 
     // Days where every active home exercise was completed
     const fullDaysRes = await db.query(
@@ -75,44 +125,6 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
        SELECT COUNT(*) AS full_days
        FROM day_totals
        WHERE total_for_day > 0 AND done >= total_for_day`,
-      [userId]
-    );
-
-    // Days with at least one home activity (used for streaks and reward history)
-    const datesRes = await db.query(
-      `SELECT DISTINCT ce.entry_date
-       FROM checklist_entries ce
-       JOIN exercises e ON e.id = ce.exercise_id
-       WHERE ce.user_id = $1
-         AND ce.completed = TRUE
-         AND e.is_active = TRUE
-         AND COALESCE(e.type, 'home') = 'home'
-       ORDER BY entry_date`,
-      [userId]
-    );
-
-    // Top exercises
-    const topExRes = await db.query(
-      `SELECT e.name, COUNT(*) AS times
-       FROM checklist_entries ce
-       JOIN exercises e ON e.id = ce.exercise_id
-       WHERE ce.user_id = $1 AND ce.completed = TRUE
-         AND COALESCE(e.type, 'home') = 'home'
-       GROUP BY e.name
-       ORDER BY times DESC
-       LIMIT 5`,
-      [userId]
-    );
-
-    // Today's status
-    const todayDoneRes = await db.query(
-      `SELECT COUNT(*) AS done
-       FROM checklist_entries ce
-       JOIN exercises e ON e.id = ce.exercise_id AND e.is_active = TRUE
-       WHERE ce.user_id = $1
-         AND ce.entry_date = CURRENT_DATE
-         AND ce.completed = TRUE
-         AND COALESCE(e.type, 'home') = 'home'`,
       [userId]
     );
 
@@ -158,31 +170,12 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       [userId]
     );
 
-    // Daily XP for last 30 days: a home day with at least one activity grants 30 XP.
-    const xpHistoryRes = await db.query(
-      `SELECT DISTINCT ce.entry_date,
-              30 AS xp_earned
-       FROM checklist_entries ce
-       JOIN exercises e ON e.id = ce.exercise_id
-       WHERE ce.user_id = $1
-         AND ce.completed = TRUE
-         AND e.is_active = TRUE
-         AND COALESCE(e.type, 'home') = 'home'
-         AND ce.entry_date >= CURRENT_DATE - 29
-       ORDER BY ce.entry_date`,
-      [userId]
-    );
-
-    // Compute streaks
-    const dates = datesRes.rows.map(r => {
-      const d = r.entry_date;
-      return typeof d === 'string' ? d : d.toISOString().split('T')[0];
-    });
-
+    // Compute streaks from consolidated dates list
     let bestStreak = 0, currentStreak = 0;
-    if (dates.length) {
+    const dateCount = Array.isArray(dates) ? dates.length : 0;
+    if (dateCount) {
       let streak = 1, maxStreak = 1;
-      for (let i = 1; i < dates.length; i++) {
+      for (let i = 1; i < dateCount; i++) {
         const diff = (new Date(dates[i]) - new Date(dates[i - 1])) / 86400000;
         if (diff === 1) { streak++; if (streak > maxStreak) maxStreak = streak; }
         else streak = 1;
@@ -191,10 +184,10 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
 
       const today = new Date().toISOString().split('T')[0];
       const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      const lastDate = dates[dates.length - 1];
+      const lastDate = dates[dateCount - 1];
       if (lastDate === today || lastDate === yesterday) {
         let cs = 1;
-        for (let i = dates.length - 2; i >= 0; i--) {
+        for (let i = dateCount - 2; i >= 0; i--) {
           const diff = (new Date(dates[i + 1]) - new Date(dates[i])) / 86400000;
           if (diff === 1) cs++;
           else break;
@@ -203,17 +196,21 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       }
     }
 
-    const todayDone = parseInt(todayDoneRes.rows[0].done, 10);
+    // XP history: one entry per date in the last 30 days (30 XP per active day)
+    const xpDates = st.xp_dates || [];
+    const xpHistory = Array.isArray(xpDates)
+      ? xpDates.map(d => ({ date: d, xp_earned: 30 }))
+      : [];
 
     res.json({
       user: userRes.rows[0],
       stats: {
-        total_completed: parseInt(totalsRes.rows[0].total_completed),
-        active_days:     parseInt(totalsRes.rows[0].active_days),
+        total_completed: totals.total_completed || 0,
+        active_days:     totals.active_days || 0,
         full_days:       parseInt(fullDaysRes.rows[0].full_days),
         best_streak:     bestStreak,
         current_streak:  currentStreak,
-        top_exercises:   topExRes.rows,
+        top_exercises:   topExercises,
         today_done:      todayDone,
         today_total:     0,
         today_is_active: todayDone > 0,
@@ -222,10 +219,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
           done:  parseInt(r.done),
           total: parseInt(r.total),
         })),
-        xp_history: xpHistoryRes.rows.map(r => ({
-          date:       typeof r.entry_date === 'string' ? r.entry_date : r.entry_date.toISOString().split('T')[0],
-          xp_earned:  parseInt(r.xp_earned),
-        })),
+        xp_history: xpHistory,
       },
     });
   } catch (err) {

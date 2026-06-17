@@ -9,6 +9,7 @@ if (missing.length) {
 }
 
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
@@ -30,6 +31,7 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 
 const app = express();
 
+app.use(compression());  // gzip compress all responses
 app.use(cors());
 app.use(express.json());
 

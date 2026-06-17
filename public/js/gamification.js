@@ -42,22 +42,24 @@ const Gamification = (() => {
     popup.addEventListener('animationend', () => popup.remove());
   }
 
-  function launchConfetti(count = 30) {
+  // Lightweight confetti — capped at 8 pieces, uses RAF for smooth animation
+  function launchConfetti(count = 8) {
+    const max = Math.min(count, 8);
     const colors = ['#e94560','#4ecdc4','#f5c518','#7c5cbf','#2ecc71','#ff7292'];
-    for (let i = 0; i < count; i++) {
-      setTimeout(() => {
-        const c = document.createElement('div');
-        c.className = 'confetti-piece';
-        c.style.left = `${Math.random() * 100}vw`;
-        c.style.top = `${Math.random() * 40}vh`;
-        c.style.background = colors[Math.floor(Math.random() * colors.length)];
-        c.style.width = `${6 + Math.random() * 8}px`;
-        c.style.height = `${6 + Math.random() * 8}px`;
-        c.style.animationDuration = `${1 + Math.random()}s`;
-        document.body.appendChild(c);
-        c.addEventListener('animationend', () => c.remove());
-      }, Math.random() * 400);
+    const fragment = document.createDocumentFragment();
+    for (let i = 0; i < max; i++) {
+      const c = document.createElement('div');
+      c.className = 'confetti-piece';
+      c.style.left = `${Math.random() * 100}vw`;
+      c.style.top = `${Math.random() * 40}vh`;
+      c.style.background = colors[Math.floor(Math.random() * colors.length)];
+      c.style.width = `${6 + Math.random() * 8}px`;
+      c.style.height = `${6 + Math.random() * 8}px`;
+      c.style.animationDuration = `${1 + Math.random()}s`;
+      c.addEventListener('animationend', () => c.remove());
+      fragment.appendChild(c);
     }
+    requestAnimationFrame(() => document.body.appendChild(fragment));
   }
 
   return { getRank, getProgress, spawnXPPopup, launchConfetti, RANKS };

@@ -1,12 +1,58 @@
 // ── SPA Router ───────────────────────────────────────────────
 const Router = (() => {
-  const PAGES = {
-    login:   { page: LoginPage,   requireAuth: false, requireAdmin: false },
-    home:    { page: HomePage,    requireAuth: true,  requireAdmin: false },
-    app:     { page: WorkoutPage, requireAuth: true,  requireAdmin: false },
-    muscu:   { page: MuscuPage,   requireAuth: true,  requireAdmin: false },
-    admin:   { page: AdminPage,   requireAuth: true,  requireAdmin: false },
-    profile: { page: ProfilePage, requireAuth: true,  requireAdmin: false },
+  // Lazy-load page modules on first navigation
+  const _pageCache = new Map();
+  const PAGE_SRC = {
+    login:   '/js/pages/login.js',
+    home:    '/js/pages/home.js',
+    app:     '/js/pages/app.js',
+    muscu:   '/js/pages/muscu.js',
+    admin:   '/js/pages/admin.js',
+    profile: '/js/pages/profile.js',
+  };
+  const PAGE_GLOBALS = {
+    login:   'LoginPage',
+    home:    'HomePage',
+    app:     'WorkoutPage',
+    muscu:   'MuscuPage',
+    admin:   'AdminPage',
+    profile: 'ProfilePage',
+  };
+
+  function _loadPageScript(route) {
+    if (_pageCache.has(route)) return Promise.resolve(_pageCache.get(route));
+    const src = PAGE_SRC[route];
+    if (!src) return Promise.reject(new Error(`Unknown route: ${route}`));
+    // If already loaded via static script tag, use it
+    const globalName = PAGE_GLOBALS[route];
+    if (globalName && window[globalName]) {
+      _pageCache.set(route, window[globalName]);
+      return Promise.resolve(window[globalName]);
+    }
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = () => {
+        const mod = window[globalName];
+        if (mod) {
+          _pageCache.set(route, mod);
+          resolve(mod);
+        } else {
+          reject(new Error(`Module ${globalName} not found after loading ${src}`));
+        }
+      };
+      script.onerror = () => reject(new Error(`Failed to load ${src}`));
+      document.head.appendChild(script);
+    });
+  }
+
+  const PAGE_CONFIG = {
+    login:   { requireAuth: false, requireAdmin: false },
+    home:    { requireAuth: true,  requireAdmin: false },
+    app:     { requireAuth: true,  requireAdmin: false },
+    muscu:   { requireAuth: true,  requireAdmin: false },
+    admin:   { requireAuth: true,  requireAdmin: false },
+    profile: { requireAuth: true,  requireAdmin: false },
   };
 
   function isLoggedIn() {
@@ -51,25 +97,38 @@ const Router = (() => {
   let _currentRoute = null;
 
   async function navigate(route, params = {}) {
-    const config = PAGES[route];
+    const config = PAGE_CONFIG[route];
     if (!config) return navigate('login');
 
     if (config.requireAuth && !isLoggedIn()) return navigate('login');
     if (!config.requireAuth && isLoggedIn() && route === 'login') return navigate('app');
     if (config.requireAdmin && !isAdmin()) return navigate('home');
 
+    // Lazy-load the page module
+    let page;
+    try {
+      page = await _loadPageScript(route);
+    } catch (err) {
+      console.error(`Failed to load page "${route}":`, err);
+      document.getElementById('app').innerHTML =
+        `<p style="color:var(--text3);text-align:center;padding:40px 0">Erreur de chargement</p>`;
+      return;
+    }
+
     // Cleanup previous page
     if (_currentRoute && _currentRoute !== route) {
-      const prev = PAGES[_currentRoute];
-      if (prev?.page?.destroy) prev.page.destroy();
+      try {
+        const prevPage = await _loadPageScript(_currentRoute);
+        if (prevPage?.destroy) prevPage.destroy();
+      } catch (_) {}
     }
     _currentRoute = route;
 
     const app = document.getElementById('app');
-    app.innerHTML = config.page.render();
+    app.innerHTML = page.render();
 
-    if (config.page.init) {
-      await config.page.init(params);
+    if (page.init) {
+      await page.init(params);
     }
 
     renderBottomNav(route);
