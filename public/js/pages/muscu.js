@@ -387,7 +387,7 @@ const MuscuPage = (() => {
     _loadCustomExercises();
     _gymWeekOffset = 0;
     _gymEntries = {};
-    _gymWeekExercises = {};
+    let _gymWeekExercises = {};
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     _userId = currentUser.id;
 

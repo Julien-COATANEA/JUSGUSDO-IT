@@ -766,6 +766,8 @@ const WorkoutPage = (() => {
       });
     }
   }
+
+  function _refreshDayUI(dateStr) {
     const dates = getWeekDates(weekOffset);
     const oldCard = document.getElementById(`day-${dateStr}`);
     if (oldCard) {
