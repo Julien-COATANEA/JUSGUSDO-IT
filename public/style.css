@@ -5473,97 +5473,18 @@ html, body {
   border-radius: 10px;
   margin-top: 6px;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: background 0.14s, border-color 0.14s;
 }
 .sheet-acc-body .exercise-item.sheet-exercise-row:first-child { margin-top: 0; }
 .sheet-acc-body .exercise-item.sheet-exercise-row:hover {
+  background: rgba(255,255,255,0.055);
+}
 .sheet-acc-body .exercise-item.sheet-exercise-row:active {
   background: rgba(255,255,255,0.08);
   border-color: rgba(255,255,255,0.12);
 }
-  background: rgba(255,255,255,0.055);
-}
-.sheet-acc-body .exercise-item.sheet-exercise-row.checked {
-  background: rgba(34,209,139,0.06);
-  border-color: rgba(34,209,139,0.2);
-}
-.sheet-acc-body .exercise-item.sheet-exercise-row .exercise-info { flex: 1; min-width: 0; }
-.sheet-acc-body .exercise-item.sheet-exercise-row .exercise-name {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sheet-acc-body .exercise-item.sheet-exercise-row.checked .exercise-name {
-  text-decoration: line-through;
-  color: var(--text3);
-}
-/* Right side: tag + checkmark */
-.sheet-ex-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.sheet-tag-reps {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text2);
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.07);
-  white-space: nowrap;
-}
-.sheet-exercise-row.checked .sheet-tag-reps {
-  opacity: 0.45;
-}
-.sheet-exercise-row.checked .sheet-tag-reps.sheet-tag-reps-btn {
-  opacity: 1;
-}
-.sheet-ex-check {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: 800;
-  color: transparent;
-  flex-shrink: 0;
-  transition: all 0.18s cubic-bezier(0.34,1.56,0.64,1);
-}
-.sheet-ex-check.on {
-  background: var(--green);
-  border-color: var(--green);
-  color: #fff;
-  box-shadow: 0 0 10px rgba(34,209,139,0.45);
-}
-/* === Sheet exercise rows (style "records card") ========================== */
-/* Override .exercise-item only inside the day-actions sheet accordion */
-.sheet-acc-body .exercise-item.sheet-exercise-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 13px 14px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 10px;
-  margin-top: 6px;
-  cursor: pointer;
-  transition: background 0.14s, border-color 0.14s;
-}
-.sheet-acc-body .exercise-item.sheet-exercise-row:first-child { margin-top: 0; }
-.sheet-acc-body .exercise-item.sheet-exercise-row:hover {
-  background: rgba(255,255,255,0.055);
-}
 .sheet-acc-body .exercise-item.sheet-exercise-row.checked {
   background: rgba(34,209,139,0.06);
   border-color: rgba(34,209,139,0.2);
@@ -5604,17 +5525,18 @@ html, body {
   opacity: 0.45;
 }
 .sheet-ex-check {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 800;
   color: transparent;
   flex-shrink: 0;
+  touch-action: manipulation;
   transition: all 0.18s cubic-bezier(0.34,1.56,0.64,1);
 }
 .sheet-ex-check.on {
@@ -5636,6 +5558,9 @@ html, body {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 44px;
 }
 .sheet-reps-editor {
   width: 100%;
@@ -5662,6 +5587,8 @@ html, body {
   gap: 5px;
   font: inherit;
   cursor: pointer;
+  touch-action: manipulation;
+  min-height: 36px;
   transition: opacity 0.16s, border-color 0.16s, background 0.16s, color 0.16s, transform 0.1s;
 }
 .sheet-tag-reps-btn:hover {
@@ -5770,7 +5697,7 @@ html, body {
 .sheet-stepper-btn:active {
   transform: scale(0.94);
 }
-.sheet-stepper-btn.compact { width: 36px; height: 36px; border-radius: 50%; font-size: 17px; }
+.sheet-stepper-btn.compact { width: 44px; height: 44px; border-radius: 50%; font-size: 18px; touch-action: manipulation; }
 .sheet-stepper-value {
   min-width: 44px;
   text-align: center;
@@ -6038,6 +5965,8 @@ html, body {
   width: 100%;
   cursor: pointer;
   padding: 14px 14px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .zone-card.single:hover { background: linear-gradient(180deg, color-mix(in srgb, var(--zc) 14%, transparent), rgba(255,255,255,0.03)); }
 .zone-card.single:active { transform: scale(0.985); }
@@ -6107,6 +6036,11 @@ html, body {
 
 .sheet-acc-body .exercise-item.sheet-exercise-row.readonly.checked:hover {
   background: rgba(34,209,139,0.06);
+}
+.sheet-ex-busy {
+  pointer-events: none;
+  opacity: 0.55;
+  transition: opacity 0.1s;
 }
 
 .zone-card.single.readonly,
@@ -6190,6 +6124,9 @@ html, body {
   cursor: pointer;
   font-family: inherit;
   color: var(--text2);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 44px;
   transition: background 0.16s, border-color 0.16s, transform 0.08s, color 0.16s;
 }
 .zone-tile:hover {
@@ -6251,6 +6188,8 @@ html, body {
   padding: 6px 10px;
   border-radius: 999px;
   cursor: pointer;
+  touch-action: manipulation;
+  min-height: 36px;
   transition: background 0.16s, border-color 0.16s, transform 0.08s;
 }
 
@@ -6612,4 +6551,38 @@ html, body {
   40%  { transform: rotate(4deg) scale(1.08); }
   60%  { transform: rotate(-3deg) scale(1.05); }
   80%  { transform: rotate(3deg) scale(1.02); }
+}
+
+/* ================================================================
+   MOBILE TOUCH IMPROVEMENTS — overrides for duplicate blocks
+   ================================================================ */
+.sheet-accordion summary {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 44px;
+}
+.rest-toggle-btn {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.sheet-close {
+  touch-action: manipulation;
+  min-width: 44px;
+  min-height: 44px;
+}
+.sheet-tag-reps-btn {
+  touch-action: manipulation;
+  min-height: 36px;
+}
+.zone-series-badge {
+  touch-action: manipulation;
+}
+.zone-series-btn {
+  touch-action: manipulation;
+  min-width: 44px;
+  min-height: 44px;
+}
+.sheet-reps-preset {
+  touch-action: manipulation;
+  min-height: 36px;
 }

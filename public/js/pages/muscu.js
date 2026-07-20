@@ -14,6 +14,7 @@ const MuscuPage = (() => {
   let _activeSheetDate = null;     // 'YYYY-MM-DD' currently shown in day-actions sheet
   let _activeGymRepsEditorKey = null;
   let _activeGymZoneSeriesEditorKey = null;
+  const _gymPendingToggles = new Set(); // prevents double-tap on slow networks
 
   const _DAYS_FR = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
   const _MONTHS_FR = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
@@ -1071,7 +1072,7 @@ const MuscuPage = (() => {
               </div>`) : '';
             return `
               <div class="exercise-item sheet-exercise-row${checked ? ' checked' : ''}${isEditorOpen ? ' has-reps-editor' : ''}"
-                   >
+                   data-ex-id="${safeExId}" data-session="${_escape(session.name)}">
                 <div class="sheet-ex-main"
                      onclick="MuscuPage.toggleGymExercise(${safeExId},'${safeEx}','${safeSes}','${dateStr}',${parseInt(exSets, 10) || 0},${parseInt(exReps, 10) || 0},this.closest('.sheet-exercise-row'),event)">
                   <div class="exercise-info">
@@ -1090,7 +1091,7 @@ const MuscuPage = (() => {
               <summary style="--session-color:${session.color || '#888'}">
                 <span class="sheet-acc-icon">${session.icon || '🏋️'}</span>
                 <span class="sheet-acc-title">${_escape(session.name)}</span>
-                <span class="sheet-acc-count">${doneInSession}/${exs.length}</span>
+                <span class="sheet-acc-count" data-session-count="${_escape(session.name)}">${doneInSession}/${exs.length}</span>
               </summary>
               <div class="sheet-acc-body">${itemsHtml}</div>
             </details>`;
@@ -1111,6 +1112,7 @@ const MuscuPage = (() => {
             const isEditorOpen = on && _activeGymZoneSeriesEditorKey === editorKey;
             return `<div class="zone-single-wrap">
               <button type="button" class="zone-card single${on ? ' on' : ''}" style="--zc:${color}"
+                data-zone-id="${p.id}"
                 onclick="MuscuPage.toggleGymZone(${p.id}, '${dateStr}')">
                 <span class="zone-card-emoji">${_escape(p.icon || '💪')}</span>
                 <div class="zone-card-text">
@@ -1145,6 +1147,7 @@ const MuscuPage = (() => {
             const isEditorOpen = on && _activeGymZoneSeriesEditorKey === editorKey;
             return `<div class="zone-tile-wrap${isEditorOpen ? ' editing' : ''}">
               <button type="button" class="zone-tile${on ? ' on' : ''}" style="--zc:${zoneColor}"
+                data-zone-id="${z.id}"
                 onclick="MuscuPage.toggleGymZone(${z.id}, '${dateStr}')"
                 aria-pressed="${on}">
                 <span class="zone-tile-emoji">${_escape(z.icon || '💪')}</span>
@@ -1209,14 +1212,20 @@ const MuscuPage = (() => {
 
     // Restore scroll position and accordion open state
     const _newBody = sheet.querySelector('.sheet-body');
+    // Immediately restore scroll position BEFORE opening accordions (prevents native <details> auto-scroll)
+    if (_newBody && _savedScroll > 0) {
+      _newBody.scrollTop = _savedScroll;
+    }
+    // Restore accordion open states
     if (_openAccordions.size > 0) {
       sheet.querySelectorAll('details.sheet-accordion').forEach((el, i) => {
         if (_openAccordions.has(i)) el.open = true;
       });
     }
-    // Defer scroll restore until after browser lays out the new content
+    // Re-assert scroll position AFTER accordion opening (browser may have auto-scrolled to first open <details>)
     if (_newBody && _savedScroll > 0) {
       requestAnimationFrame(() => {
+        _newBody.scrollTop = _savedScroll;
         requestAnimationFrame(() => { _newBody.scrollTop = _savedScroll; });
       });
     }
@@ -1440,11 +1449,13 @@ const MuscuPage = (() => {
         performed_distance_km: _normalizeGymDistanceKm(result.performed_distance_km),
       };
       _syncGymXp(result, anchorEl);
-      _refreshDayUI(dateStr);
+      _refreshDayUI(dateStr, { skipSheet: true });
+      _updateSheetExerciseRow(dateStr, exerciseId, exerciseName, sessionName);
     } catch (err) {
       if (previousEntry) _gymEntries[entryKey] = previousEntry;
       else delete _gymEntries[entryKey];
-      _refreshDayUI(dateStr);
+      _refreshDayUI(dateStr, { skipSheet: true });
+      _updateSheetExerciseRow(dateStr, exerciseId, exerciseName, sessionName);
       if (typeof App !== 'undefined') App.showToast('Erreur : ' + err.message);
     }
   }
@@ -1452,10 +1463,19 @@ const MuscuPage = (() => {
   async function toggleGymExercise(exerciseId, exerciseName, sessionName, dateStr, plannedSets, plannedReps, el, evt) {
     if (evt?.target?.closest && evt.target.closest('.sheet-reps-editor, .sheet-tag-reps-btn')) return;
 
+    // Anti-double-tap: ignore if this exercise is already being processed
+    const toggleKey = `ex_${dateStr}_${exerciseId || exerciseName}_${sessionName}`;
+    if (_gymPendingToggles.has(toggleKey)) return;
+
     // Block future dates
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const [y, m, d] = dateStr.split('-').map(Number);
     if (new Date(y, m - 1, d) > today) return;
+
+    // Visual feedback: mark row as busy
+    const row = el?.closest('.sheet-exercise-row');
+    if (row) row.classList.add('sheet-ex-busy');
+    _gymPendingToggles.add(toggleKey);
 
     const entryKey = _getGymEntryKey(dateStr, exerciseId, exerciseName);
     const wasChecked = _gymEntries[entryKey]?.completed || false;
@@ -1477,7 +1497,12 @@ const MuscuPage = (() => {
       _activeGymRepsEditorKey = null;
     }
 
-    await _persistGymExercisePerformance(exerciseId, exerciseName, sessionName, dateStr, nextPerformedReps, nextDistanceKm, el, previousEntry);
+    try {
+      await _persistGymExercisePerformance(exerciseId, exerciseName, sessionName, dateStr, nextPerformedReps, nextDistanceKm, el, previousEntry);
+    } finally {
+      _gymPendingToggles.delete(toggleKey);
+      if (row) row.classList.remove('sheet-ex-busy');
+    }
   }
 
   function toggleGymRepsEditor(exerciseId, exerciseName, sessionName, dateStr) {
@@ -1696,9 +1721,15 @@ const MuscuPage = (() => {
   }
 
   async function toggleGymZone(zoneId, dateStr) {
+    // Anti-double-tap
+    const toggleKey = `zone_${dateStr}_${zoneId}`;
+    if (_gymPendingToggles.has(toggleKey)) return;
+
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const [y, m, d] = dateStr.split('-').map(Number);
     if (new Date(y, m - 1, d) > today) return;
+
+    _gymPendingToggles.add(toggleKey);
 
     const previousEntries = _cloneGymZoneEntriesForDate(dateStr);
     const wasOn = previousEntries.has(zoneId);
@@ -1710,7 +1741,8 @@ const MuscuPage = (() => {
       _activeGymZoneSeriesEditorKey = null;
     }
     _setGymZoneEntriesForDate(dateStr, nextEntries);
-    _refreshDayUI(dateStr);
+    _refreshDayUI(dateStr, { skipSheet: true });
+    _updateSheetZoneTile(dateStr, zoneId);
     const mutation = _beginGymZoneMutation(dateStr, zoneId);
 
     return _queueGymZoneMutation(dateStr, zoneId, async () => {
@@ -1731,15 +1763,19 @@ const MuscuPage = (() => {
                         || document.querySelector('.gym-day-sheet');
             if (anchor) Gamification.spawnXPPopup(anchor, `${result.xpDelta > 0 ? '+' : ''}${result.xpDelta} XP`);
           }
-          _refreshDayUI(dateStr);
+          _refreshDayUI(dateStr, { skipSheet: true });
+          _updateSheetZoneTile(dateStr, zoneId);
         }
       } catch (err) {
         if (_isLatestGymZoneMutation(mutation)) {
           _setGymZoneEntriesForDate(dateStr, previousEntries);
-          _refreshDayUI(dateStr);
+          _refreshDayUI(dateStr, { skipSheet: true });
+          _updateSheetZoneTile(dateStr, zoneId);
           if (typeof App !== 'undefined') App.showToast('Erreur : ' + err.message);
         }
         throw err;
+      } finally {
+        _gymPendingToggles.delete(toggleKey);
       }
     }).catch(() => {});
   }
@@ -1779,7 +1815,83 @@ const MuscuPage = (() => {
     }
   }
 
-  function _refreshDayUI(dateStr) {
+  // ── Targeted sheet DOM updates (avoids full re-render on every toggle) ─
+  function _updateSheetExerciseRow(dateStr, exerciseId, exerciseName, sessionName) {
+    const sheet = document.getElementById('gym-day-sheet');
+    if (!sheet || !sheet.classList.contains('open')) return;
+    const exId = _normalizeGymExerciseId(exerciseId);
+    let row = null;
+    const rows = sheet.querySelectorAll('.sheet-exercise-row');
+    for (const r of rows) {
+      const rowExId = r.dataset.exId;
+      const rowSession = r.dataset.session;
+      if (exId && rowExId === String(exId) && rowSession === sessionName) { row = r; break; }
+      if (!exId && rowSession === sessionName) {
+        const nameEl = r.querySelector('.exercise-name');
+        if (nameEl && nameEl.textContent.trim().toLowerCase() === String(exerciseName || '').trim().toLowerCase()) { row = r; break; }
+      }
+    }
+    if (!row) return;
+    const entry = _getGymEntry(dateStr, exerciseId, exerciseName);
+    const checked = !!entry?.completed;
+    row.classList.toggle('checked', checked);
+    const checkEl = row.querySelector('.sheet-ex-check');
+    if (checkEl) checkEl.classList.toggle('on', checked);
+    const nameEl = row.querySelector('.exercise-name');
+    if (nameEl) nameEl.style.textDecoration = checked ? 'line-through' : '';
+    _updateSheetSessionCount(sessionName);
+  }
+
+  function _updateSheetSessionCount(sessionName) {
+    const sheet = document.getElementById('gym-day-sheet');
+    if (!sheet || !sheet.classList.contains('open') || !_activeSheetDate) return;
+    const countEl = sheet.querySelector(`.sheet-acc-count[data-session-count="${_escape(sessionName)}"]`);
+    if (!countEl) return;
+    const session = (_gymSessionsCatalog || []).find(s => s.name === sessionName);
+    if (!session) return;
+    const exs = session.exercises || [];
+    let doneCount = 0;
+    exs.forEach(ex => {
+      const entry = _gymEntries[_getGymEntryKey(_activeSheetDate, ex.id, ex.name)];
+      if (entry?.completed) doneCount++;
+    });
+    countEl.textContent = `${doneCount}/${exs.length}`;
+  }
+
+  function _updateSheetZoneTile(dateStr, zoneId) {
+    const sheet = document.getElementById('gym-day-sheet');
+    if (!sheet || !sheet.classList.contains('open')) return;
+    const tile = sheet.querySelector(`[data-zone-id="${zoneId}"]`);
+    if (!tile) return;
+    const active = _gymZoneEntriesByDate[dateStr]?.has(zoneId);
+    tile.classList.toggle('on', active);
+    if (tile.matches('.zone-tile')) {
+      tile.setAttribute('aria-pressed', String(active));
+      const checkEl = tile.querySelector('.zone-tile-check');
+      if (checkEl) checkEl.textContent = active ? '✓' : '';
+    }
+    if (tile.matches('.zone-card.single')) {
+      const smallEl = tile.querySelector('.zone-card-text small');
+      if (smallEl) smallEl.textContent = active ? 'Travaillé ✓' : 'Toucher pour valider';
+      const stateEl = tile.querySelector('.zone-card-state');
+      if (stateEl) stateEl.textContent = active ? '✓' : '';
+    }
+    const wrap = tile.closest('.zone-tile-wrap, .zone-single-wrap');
+    if (wrap) {
+      const badge = wrap.querySelector('.zone-series-badge');
+      if (badge) {
+        if (active) {
+          const setCount = _getGymZoneSetCount(dateStr, zoneId);
+          badge.innerHTML = `${setCount} série${setCount > 1 ? 's' : ''}<span class="editable-badge-icon" aria-hidden="true">✎</span>`;
+          badge.style.display = '';
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+    }
+  }
+
+  function _refreshDayUI(dateStr, { skipSheet } = {}) {
     // 1) Re-render the day card in the week view
     const oldCard = document.getElementById(`gday-${dateStr}`);
     if (oldCard) {
@@ -1790,8 +1902,8 @@ const MuscuPage = (() => {
       const newCard = _buildGymDayCard(date, isHero, today);
       oldCard.replaceWith(newCard);
     }
-    // 2) Re-render the open sheet
-    if (_activeSheetDate === dateStr) _renderDayActionsSheet();
+    // 2) Re-render or patch the open sheet
+    if (!skipSheet && _activeSheetDate === dateStr) _renderDayActionsSheet();
   }
 
   function _syncGymCardStats(card, dateStr) {
