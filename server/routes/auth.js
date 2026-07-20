@@ -124,11 +124,11 @@ router.patch('/profile', requireAuth, async (req, res) => {
 
 // POST /api/auth/reset-password — mot de passe oublié (app entre amis, sans vérification)
 router.post('/reset-password', async (req, res) => {
-  const { username } = req.body;
+  const { username, newPassword } = req.body;
   if (!username) return res.status(400).json({ error: "Nom d'utilisateur requis" });
+  if (!newPassword || newPassword.length < 4) return res.status(400).json({ error: 'Nouveau mot de passe requis (min 4 caractères)' });
 
   try {
-    const newPassword = 'reset123';
     const hash = await bcrypt.hash(newPassword, 12);
     const result = await db.query(
       'UPDATE users SET password_hash = $1 WHERE username = $2 RETURNING id, username',
@@ -137,7 +137,7 @@ router.post('/reset-password', async (req, res) => {
     if (!result.rows[0]) {
       return res.status(404).json({ error: 'Utilisateur introuvable' });
     }
-    res.json({ message: 'Mot de passe réinitialisé avec succès', newPassword });
+    res.json({ message: 'Mot de passe réinitialisé avec succès' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });

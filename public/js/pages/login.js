@@ -49,11 +49,15 @@ const LoginPage = (() => {
     return `
       <div class="auth-form" id="auth-form">
         <p style="text-align:center;color:var(--text2);font-size:13px;margin-bottom:14px">
-          Entre ton pseudo, le mot de passe deviendra <strong>reset123</strong>.
+          Entre ton pseudo et choisis un nouveau mot de passe.
         </p>
         <div class="form-group">
           <label>Nom d'utilisateur</label>
           <input type="text" id="f-username" placeholder="tonpseudo" autocomplete="username" required />
+        </div>
+        <div class="form-group">
+          <label>Nouveau mot de passe</label>
+          <input type="password" id="f-password" placeholder="••••••" autocomplete="new-password" required minlength="4" />
         </div>
         <p class="form-error" id="form-error"></p>
         <p class="form-success" id="form-success" style="display:none"></p>
@@ -149,17 +153,19 @@ const LoginPage = (() => {
 
   async function submitForgotPassword() {
     const username = document.getElementById('f-username').value.trim();
+    const newPassword = document.getElementById('f-password').value;
     if (!username) { showError("Entre ton nom d'utilisateur"); return; }
+    if (!newPassword || newPassword.length < 4) { showError('Le mot de passe doit faire au moins 4 caractères'); return; }
     const btn = document.getElementById('submit-btn');
     btn.disabled = true;
     btn.textContent = 'Réinitialisation…';
     showError('');
     try {
-      const data = await API.resetPassword(username);
+      await API.resetPassword(username, newPassword);
       const successEl = document.getElementById('form-success');
       if (successEl) {
         successEl.style.display = 'block';
-        successEl.innerHTML = `✅ Mot de passe réinitialisé !<br>Connecte-toi avec <strong>${data.newPassword}</strong>`;
+        successEl.innerHTML = '✅ Mot de passe réinitialisé !<br>Tu peux maintenant te connecter avec ton nouveau mot de passe.';
       }
       btn.style.display = 'none';
       const container = document.getElementById('auth-form');
