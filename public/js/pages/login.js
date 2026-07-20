@@ -40,7 +40,26 @@ const LoginPage = (() => {
         </label>
         <p class="form-error" id="form-error"></p>
         <button type="submit" class="submit-btn" id="submit-btn">Se connecter</button>
+        <button type="button" class="auth-link-btn" onclick="LoginPage.showForgotPassword()">Mot de passe oublié ?</button>
       </form>
+    `;
+  }
+
+  function renderForgotPasswordForm() {
+    return `
+      <div class="auth-form" id="auth-form">
+        <p style="text-align:center;color:var(--text2);font-size:13px;margin-bottom:14px">
+          Entre ton pseudo, le mot de passe deviendra <strong>reset123</strong>.
+        </p>
+        <div class="form-group">
+          <label>Nom d'utilisateur</label>
+          <input type="text" id="f-username" placeholder="tonpseudo" autocomplete="username" required />
+        </div>
+        <p class="form-error" id="form-error"></p>
+        <p class="form-success" id="form-success" style="display:none"></p>
+        <button type="button" class="submit-btn" id="submit-btn" onclick="LoginPage.submitForgotPassword()">Réinitialiser le mot de passe</button>
+        <button type="button" class="auth-link-btn" onclick="LoginPage.switchTab('login')">← Retour à la connexion</button>
+      </div>
     `;
   }
 
@@ -124,6 +143,41 @@ const LoginPage = (() => {
     }
   }
 
+  function showForgotPassword() {
+    document.getElementById('auth-form-container').innerHTML = renderForgotPasswordForm();
+  }
+
+  async function submitForgotPassword() {
+    const username = document.getElementById('f-username').value.trim();
+    if (!username) { showError("Entre ton nom d'utilisateur"); return; }
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Réinitialisation…';
+    showError('');
+    try {
+      const data = await API.resetPassword(username);
+      const successEl = document.getElementById('form-success');
+      if (successEl) {
+        successEl.style.display = 'block';
+        successEl.innerHTML = `✅ Mot de passe réinitialisé !<br>Connecte-toi avec <strong>${data.newPassword}</strong>`;
+      }
+      btn.style.display = 'none';
+      const container = document.getElementById('auth-form');
+      if (container) {
+        const loginBtn = document.createElement('button');
+        loginBtn.type = 'button';
+        loginBtn.className = 'submit-btn';
+        loginBtn.textContent = 'Aller à la connexion';
+        loginBtn.onclick = () => LoginPage.switchTab('login');
+        container.appendChild(loginBtn);
+      }
+    } catch (err) {
+      showError(err.message);
+      btn.disabled = false;
+      btn.textContent = 'Réinitialiser le mot de passe';
+    }
+  }
+
   function _saveSession(data, remember) {
     const storage = remember ? localStorage : sessionStorage;
     if (!remember) {
@@ -134,6 +188,6 @@ const LoginPage = (() => {
     storage.setItem('user', JSON.stringify(data.user));
   }
 
-  return { render, switchTab, submitLogin, submitRegister };
+  return { render, switchTab, submitLogin, submitRegister, showForgotPassword, submitForgotPassword };
 })();
 window.LoginPage = LoginPage;

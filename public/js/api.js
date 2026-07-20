@@ -53,6 +53,7 @@ const API = (() => {
     // Auth
     login: (username, password) => request('POST', '/auth/login', { username, password }),
     register: (username, password) => request('POST', '/auth/register', { username, password }),
+    resetPassword: (username) => request('POST', '/auth/reset-password', { username }),
     me: () => request('GET', '/auth/me'),
     updateProfile: (data) => request('PATCH', '/auth/profile', data),
 

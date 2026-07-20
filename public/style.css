@@ -6586,3 +6586,27 @@ html, body {
   touch-action: manipulation;
   min-height: 36px;
 }
+
+/* Auth: forgot password */
+.auth-link-btn {
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 8px 0;
+  text-align: center;
+  width: 100%;
+  touch-action: manipulation;
+}
+.auth-link-btn:hover { color: var(--text2); }
+.form-success {
+  text-align: center;
+  font-size: 14px;
+  color: #22d18b;
+  background: rgba(34,209,139,0.08);
+  padding: 12px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
