@@ -111,7 +111,7 @@ const ProfilePage = (() => {
           ${_renderTodayBadge(stats)}
           ${_renderCalendar(stats.calendar)}
           ${_renderXpChart(stats.xp_history)}
-          ${_renderChallenges(stats)}
+          ${_renderAdvancedStats(stats, gymStats)}
           ${_renderTopEx(stats.top_exercises)}
           ${_isOwnProfile ? _renderNotifSection() : ''}
           ${_isOwnProfile ? `
@@ -1340,65 +1340,153 @@ const ProfilePage = (() => {
       </div>`;
   }
 
-  // ── 5. Défis motivationnels ─────────────────────────────────
-  function _renderChallenges(stats) {
-    const challenges = [
-      {
-        icon: '🔥', title: 'Série de 3 jours',
-        desc: 'Valider 3 jours d\'activité consécutifs',
-        current: Math.min(stats.current_streak, 3), target: 3,
-      },
-      {
-        icon: '⚡', title: 'Série de 7 jours',
-        desc: '7 jours d\'activité d\'affilée',
-        current: Math.min(stats.current_streak, 7), target: 7,
-      },
-      {
-        icon: '💪', title: '10 exercices',
-        desc: '10 exercices complétés au total',
-        current: Math.min(stats.total_completed, 10), target: 10,
-      },
-      {
-        icon: '🏆', title: '30 exercices',
-        desc: '30 exercices complétés au total',
-        current: Math.min(stats.total_completed, 30), target: 30,
-      },
-      {
-        icon: '📅', title: '10 jours complets',
-        desc: 'Terminer 10 journées entières',
-        current: Math.min(stats.full_days, 10), target: 10,
-      },
-      {
-        icon: '🌟', title: 'Régularité',
-        desc: '20 jours actifs au total',
-        current: Math.min(stats.active_days, 20), target: 20,
-      },
+  // ── 5. Statistiques d'activité avancées ─────────────────────
+  function _mergeActivityCalendar(stats, gymStats) {
+    const homeCal = Array.isArray(stats?.calendar) ? stats.calendar : [];
+    const gymCal  = Array.isArray(gymStats?.calendar) ? gymStats.calendar : [];
+    const byDate  = new Map();
+
+    homeCal.forEach(day => {
+      byDate.set(day.date, { date: day.date, homeDone: day.done || 0, gymDone: 0 });
+    });
+    gymCal.forEach(day => {
+      const cur = byDate.get(day.date) || { date: day.date, homeDone: 0, gymDone: 0 };
+      cur.gymDone = (day.exercises_done || 0) + (day.zones_done || 0);
+      byDate.set(day.date, cur);
+    });
+
+    return Array.from(byDate.values())
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(day => ({
+        date: day.date,
+        hasActivity: day.homeDone > 0 || day.gymDone > 0,
+        dayOfWeek: new Date(day.date + 'T12:00:00').getDay(),
+      }));
+  }
+
+  function _computeWeeklyActivity(merged) {
+    const weeks = new Map();
+    merged.forEach(day => {
+      const d = new Date(day.date + 'T12:00:00');
+      const dow = (d.getDay() + 6) % 7;
+      const mon = new Date(d);
+      mon.setDate(d.getDate() - dow);
+      const key = mon.toISOString().split('T')[0];
+      if (!weeks.has(key)) weeks.set(key, { weekStart: key, activeDays: 0 });
+      if (day.hasActivity) weeks.get(key).activeDays++;
+    });
+
+    return Array.from(weeks.values())
+      .sort((a, b) => a.weekStart.localeCompare(b.weekStart))
+      .slice(-8)
+      .map(w => ({
+        label: new Date(w.weekStart + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+        activeDays: w.activeDays,
+      }));
+  }
+
+  function _computeDayDistribution(merged) {
+    const counts = [0, 0, 0, 0, 0, 0, 0];
+    merged.forEach(day => {
+      if (day.hasActivity) {
+        const idx = (day.dayOfWeek + 6) % 7;
+        counts[idx]++;
+      }
+    });
+    return counts;
+  }
+
+  function _computeRegularity(merged) {
+    if (merged.length < 2) return 0;
+    const active = merged.filter(d => d.hasActivity).length;
+    return Math.round((active / merged.length) * 100);
+  }
+
+  function _computeTrend(merged) {
+    if (merged.length < 28) return 0;
+    const recent   = merged.slice(-14).filter(d => d.hasActivity).length;
+    const previous = merged.slice(-28, -14).filter(d => d.hasActivity).length;
+    if (previous === 0 && recent === 0) return 0;
+    if (previous === 0) return 1;
+    return Math.round(((recent - previous) / previous) * 100) / 100;
+  }
+
+  function _renderAdvancedStats(stats, gymStats) {
+    const merged = _mergeActivityCalendar(stats, gymStats);
+    if (!merged.length) return '';
+
+    const weeklyData = _computeWeeklyActivity(merged);
+    const dayDist    = _computeDayDistribution(merged);
+    const regularity = _computeRegularity(merged);
+    const trend      = _computeTrend(merged);
+
+    if (!weeklyData.length && regularity === 0) return '';
+
+    const DAY_NAMES   = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'];
+    const rawMaxDay   = Math.max(...dayDist);
+    const maxDayCount = Math.max(rawMaxDay, 1);
+    const topDayIdx   = rawMaxDay > 0 ? dayDist.indexOf(rawMaxDay) : -1;
+    const avgPerWeek  = weeklyData.length
+      ? (merged.filter(d => d.hasActivity).length / weeklyData.length).toFixed(1)
+      : '0';
+
+    const trendIcon  = trend > 0.05 ? '📈' : trend < -0.05 ? '📉' : '📊';
+    const trendLabel = trend > 0.05 ? 'En hausse' : trend < -0.05 ? 'En baisse' : 'Stable';
+    const trendPct   = Math.abs(Math.round(trend * 100));
+    const trendColor = trend > 0.05 ? 'var(--green)' : trend < -0.05 ? 'var(--red)' : 'var(--text2)';
+
+    // KPI cards
+    const kpiCards = [
+      { value: avgPerWeek,           label: 'j / semaine',    color: '' },
+      { value: regularity + '%',     label: 'régularité',     color: '' },
+      { value: trendIcon + ' ' + trendPct + '%', label: trendLabel, color: trendColor },
+      { value: topDayIdx >= 0 ? DAY_NAMES[topDayIdx] : '—', label: 'jour préféré', color: '' },
     ];
 
-    const items = challenges.map(c => {
-      const done = c.current >= c.target;
-      const pct  = Math.round((c.current / c.target) * 100);
-      const barColor = done      ? 'var(--green)'
-                     : pct >= 70 ? 'var(--green)'
-                     : pct >= 30 ? 'var(--gold)'
-                     : '#ef4444';
-      return `
-        <div class="challenge-item${done ? ' done' : ''}">
-          <span class="challenge-icon">${done ? '✅' : c.icon}</span>
-          <div class="challenge-body">
-            <div class="challenge-title">${c.title}</div>
-            <div class="challenge-bar-track">
-              <div class="challenge-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+    const kpiHtml = kpiCards.map(c => `
+      <div class="adv-kpi-card">
+        <span class="adv-kpi-value"${c.color ? ` style="color:${c.color}"` : ''}>${c.value}</span>
+        <span class="adv-kpi-label">${c.label}</span>
+      </div>`).join('');
+
+    // Weekly bars
+    const weeklyBarsHtml = weeklyData.length
+      ? weeklyData.map(w => {
+          const pct = Math.round((w.activeDays / 7) * 100);
+          return `<div class="adv-wbar-row">
+            <span class="adv-wbar-label">${w.label}</span>
+            <div class="adv-wbar-track">
+              <div class="adv-wbar-fill" style="width:${pct}%"></div>
             </div>
-            <div class="challenge-progress">${c.current}\u202f/\u202f${c.target}</div>
-          </div>
-        </div>`;
+            <span class="adv-wbar-val">${w.activeDays}j</span>
+          </div>`;
+        }).join('')
+      : '<p style="font-size:13px;color:var(--text3);text-align:center;padding:8px 0">Pas encore assez de semaines</p>';
+
+    // Day pills
+    const dayPillsHtml = dayDist.map((count, i) => {
+      const intensity = maxDayCount > 0 ? count / maxDayCount : 0;
+      const bg = count > 0
+        ? `rgba(78,205,196,${Math.max(0.12, (intensity * 0.65).toFixed(2))})`
+        : 'rgba(255,255,255,0.04)';
+      const isTop = i === topDayIdx && count > 0;
+      return `<div class="adv-day-pill${isTop ? ' adv-day-pill--top' : ''}" style="--pill-bg:${bg}">
+        <span class="adv-day-pill-name">${DAY_NAMES[i]}</span>
+        <span class="adv-day-pill-count">${count}</span>
+      </div>`;
     }).join('');
 
     return `
       <div class="profile-section" style="animation:fadeIn 0.3s ease 0.16s both">
-        <div class="profile-section-title">Défis</div>
-        ${items}
+        <div class="profile-section-title">📊 Statistiques d'activité</div>
+
+        <div class="adv-kpi-grid">${kpiHtml}</div>
+
+        <div class="adv-sub-title">Jours actifs par semaine</div>
+        <div class="adv-wbars">${weeklyBarsHtml}</div>
+
+        <div class="adv-sub-title">Répartition par jour</div>
+        <div class="adv-day-pills">${dayPillsHtml}</div>
       </div>`;
   }
 
